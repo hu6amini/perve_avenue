@@ -12,6 +12,10 @@
 //     (alt text + size), edit-in-place for code language / spoiler title /
 //     link URL.
 // v9: lite YouTube and Vimeo embeds (lite-youtube-embed, lite-vimeo-embed).
+// v10: caption wrapper for lite embeds — title + author pulled from the
+//      OG worker (provider oEmbed + JSON-LD), rendered as a two-line
+//      caption below the facade and round-tripped through the legacy
+//      serialization so replies and drafts keep the metadata.
 var MessengerModule = (function(Utils, EventBus) {
     'use strict';
 
@@ -124,6 +128,34 @@ var MessengerModule = (function(Utils, EventBus) {
         try {
             return new Date(dateStr).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' });
         } catch(e) { return dateStr; }
+    }
+
+    // Unwrap .lite-embed-wrapper containers produced by the LiteYouTube /
+    // LiteVimeo renderHTML, emitting the legacy marker span that the
+    // forum stores. Title and author ride along as data-* attributes so
+    // replies and drafts can restore the caption without re-fetching.
+    function unwrapLiteEmbedWrappers(html) {
+        if (!html || html.indexOf('lite-embed-wrapper') === -1) return html;
+        var temp = document.createElement('div');
+        temp.innerHTML = html;
+        temp.querySelectorAll('div.lite-embed-wrapper').forEach(function(wrapper) {
+            var lite = wrapper.querySelector('lite-youtube, lite-vimeo');
+            if (!lite) return;
+            var videoid = lite.getAttribute('videoid') || wrapper.getAttribute('data-videoid') || '';
+            if (!videoid) { wrapper.remove(); return; }
+            var title = wrapper.getAttribute('data-title') || '';
+            var author = wrapper.getAttribute('data-author') || '';
+            var kind = lite.tagName.toLowerCase() === 'lite-youtube'
+                ? 'ff-lite-youtube'
+                : 'ff-lite-vimeo';
+            var span = document.createElement('span');
+            span.className = kind;
+            span.setAttribute('data-videoid', videoid);
+            if (title) span.setAttribute('data-title', title);
+            if (author) span.setAttribute('data-author', author);
+            wrapper.parentNode.replaceChild(span, wrapper);
+        });
+        return temp.innerHTML;
     }
 
     // ------------------------------------------------------------------------
@@ -1011,24 +1043,39 @@ var MessengerModule = (function(Utils, EventBus) {
         );
 
         // Lite embed markers → custom elements. Round-trips the payload
-        // written by htmlToLegacy; LiteYouTube/LiteVimeo parseHTML then
-        // converts them into editor nodes on load.
+        // written by htmlToLegacy; the LiteYouTube/LiteVimeo parseHTML
+        // picks up title and author from data-title / data-author, and
+        // the caption renders without a second fetch.
         html = html.replace(
             /<span\b[^>]*\bff-lite-youtube\b[^>]*>([\s\S]*?)<\/span>/gis,
             function(match) {
                 var idMatch = match.match(/data-videoid="([^"]*)"/);
-                var videoid = idMatch ? idMatch[1] : '';
+                var videoid = idMatch ? decodeHtmlEntities(idMatch[1]) : '';
                 if (!videoid) return '';
-                return '<lite-youtube videoid="' + escapeHtml(videoid) + '"></lite-youtube>';
+                var titleMatch = match.match(/data-title="([^"]*)"/);
+                var authorMatch = match.match(/data-author="([^"]*)"/);
+                var title = titleMatch ? decodeHtmlEntities(titleMatch[1]) : '';
+                var author = authorMatch ? decodeHtmlEntities(authorMatch[1]) : '';
+                var attrs = 'videoid="' + escapeHtml(videoid) + '"';
+                if (title)  attrs += ' data-title="' + escapeHtml(title) + '"';
+                if (author) attrs += ' data-author="' + escapeHtml(author) + '"';
+                return '<lite-youtube ' + attrs + '></lite-youtube>';
             }
         );
         html = html.replace(
             /<span\b[^>]*\bff-lite-vimeo\b[^>]*>([\s\S]*?)<\/span>/gis,
             function(match) {
                 var idMatch = match.match(/data-videoid="([^"]*)"/);
-                var videoid = idMatch ? idMatch[1] : '';
+                var videoid = idMatch ? decodeHtmlEntities(idMatch[1]) : '';
                 if (!videoid) return '';
-                return '<lite-vimeo videoid="' + escapeHtml(videoid) + '"></lite-vimeo>';
+                var titleMatch = match.match(/data-title="([^"]*)"/);
+                var authorMatch = match.match(/data-author="([^"]*)"/);
+                var title = titleMatch ? decodeHtmlEntities(titleMatch[1]) : '';
+                var author = authorMatch ? decodeHtmlEntities(authorMatch[1]) : '';
+                var attrs = 'videoid="' + escapeHtml(videoid) + '"';
+                if (title)  attrs += ' data-title="' + escapeHtml(title) + '"';
+                if (author) attrs += ' data-author="' + escapeHtml(author) + '"';
+                return '<lite-vimeo ' + attrs + '></lite-vimeo>';
             }
         );
 
@@ -1078,6 +1125,13 @@ html = html.replace(
 
     function htmlToLegacy(html) {
         if (!html || typeof html !== 'string') return html;
+
+        // Unwrap the lite-embed caption wrapper first, converting each
+        // .lite-embed-wrapper into the marker span form. Runs before the
+        // regex loop so the existing lite-youtube / lite-vimeo replacements
+        // below only serve as defensive coverage for stray bare elements.
+        html = unwrapLiteEmbedWrappers(html);
+
         var result = html;
         var maxIterations = 10;
         for (var i = 0; i < maxIterations; i++) {
@@ -1748,6 +1802,59 @@ function focusTrailingEmbedParagraph() {
     // empty trailing paragraph. setTextSelection on that puts a real
     // text cursor there and chain().focus() gives it focus.
     editor.chain().focus().setTextSelection(doc.content.size - 1).run();
+}
+
+// Fetch title + author for a fresh embed and patch the node once the
+// worker responds. The worker's provider map (OEMBED_PROVIDERS) hits
+// YouTube's and Vimeo's oEmbed endpoints directly, so both fields
+// usually come back in a single round-trip.
+function fetchEmbedMetadata(kind, videoid) {
+    if (!editor || !videoid) return;
+    var canonicalUrl = kind === 'liteYouTube'
+        ? 'https://www.youtube.com/watch?v=' + encodeURIComponent(videoid)
+        : 'https://vimeo.com/' + encodeURIComponent(videoid);
+
+    fetch(OG_WORKER_URL + encodeURIComponent(canonicalUrl))
+        .then(function(r) { return r.ok ? r.json() : null; })
+        .then(function(data) {
+            if (!data || data.error || !data.title) return;
+            if (!editor) return;
+            var positions = [];
+            editor.state.doc.descendants(function(node, pos) {
+                if (node.type.name === kind &&
+                    node.attrs.videoid === videoid &&
+                    !node.attrs.title) {
+                    positions.push(pos);
+                }
+                return true;
+            });
+            if (positions.length === 0) return;
+            var tr = editor.state.tr;
+            for (var i = 0; i < positions.length; i++) {
+                var pos = positions[i];
+                var node = tr.doc.nodeAt(pos);
+                if (!node) continue;
+                tr.setNodeMarkup(pos, undefined, Object.assign({}, node.attrs, {
+                    title: data.title || '',
+                    author: data.author || '',
+                }));
+            }
+            editor.view.dispatch(tr);
+        })
+        .catch(function() { /* caption is optional — silent fail */ });
+}
+
+// One entry point for all four paste-handler branches. Inserts the
+// node, moves the cursor into the trailing paragraph, and kicks off
+// the metadata fetch.
+function insertLiteEmbed(kind, videoid) {
+    if (!editor) return;
+    editor.chain().focus().insertContent({
+        type: kind,
+        attrs: { videoid: videoid }
+    }).run();
+    focusTrailingEmbedParagraph();
+    fetchEmbedMetadata(kind, videoid);
 }
 
         var modernRecipient     = container.querySelector('#modern-recipient');
@@ -3535,12 +3642,11 @@ description ? ['span', { class: 'link-preview-description' }, description] : '',
 
                 // ------------------------------------------------------------------
                 // Lite embeds — YouTube and Vimeo.
-                // Atom block nodes that render the lite-* custom elements
-                // defined by the boot loader. Two parseHTML rules each: one for
-                // the live editor DOM (tag = lite-youtube), one for the
-                // legacy serialization produced by htmlToLegacy
-                // (span.ff-lite-youtube). The videoid attribute is the only
-                // payload; the lite library reads it on upgrade.
+                // Atom block nodes that render a caption wrapper around the
+                // lite-* custom element. The wrapper carries the video id
+                // plus optional title/author, which are populated by the
+                // fetchEmbedMetadata helper on first insert and restored
+                // from the legacy marker span on reply / draft load.
                 // ------------------------------------------------------------------
                 const LiteYouTube = Node.create({
                     name: 'liteYouTube',
@@ -3555,16 +3661,55 @@ description ? ['span', { class: 'link-preview-description' }, description] : '',
                                 parseHTML: el => el.getAttribute('videoid') || el.getAttribute('data-videoid') || null,
                                 renderHTML: attrs => attrs.videoid ? { videoid: attrs.videoid } : {},
                             },
+                            title:  { default: '' },
+                            author: { default: '' },
                         };
                     },
                     parseHTML() {
                         return [
-                            { tag: 'lite-youtube' },
+                            {
+                                tag: 'div.lite-embed-wrapper',
+                                getAttrs: el => {
+                                    const lite = el.querySelector('lite-youtube');
+                                    if (!lite) return false;
+                                    return {
+                                        videoid: lite.getAttribute('videoid') || el.getAttribute('data-videoid') || null,
+                                        title: el.getAttribute('data-title') || '',
+                                        author: el.getAttribute('data-author') || '',
+                                    };
+                                },
+                            },
+                            {
+                                tag: 'lite-youtube',
+                                getAttrs: el => ({
+                                    videoid: el.getAttribute('videoid') || el.getAttribute('data-videoid') || null,
+                                    title: el.getAttribute('data-title') || '',
+                                    author: el.getAttribute('data-author') || '',
+                                }),
+                            },
                             { tag: 'span.ff-lite-youtube' },
                         ];
                     },
-                    renderHTML({ HTMLAttributes }) {
-                        return ['lite-youtube', HTMLAttributes];
+                    renderHTML({ node, HTMLAttributes }) {
+                        const title = node.attrs.title || '';
+                        const author = node.attrs.author || '';
+                        const caption = (title || author)
+                            ? ['div', { class: 'lite-embed-caption' },
+                                title ? ['span', { class: 'lite-embed-title' }, title] : '',
+                                author ? ['span', { class: 'lite-embed-author' }, author] : ''
+                              ]
+                            : '';
+                        return [
+                            'div',
+                            {
+                                class: 'lite-embed-wrapper',
+                                'data-videoid': node.attrs.videoid || '',
+                                'data-title': title || null,
+                                'data-author': author || null,
+                            },
+                            ['lite-youtube', HTMLAttributes],
+                            caption,
+                        ];
                     },
                 });
 
@@ -3581,16 +3726,55 @@ description ? ['span', { class: 'link-preview-description' }, description] : '',
                                 parseHTML: el => el.getAttribute('videoid') || el.getAttribute('data-videoid') || null,
                                 renderHTML: attrs => attrs.videoid ? { videoid: attrs.videoid } : {},
                             },
+                            title:  { default: '' },
+                            author: { default: '' },
                         };
                     },
                     parseHTML() {
                         return [
-                            { tag: 'lite-vimeo' },
+                            {
+                                tag: 'div.lite-embed-wrapper',
+                                getAttrs: el => {
+                                    const lite = el.querySelector('lite-vimeo');
+                                    if (!lite) return false;
+                                    return {
+                                        videoid: lite.getAttribute('videoid') || el.getAttribute('data-videoid') || null,
+                                        title: el.getAttribute('data-title') || '',
+                                        author: el.getAttribute('data-author') || '',
+                                    };
+                                },
+                            },
+                            {
+                                tag: 'lite-vimeo',
+                                getAttrs: el => ({
+                                    videoid: el.getAttribute('videoid') || el.getAttribute('data-videoid') || null,
+                                    title: el.getAttribute('data-title') || '',
+                                    author: el.getAttribute('data-author') || '',
+                                }),
+                            },
                             { tag: 'span.ff-lite-vimeo' },
                         ];
                     },
-                    renderHTML({ HTMLAttributes }) {
-                        return ['lite-vimeo', HTMLAttributes];
+                    renderHTML({ node, HTMLAttributes }) {
+                        const title = node.attrs.title || '';
+                        const author = node.attrs.author || '';
+                        const caption = (title || author)
+                            ? ['div', { class: 'lite-embed-caption' },
+                                title ? ['span', { class: 'lite-embed-title' }, title] : '',
+                                author ? ['span', { class: 'lite-embed-author' }, author] : ''
+                              ]
+                            : '';
+                        return [
+                            'div',
+                            {
+                                class: 'lite-embed-wrapper',
+                                'data-videoid': node.attrs.videoid || '',
+                                'data-title': title || null,
+                                'data-author': author || null,
+                            },
+                            ['lite-vimeo', HTMLAttributes],
+                            caption,
+                        ];
                     },
                 });
 
@@ -4043,7 +4227,7 @@ const LiteEmbedSelection = Extension.create({
         ];
     },
 });
-                
+
                 var textareaRaw = originalTextarea ? (originalTextarea.value || '') : '';
                 var initialHtml = textareaRaw ? legacyToHtml(textareaRaw) : '';
 
@@ -4167,58 +4351,42 @@ handlePaste: function(view, event) {
     // side can render the lite facade.
     var clipboard = event.clipboardData;
     if (clipboard) {
-// 4a. iframe HTML — user copied an embed code from a provider
-var htmlData = clipboard.getData('text/html');
-if (htmlData && htmlData.indexOf('<iframe') !== -1) {
-    var ytIframe = htmlData.match(/youtube\.com\/embed\/([A-Za-z0-9_-]{6,})/);
-    if (ytIframe) {
-        event.preventDefault();
-        editor.chain().focus().insertContent({
-            type: 'liteYouTube',
-            attrs: { videoid: ytIframe[1] }
-        }).run();
-        focusTrailingEmbedParagraph();
-        return true;
-    }
-    var vimeoIframe = htmlData.match(/player\.vimeo\.com\/video\/(\d+)/);
-    if (vimeoIframe) {
-        event.preventDefault();
-        editor.chain().focus().insertContent({
-            type: 'liteVimeo',
-            attrs: { videoid: vimeoIframe[1] }
-        }).run();
-        focusTrailingEmbedParagraph();
-        return true;
-    }
-}
+        // 4a. iframe HTML — user copied an embed code from a provider
+        var htmlData = clipboard.getData('text/html');
+        if (htmlData && htmlData.indexOf('<iframe') !== -1) {
+            var ytIframe = htmlData.match(/youtube\.com\/embed\/([A-Za-z0-9_-]{6,})/);
+            if (ytIframe) {
+                event.preventDefault();
+                insertLiteEmbed('liteYouTube', ytIframe[1]);
+                return true;
+            }
+            var vimeoIframe = htmlData.match(/player\.vimeo\.com\/video\/(\d+)/);
+            if (vimeoIframe) {
+                event.preventDefault();
+                insertLiteEmbed('liteVimeo', vimeoIframe[1]);
+                return true;
+            }
+        }
 
-// 4b. Bare URL — user copied a share link
-var textData = clipboard.getData('text/plain');
-if (textData) {
-    var candidate = textData.trim();
-    if (/^https?:\/\/\S+$/.test(candidate)) {
-        var ytId = parseYouTubeUrl(candidate);
-        if (ytId) {
-            event.preventDefault();
-            editor.chain().focus().insertContent({
-                type: 'liteYouTube',
-                attrs: { videoid: ytId }
-            }).run();
-            focusTrailingEmbedParagraph();
-            return true;
+        // 4b. Bare URL — user copied a share link
+        var textData = clipboard.getData('text/plain');
+        if (textData) {
+            var candidate = textData.trim();
+            if (/^https?:\/\/\S+$/.test(candidate)) {
+                var ytId = parseYouTubeUrl(candidate);
+                if (ytId) {
+                    event.preventDefault();
+                    insertLiteEmbed('liteYouTube', ytId);
+                    return true;
+                }
+                var vmId = parseVimeoUrl(candidate);
+                if (vmId) {
+                    event.preventDefault();
+                    insertLiteEmbed('liteVimeo', vmId);
+                    return true;
+                }
+            }
         }
-        var vmId = parseVimeoUrl(candidate);
-        if (vmId) {
-            event.preventDefault();
-            editor.chain().focus().insertContent({
-                type: 'liteVimeo',
-                attrs: { videoid: vmId }
-            }).run();
-            focusTrailingEmbedParagraph();
-            return true;
-        }
-    }
-}
     }
 
     // ----- 5. Fall through -----
