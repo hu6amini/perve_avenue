@@ -987,6 +987,7 @@ function transformLiteEmbeds(htmlContent) {
 
         const lite = document.createElement(kind === 'youtube' ? 'lite-youtube' : 'lite-vimeo');
         lite.setAttribute('videoid', videoid);
+        if (title) lite.setAttribute('data-title', title);
         wrapper.appendChild(lite);
 
         if (title || author) {
@@ -2961,7 +2962,7 @@ function hydrateLiteEmbeds(root) {
         promise.then(data => {
             if (!wrapper.parentNode) return;
             if (!data || data.error || !data.title) return;
-
+            lite.setAttribute('data-title', data.title);
             const caption = document.createElement('div');
             caption.className = 'lite-embed-caption';
 
