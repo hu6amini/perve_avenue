@@ -3918,6 +3918,37 @@ section.modern-stats { flex-direction: column; width: 100%; }
     cursor: pointer;
 }
 
+.modern-wysiwyg .ProseMirror lite-vimeo::before,
+.modern-preview .preview-content lite-vimeo::before,
+.post-message lite-vimeo::before {
+    content: attr(data-title);
+    display: block;
+    position: absolute;
+    top: 0;
+    left: 0;
+    background-image: linear-gradient(
+        180deg,
+        rgb(0 0 0 / 67%) 0,
+        rgb(0 0 0 / 54%) 14%,
+        rgb(0 0 0 / 15%) 54%,
+        rgb(0 0 0 / 5%) 72%,
+        rgb(0 0 0 / 0) 94%
+    );
+    height: 99px;
+    width: 100%;
+    font-family: "YouTube Noto", Roboto, Arial, Helvetica, sans-serif;
+    color: hsl(0deg 0% 93.33%);
+    text-shadow: 0 0 2px rgba(0, 0, 0, .5);
+    font-size: 18px;
+    padding: 25px 20px;
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+    box-sizing: border-box;
+    pointer-events: none;
+    z-index: 1;
+}
+
 /* The custom element inside the wrapper — fills the wrapper width,
    keeps the rounded corners, and provides a background while the
    poster image loads. */
