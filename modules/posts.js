@@ -2845,22 +2845,13 @@ function transformLegacyCodeBlocks(htmlContent) {
     return tempDiv.innerHTML;
 }
 
-    // ============================================================================
-// LEGACY SOCIAL EMBED TRANSFORMATION
-// Twitter and Instagram store their embeds as <blockquote class="twitter-tweet">
-// / <blockquote class="instagram-media">. With their widget scripts gone,
-// they render as plain text. This pair of functions replaces them with
-// the same .link-preview-card structure the composer uses:
-//
-//   transformLegacySocialEmbeds — synchronous, runs in the pipeline. Emits
-//   a skeleton card with a data-social-hydrate="URL" marker so the swap
-//   happens in the same render pass as the post itself. The user sees the
-//   card frame immediately, not after a network round-trip.
-//
-//   hydrateSocialEmbeds — asynchronous, runs once per card after insertion.
-//   Collects the marked skeletons, batches the worker fetches, fills each
-//   card in place. Failures leave the skeleton styled as a plain link so
-//   nothing collapses.
+// ============================================================================
+// EMBED HYDRATION — async caption/thumbnail fill-in after card insertion
+//   • hydrateSocialEmbeds  — Twitter/Instagram blockquote upgrades
+//   • hydrateLiteEmbeds    — YouTube/Vimeo iframe caption upgrades
+// Both use the same skeleton-first pattern: the pipeline emits a marked
+// card, insertion appends it, this section fills it in when the worker
+// responds. Failures are silent; the skeleton stays as a fallback.
 // ============================================================================
 function transformLegacySocialEmbeds(htmlContent) {
     if (!htmlContent || typeof htmlContent !== 'string') return htmlContent;
@@ -2939,6 +2930,57 @@ function transformLegacySocialEmbeds(htmlContent) {
 // posts still triggers one worker request.
 const _socialHydrationCache = new Map();  // url → Promise<metadata | null>
 const _hydratedUrls = new Set();
+
+    const _liteEmbedCache = new Map();
+
+function hydrateLiteEmbeds(root) {
+    if (!root) return;
+    const wrappers = root.querySelectorAll('.lite-embed-wrapper[data-videoid]');
+    wrappers.forEach(wrapper => {
+        // Skip if the wrapper already has a caption (new posts from v10)
+        if (wrapper.querySelector('.lite-embed-caption')) return;
+        const videoid = wrapper.getAttribute('data-videoid');
+        if (!videoid) return;
+        const lite = wrapper.querySelector('lite-youtube, lite-vimeo');
+        if (!lite) return;
+
+        const kind = lite.tagName.toLowerCase() === 'lite-youtube' ? 'youtube' : 'vimeo';
+        const cacheKey = kind + ':' + videoid;
+
+        let promise = _liteEmbedCache.get(cacheKey);
+        if (!promise) {
+            const url = kind === 'youtube'
+                ? 'https://www.youtube.com/watch?v=' + encodeURIComponent(videoid)
+                : 'https://vimeo.com/' + encodeURIComponent(videoid);
+            promise = fetch(OG_WORKER_URL + encodeURIComponent(url))
+                .then(r => r.ok ? r.json() : null)
+                .catch(() => null);
+            _liteEmbedCache.set(cacheKey, promise);
+        }
+
+        promise.then(data => {
+            if (!wrapper.parentNode) return;
+            if (!data || data.error || !data.title) return;
+
+            const caption = document.createElement('div');
+            caption.className = 'lite-embed-caption';
+
+            const titleEl = document.createElement('span');
+            titleEl.className = 'lite-embed-title';
+            titleEl.textContent = data.title;
+            caption.appendChild(titleEl);
+
+            if (data.author) {
+                const authorEl = document.createElement('span');
+                authorEl.className = 'lite-embed-author';
+                authorEl.textContent = data.author;
+                caption.appendChild(authorEl);
+            }
+
+            wrapper.appendChild(caption);
+        });
+    });
+}
 
 function hydrateSocialEmbeds(root) {
     if (!root) return;
