@@ -2258,6 +2258,7 @@ function wrapImagesWithDimensions(container) {
             if (link.querySelector('img')) continue;
             // Skip user tags — they have their own styling
             if (link.classList.contains('user-tag')) continue;
+            if (link.classList.contains('link-preview-link')) continue; 
             try {
                 const urlObj = new URL(link.href);
                 const domain = urlObj.hostname;
@@ -3660,6 +3661,7 @@ function attachPollHandlers(modernPoll, legacyPoll, pollData) {
                 applyFaviconsToMessageLinks(card);
                 wrapImagesWithDimensions(card);
                 attachTips(card, completeData);
+                hydrateSocialEmbeds(card);
             }
             attachEventHandlers();
             initQuotesAndSpoilers();
@@ -3775,6 +3777,7 @@ function attachPollHandlers(modernPoll, legacyPoll, pollData) {
                 applyFaviconsToMessageLinks(card);
                 wrapImagesWithDimensions(card);
                 attachTips(card, completeData);
+                hydrateSocialEmbeds(card);
             }
             attachEventHandlers();
             initQuotesAndSpoilers();
