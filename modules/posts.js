@@ -1,11 +1,14 @@
-// Forum Modernizer - Posts Module v2.5 (with anchor ID for scrolling) + Poll + Attachments + Code Blocks + Image Wrapper + Global Broken Image Fix + Event Listener + Tooltips (auto title conversion) + User Tags + LightGallery
+// Forum Modernizer - Posts Module v2.6
+//   + paragraphization: legacy content wrapped in <p>, top-level <br> removed
+//   + metadata <br> cleanup (bottomborder adjacency ordering fixed)
+//   + trailing-<br> / whitespace net
 // v2.5: lite embeds now backed by the self-hosted lite-embed.js module.
 //       transformLiteEmbeds and hydrateLiteEmbeds unchanged — they operate
 //       on the wrapper / marker level, not the custom element internals.
 'use strict';
 
 const ForumPostsModule = (function () {
-    console.log('🔥 ForumPostsModule v2.5 loaded');
+    console.log('🔥 ForumPostsModule v2.6 loaded');
 
     // ===== USER TIMING: mark script start =====
     if (typeof performance !== 'undefined' && performance.mark) {
@@ -133,6 +136,107 @@ const highlightCode = (codeText) => {
 
     return html;
 };
+
+    // ============================================================================
+    // PARAGRAPHIZATION
+    // Converts legacy HTML that relies on <br> for structure into modern
+    // block-level HTML wrapped in <p>. Every top-level <br> acts as a
+    // paragraph boundary; runs of text between boundaries become <p>
+    // elements. Block-level elements (divs from transforms, headings,
+    // tables, lists) pass through untouched. Standalone post images are
+    // treated as block-level so the CLS wrapper produces a block later.
+    // Twemoji images stay inline.
+    //
+    // Recurses into .quote-content and .spoiler-content-inner, whose
+    // bodies are cloned from legacy HTML and may carry their own <br>
+    // structure.
+    // ============================================================================
+    function paragraphizeHtml(html) {
+        if (!html || typeof html !== 'string') return html;
+        try {
+            const BLOCK_TAGS = new Set([
+                'H1','H2','H3','H4','H5','H6',
+                'DIV','P','UL','OL','LI',
+                'BLOCKQUOTE','PRE','TABLE','HR',
+                'SECTION','ARTICLE','FIGURE',
+                'HEADER','FOOTER','ASIDE','NAV',
+                'DL','DT','DD','FORM'
+            ]);
+
+            const container = document.createElement('div');
+            container.innerHTML = html;
+
+            const newChildren = [];
+            let inlineBuffer = [];
+
+            function hasVisibleContent(nodes) {
+                return nodes.some(n => {
+                    if (n.nodeType === 3) return n.nodeValue.trim().length > 0;
+                    if (n.nodeType === 1) return n.tagName !== 'BR';
+                    return false;
+                });
+            }
+
+            function flushBuffer() {
+                if (!hasVisibleContent(inlineBuffer)) {
+                    inlineBuffer = [];
+                    return;
+                }
+                const p = document.createElement('p');
+                inlineBuffer.forEach(n => p.appendChild(n));
+                newChildren.push(p);
+                inlineBuffer = [];
+            }
+
+            Array.from(container.childNodes).forEach(child => {
+                // <br> = paragraph separator
+                if (child.nodeType === 1 && child.tagName === 'BR') {
+                    flushBuffer();
+                    return;
+                }
+
+                // Block-level element — pass through
+                if (child.nodeType === 1 && BLOCK_TAGS.has(child.tagName)) {
+                    flushBuffer();
+                    newChildren.push(child);
+                    return;
+                }
+
+                // Standalone post image (non-twemoji) with no preceding
+                // visible content — treat as block so it isn't trapped
+                // inside a <p> that later gets a div wrapper inside it.
+                if (child.nodeType === 1 &&
+                    child.tagName === 'IMG' &&
+                    !child.classList.contains('twemoji') &&
+                    !hasVisibleContent(inlineBuffer)) {
+                    inlineBuffer = [];
+                    newChildren.push(child);
+                    return;
+                }
+
+                inlineBuffer.push(child);
+            });
+
+            flushBuffer();
+
+            container.innerHTML = '';
+            newChildren.forEach(n => container.appendChild(n));
+
+            // Recurse into quote / spoiler bodies. Their content is user
+            // content cloned from legacy markup and can carry its own
+            // <br> structure. :scope-agnostic — nested quotes recurse
+            // naturally, and re-paragraphizing already-<p>-wrapped
+            // content is a no-op.
+            Array.from(container.querySelectorAll('.quote-content, .spoiler-content-inner')).forEach(el => {
+                el.innerHTML = paragraphizeHtml(el.innerHTML);
+            });
+
+            return container.innerHTML;
+        } catch (e) {
+            console.warn('[PostsModule] paragraphizeHtml failed:', e);
+            return html;
+        }
+    }
 
     // ============================================================================
     // HTML SANITIZER
@@ -484,76 +588,76 @@ function parseDateFromTitle(title) {
         return { title: title || 'Member', iconClass: iconClass };
     }
 
-function getCleanContent($post) {
-    let contentTable = $post.querySelector('.right.Item table.color');
-    if (!contentTable) contentTable = $post.querySelector('td.Item table.color');
-    if (!contentTable) return '';
-    const contentClone = contentTable.cloneNode(true);
+    function getCleanContent($post) {
+        let contentTable = $post.querySelector('.right.Item table.color');
+        if (!contentTable) contentTable = $post.querySelector('td.Item table.color');
+        if (!contentTable) return '';
+        const contentClone = contentTable.cloneNode(true);
 
-    // Strip <br>s that sit immediately before the .edit marker. These
-    // separated the post body from the edit note and have no purpose
-    // once the note is removed.
-    const editSpans = contentClone.querySelectorAll('.edit');
-    editSpans.forEach(edit => {
-        let prev = edit.previousSibling;
-        while (prev && prev.nodeType === Node.ELEMENT_NODE && prev.tagName === 'BR') {
-            const toRemove = prev;
-            prev = prev.previousSibling;
-            toRemove.remove();
+        // Strip <br>s that sit immediately before the .edit marker. These
+        // separated the body from the edit note and have no purpose once
+        // the note is removed.
+        const editSpans = contentClone.querySelectorAll('.edit');
+        editSpans.forEach(edit => {
+            let prev = edit.previousSibling;
+            while (prev && prev.nodeType === Node.ELEMENT_NODE && prev.tagName === 'BR') {
+                const toRemove = prev;
+                prev = prev.previousSibling;
+                toRemove.remove();
+            }
+        });
+
+        contentClone.querySelectorAll('.signature, .edit').forEach(el => el.remove());
+
+        // Strip <br>s adjacent to .bottomborder. Runs BEFORE the
+        // .bottomborder elements themselves are removed — otherwise the
+        // adjacency check has nothing to match against and orphan <br>s
+        // survive at the end of the content.
+        contentClone.querySelectorAll('br').forEach(br => {
+            const prev = br.previousElementSibling;
+            const next = br.nextElementSibling;
+            if ((next?.classList?.contains('bottomborder')) ||
+                (prev?.classList?.contains('bottomborder'))) {
+                br.remove();
+            }
+        });
+
+        contentClone.querySelectorAll('.bottomborder').forEach(el => el.remove());
+
+        // Trailing net. Any <br> or whitespace-only text node left at the
+        // very end is orphaned metadata residue.
+        let last = contentClone.lastChild;
+        while (last) {
+            if (last.nodeType === Node.TEXT_NODE && !last.nodeValue.trim()) {
+                contentClone.removeChild(last);
+            } else if (last.nodeType === Node.ELEMENT_NODE && last.tagName === 'BR') {
+                contentClone.removeChild(last);
+            } else {
+                break;
+            }
+            last = contentClone.lastChild;
         }
-    });
 
-    contentClone.querySelectorAll('.signature, .edit').forEach(el => el.remove());
-
-    // Strip <br>s adjacent to .bottomborder. Must run BEFORE the
-    // .bottomborder elements themselves are removed — otherwise the
-    // adjacency check has nothing to match against and orphan <br>s
-    // survive at the end of the content.
-    contentClone.querySelectorAll('br').forEach(br => {
-        const prev = br.previousElementSibling;
-        const next = br.nextElementSibling;
-        if ((next?.classList?.contains('bottomborder')) ||
-            (prev?.classList?.contains('bottomborder'))) {
-            br.remove();
-        }
-    });
-
-    contentClone.querySelectorAll('.bottomborder').forEach(el => el.remove());
-
-    // Trailing net. Any <br> or whitespace-only text node left at the
-    // very end of the content is orphaned metadata residue — nothing
-    // meaningful can follow it inside the post body. Strip until we
-    // hit real content.
-    let last = contentClone.lastChild;
-    while (last) {
-        if (last.nodeType === Node.TEXT_NODE && !last.nodeValue.trim()) {
-            contentClone.removeChild(last);
-        } else if (last.nodeType === Node.ELEMENT_NODE && last.tagName === 'BR') {
-            contentClone.removeChild(last);
-        } else {
-            break;
-        }
-        last = contentClone.lastChild;
+        let html = contentClone.innerHTML || '';
+        html = html.replace(/<p>\s*<\/p>/g, '');
+        html = html.trim();
+        html = transformEmbeddedLinks(html);
+        html = transformLegacyQuotesAndSpoilers(html);
+        html = transformLegacyAttachments(html);
+        html = transformLegacyCodeBlocks(html);
+        html = transformLegacyIframes(html);
+        html = transformLiteEmbeds(html);
+        html = transformLegacySocialEmbeds(html);
+        html = transformUserTags(html);
+        html = transformNSFWTags(html);
+        html = paragraphizeHtml(html);
+        return html;
     }
-
-    let html = contentClone.innerHTML || '';
-    html = html.replace(/<p>\s*<\/p>/g, '');
-    html = html.trim();
-    html = transformEmbeddedLinks(html);
-    html = transformLegacyQuotesAndSpoilers(html);
-    html = transformLegacyAttachments(html);
-    html = transformLegacyCodeBlocks(html);
-    html = transformLegacyIframes(html);
-    html = transformLiteEmbeds(html);
-    html = transformLegacySocialEmbeds(html);
-    html = transformUserTags(html);
-    html = transformNSFWTags(html);
-    return html;
-}
 
     function getSignatureHtml($post) {
         const signature = $post.querySelector('.signature');
-        return signature ? signature.innerHTML : '';
+        if (!signature) return '';
+        return paragraphizeHtml(signature.innerHTML);
     }
 
     function getEditInfo($post) {
@@ -691,6 +795,7 @@ function getCleanContent($post) {
         html = transformLegacySocialEmbeds(html);
         html = transformUserTags(html);
         html = transformNSFWTags(html);
+        html = paragraphizeHtml(html);
         return html;
     }
     function getMessagePostDate($post) {
@@ -756,6 +861,7 @@ function getCleanContent($post) {
             contentHtml = transformLegacySocialEmbeds(contentHtml);
             contentHtml = transformUserTags(contentHtml);
             contentHtml = transformNSFWTags(contentHtml);
+            contentHtml = paragraphizeHtml(contentHtml);
         }
         const pointsPos = articleLi.querySelector('.points_pos');
         const likes = pointsPos ? parseInt(pointsPos.textContent.replace(/[^0-9]/g, '')) || 0 : 0;
@@ -1068,15 +1174,10 @@ function transformLegacyQuotesAndSpoilers(htmlContent) {
         if (modernQuote) wrapper.parentNode.replaceChild(modernQuote, wrapper);
     });
 
-        // Extract spoiler title markers before converting spoilers. The
+    // Extract spoiler title markers before converting spoilers. The
     // marker span sits immediately before the legacy .spoiler div, with
     // optional <br>s between them; its text becomes the modern spoiler's
-    // data-title attribute. The attribute name matches the one the
-    // composer's TipTap Spoiler node uses, so the reader pipeline and
-    // the editor pipeline speak the same language if they ever need to
-    // be unified. It's set and consumed within this function — the
-    // wrapper element is discarded immediately after conversion, so
-    // there is no collision with an incoming data-title.
+    // data-title attribute.
     const titleMarkers = tempDiv.querySelectorAll('.ff-spoiler-title');
     titleMarkers.forEach(marker => {
         let next = marker.nextElementSibling;
@@ -1371,9 +1472,7 @@ function wrapImagesWithDimensions(container) {
         wrapper.style.aspectRatio = width + '/' + height;
         wrapper.style.maxWidth = '100%';
         // Apply the author's chosen display size (overrides the default
-        // 100% max-width). The explicit width set above becomes the
-        // upper bound; max-width shrinks it further when the size is
-        // smaller than the natural width.
+        // 100% max-width).
         if (dataSize === 'small') wrapper.style.maxWidth = '25%';
         else if (dataSize === 'medium') wrapper.style.maxWidth = '50%';
         else if (dataSize === 'large') wrapper.style.maxWidth = '75%';
@@ -1451,11 +1550,11 @@ function wrapImagesWithDimensions(container) {
                     } catch (e) {}
                 }
                 if (originalSrc && originalSrc !== src) {
-    target.src = originalSrc;
-    target.setAttribute('data-optimized', 'failed');
-    target.onerror = null;
-    console.log('[PostsModule] Global error handler fixed lazy image:', originalSrc);
-}
+                    target.src = originalSrc;
+                    target.setAttribute('data-optimized', 'failed');
+                    target.onerror = null;
+                    console.log('[PostsModule] Global error handler fixed lazy image:', originalSrc);
+                }
             }
         }, true); // Use capture phase to catch errors early
     }
@@ -1463,17 +1562,14 @@ function wrapImagesWithDimensions(container) {
     // ============================================================================
     // TOOLTIPS (data-tippy-content + polling + mutation observer + auto title conversion)
     // ============================================================================
-    // Guest detection – body.guest is set by the forum for unregistered users.
     function isGuest() {
         return document.body.classList.contains('guest');
     }
 
-    // Tippy availability check – evaluated at call time (Tippy loads with defer).
     function isTippyAvailable() {
         return typeof window.tippy === 'function';
     }
 
-    // Wait for Tippy to become available, then run the callback once.
     let tippyReadyCallbacks = [];
     let tippyPollTimer = null;
     function whenTippyReady(cb) {
@@ -1497,7 +1593,6 @@ function wrapImagesWithDimensions(container) {
         }, 50);
     }
 
-    // Init a single element (idempotent)
     function initTippyOn(el, opts) {
         if (!el || el._tippy || !isTippyAvailable()) return;
         try {
@@ -1515,18 +1610,13 @@ function wrapImagesWithDimensions(container) {
         } catch (e) { /* silent */ }
     }
 
-    // Auto‑convert any element with a `title` attribute into a tippy (registered users only).
-    // Mirrors the pattern used on the working forum.
     function autoTippyFromTitle(root) {
         if (isGuest() || !isTippyAvailable()) return;
         const scope = root || document.body;
         const els = scope.querySelectorAll('[title]');
         els.forEach(function (el) {
-            // Skip if already processed
             if (el._tippy || el.hasAttribute('data-tippy-content')) return;
-            // Skip inside a tippy popup itself
             if (el.closest('.tippy-box')) return;
-            // Skip non-interactive elements we don't want tips on
             if (el.tagName === 'HTML' || el.tagName === 'BODY' || el.tagName === 'IFRAME') return;
 
             const text = (el.getAttribute('title') || '').trim();
@@ -1538,25 +1628,18 @@ function wrapImagesWithDimensions(container) {
         });
     }
 
-    // Scan the whole document for [data-tippy-content] and init any not yet initialised.
-    // Also converts any remaining `title` attributes.
     function initAllTippys(root) {
         if (isGuest() || !isTippyAvailable()) return;
         (root || document).querySelectorAll('[data-tippy-content]').forEach(function (el) {
             initTippyOn(el);
         });
-        // Convert any remaining native titles.
         autoTippyFromTitle(root);
     }
 
-    // Apply a tooltip: sets data-tippy-content (registered) or title (guest), and initialises if possible.
-    // Options that affect initialisation (interactive, placement, maxWidth, delay, hideOnClick)
-    // are stored as data-* attributes so the deferred initialiser can read them.
     function applyTip(el, htmlContent, options) {
         if (!el || el._tippy) return;
         options = options || {};
 
-        // Guest path — native title only
         if (isGuest() || !htmlContent) {
             if (!el.hasAttribute('title')) {
                 const text = String(htmlContent || '')
@@ -1568,14 +1651,12 @@ function wrapImagesWithDimensions(container) {
             return;
         }
 
-        // Registered user path — set data-tippy-content and remember options
         el.setAttribute('data-tippy-content', htmlContent);
         if (options.placement) el.setAttribute('data-tippy-placement', options.placement);
         if (options.interactive) el.setAttribute('data-tippy-interactive', 'true');
         if (options.maxWidth) el.setAttribute('data-tippy-maxwidth', String(options.maxWidth));
         if (options.hideOnClick === false) el.setAttribute('data-tippy-hideonclick', 'false');
 
-        // If Tippy is already loaded, initialise right away.
         if (isTippyAvailable()) {
             initTippyOn(el, {
                 placement: el.getAttribute('data-tippy-placement') || 'top',
@@ -1584,15 +1665,12 @@ function wrapImagesWithDimensions(container) {
                 hideOnClick: el.getAttribute('data-tippy-hideonclick') !== 'false'
             });
         } else {
-            // Otherwise, wait for Tippy to load, then init.
             whenTippyReady(function () {
                 initAllTippys(el.parentNode || document);
             });
         }
     }
 
-    // MutationObserver — auto-init any [data-tippy-content] that appears later,
-    // and auto-convert any new [title] attributes.
     let tooltipObserver = null;
     function setupTooltipObserver() {
         if (isGuest()) return;
@@ -1694,7 +1772,6 @@ function wrapImagesWithDimensions(container) {
     function attachTips(card, data) {
         if (!card || !data) return;
 
-        // 1) Profile hovercard (avatar + username)
         const hovercardHtml = buildProfileHovercardHtml(data);
         const profileFallback = 'View profile of ' + data.username;
         [card.querySelector('.avatar-link'), card.querySelector('.user-profile-link')].forEach(el => {
@@ -1708,7 +1785,6 @@ function wrapImagesWithDimensions(container) {
             });
         });
 
-        // 2) Post number
         const postNumberEl = card.querySelector('.post-number');
         if (postNumberEl) {
             const num = data.postNumber;
@@ -1717,7 +1793,6 @@ function wrapImagesWithDimensions(container) {
                 { placement: 'bottom' });
         }
 
-        // 3) Post time (relative → absolute)
         const timeEl = card.querySelector('.post-time time');
         if (timeEl && data.postDate) {
             const abs = data.postDate.toLocaleString(undefined, {
@@ -1729,7 +1804,6 @@ function wrapImagesWithDimensions(container) {
                 { placement: 'bottom' });
         }
 
-        // 3b) Blog date (absolute)
         const blogDateEl = card.querySelector('.blog-date');
         if (blogDateEl && data.absoluteDate) {
             applyTip(blogDateEl,
@@ -1737,7 +1811,6 @@ function wrapImagesWithDimensions(container) {
                 { placement: 'bottom' });
         }
 
-        // 4) Role badge
         const roleBadge = card.querySelector('.role-badge');
         if (roleBadge) {
             const roleText = roleBadge.textContent.trim();
@@ -1747,7 +1820,6 @@ function wrapImagesWithDimensions(container) {
                 { placement: 'top' });
         }
 
-        // 5) User rank
         const rankEl = card.querySelector('.user-rank');
         if (rankEl) {
             applyTip(rankEl,
@@ -1755,7 +1827,6 @@ function wrapImagesWithDimensions(container) {
                 { placement: 'top' });
         }
 
-        // 6) Edit info
         const editEl = card.querySelector('.post-edit-info');
         if (editEl && data.editInfo) {
             const editor = data.editInfo.editor || 'someone';
@@ -1766,7 +1837,6 @@ function wrapImagesWithDimensions(container) {
                 { placement: 'top' });
         }
 
-        // 7) IP address (privacy note)
         const ipEl = card.querySelector('.post-ip');
         if (ipEl && data.ipAddress) {
             applyTip(ipEl,
@@ -1774,7 +1844,6 @@ function wrapImagesWithDimensions(container) {
                 { placement: 'top' });
         }
 
-        // 8) User tags — async fetch + hovercard
         const userTags = card.querySelectorAll('.user-tag');
         userTags.forEach(tag => {
             if (tag._tippy || tag.hasAttribute('data-tippy-content')) return;
@@ -1782,13 +1851,11 @@ function wrapImagesWithDimensions(container) {
             const username = tag.getAttribute('data-username') || tag.textContent.trim().replace(/^@/, '');
             if (!uid) return;
 
-            // Guests get a plain native title
             if (isGuest()) {
                 tag.setAttribute('title', 'View profile of ' + username);
                 return;
             }
 
-            // Fetch the tagged user's data, then attach the hovercard
             fetchUserData(uid).then(user => {
                 const tagData = {
                     mid: uid,
@@ -1808,7 +1875,6 @@ function wrapImagesWithDimensions(container) {
                     hideOnClick: false
                 });
             }).catch(() => {
-                // Fallback on API error
                 tag.setAttribute('title', 'View profile of ' + username);
             });
         });
@@ -1826,13 +1892,11 @@ function wrapImagesWithDimensions(container) {
         const validPages = ['topic', 'send', 'blog', 'search'];
         if (!validPages.includes(document.body.id)) return;
 
-        // Init per post card so each gallery is isolated to its own post
         const cards = document.querySelectorAll('#posts-container .post-card, #modern-summary-container .post-card');
 
         cards.forEach(card => {
             if (card.dataset.lgInit === 'true') return;
 
-            // Only scan post content — skip signatures entirely
             const images = card.querySelectorAll(
                 '.post-message img[src], .quote-content img[src], .spoiler-content img[src]'
             );
@@ -1842,27 +1906,13 @@ function wrapImagesWithDimensions(container) {
             let idx = 0;
 
             images.forEach(img => {
-                    // Never hand NSFW-marked images to the gallery. The reveal click
-    // has to stay exclusive to the nsfw-image toggle, and an NSFW
-    // image opening full-screen in a lightbox is the wrong default
-    // anyway. Users who want the full size can right-click → open
-    // image in new tab.
     if (img.getAttribute('data-nsfw') === 'true') return;
-                
-                // Skip twemoji
                 if (img.classList.contains('twemoji')) return;
-
-                // Skip emoji alt (alt starts AND ends with ":")
                 const alt = img.getAttribute('alt');
                 if (alt && alt.startsWith(':') && alt.endsWith(':')) return;
-
-                // Skip link-preview images
                 if (img.closest('.modern-embedded-link')) return;
-
-                // Skip already-processed images
                 if (img.dataset.src) return;
 
-                // Skip linked thumbnails that lead to a viewer page (imagebam, etc.)
                 const link = img.closest('a');
                 if (link) {
                     const href = link.getAttribute('href') || '';
@@ -1870,9 +1920,6 @@ function wrapImagesWithDimensions(container) {
                     if (href && href !== img.src) return;
                 }
 
-                // ---- Determine the full-size URL ----
-                // Prefer the original URL (data-original, or the url= param
-                // inside the weserv URL). Fall back to the current src.
                 let fullSizeSrc = img.getAttribute('data-original');
                 if (!fullSizeSrc) {
                     const src = img.src;
@@ -1886,13 +1933,10 @@ function wrapImagesWithDimensions(container) {
                 }
                 if (!fullSizeSrc) fullSizeSrc = img.src;
 
-                // LightGallery source = original full-size image.
-                // Thumbnail = current (optimized) src.
                 img.dataset.src = fullSizeSrc;
                 img.dataset.thumb = img.src;
                 if (!img.dataset.lgId) img.dataset.lgId = `lg-${initTime}-${idx++}`;
 
-                // Determine intrinsic size (probe the full-size image)
                 if (img.naturalWidth && img.naturalHeight) {
                     img.dataset.lgSize = `${img.naturalWidth}-${img.naturalHeight}`;
                 } else {
@@ -1965,7 +2009,6 @@ function wrapImagesWithDimensions(container) {
         });
     }
 
-    // Wait for lightGallery + plugins, then init
     function waitForLightGallery() {
         if (
             typeof lightGallery !== 'undefined' &&
@@ -2278,7 +2321,6 @@ function wrapImagesWithDimensions(container) {
             footerHtml = '<footer class="post-footer"><div class="post-reactions">' + likeButton + reactionsHtml + '</div>' + memberActionsHtml + messageActionsHtml + ipHtml + '</footer>';
         }
 
-        // MODIFIED: added id="entry{data.postId}" to the article element
         return '<article id="entry' + data.postId + '" class="post-card ' + groupCssClass + '" data-original-id="' + (data.originalIdPrefix || CONFIG.POST_ID_PREFIX) + data.postId + '" data-post-id="' + data.postId + '" aria-labelledby="post-title-' + data.postId + '">' +
             '<header class="post-card-header"><div class="post-meta"><div class="post-number"><i class="fa-regular fa-hashtag" aria-hidden="true"></i> ' + data.postNumber + '</div>' + postTimeHtml + '</div>' + headerActionsHtml + '</header>' +
             '<div class="post-card-body"><div class="avatar-modern">' + avatarHtml + '</div>' +
@@ -2296,11 +2338,9 @@ function wrapImagesWithDimensions(container) {
         if (!container) return;
         const links = container.querySelectorAll('.post-message a[href]:not(.has-favicon)');
         for (const link of links) {
-            // Skip attachment action buttons
             if (link.closest('.attachment-actions')) continue;
             if (link.classList.contains('attachment-download-btn') || link.classList.contains('attachment-view-btn')) continue;
             if (link.querySelector('img')) continue;
-            // Skip user tags — they have their own styling
             if (link.classList.contains('user-tag')) continue;
             if (link.classList.contains('link-preview-link')) continue; 
             try {
@@ -2512,18 +2552,11 @@ function wrapImagesWithDimensions(container) {
         const isExpanded = quote.classList.contains('expanded');
 
         if (isExpanded) {
-            // Collapsing: capture the current full height as the starting
-            // value, force a reflow so the browser registers it, then
-            // release to CSS (which applies the 250px collapsed max-height).
             content.style.maxHeight = content.scrollHeight + 'px';
             void content.offsetHeight;
             content.style.maxHeight = '';
             quote.classList.remove('expanded');
         } else {
-            // Expanding: set an explicit pixel target so the browser has
-            // two length values to interpolate between. Clean up after the
-            // transition so future content growth isn't clipped by a stale
-            // inline max-height.
             content.style.maxHeight = content.scrollHeight + 'px';
             quote.classList.add('expanded');
 
@@ -2595,18 +2628,11 @@ function wrapImagesWithDimensions(container) {
         const isExpanded = spoiler.classList.contains('expanded');
 
         if (isExpanded) {
-            // Collapsing — set the current height as the starting point,
-            // then animate to 0 on the next frame. Without the explicit
-            // starting value, the browser would skip the transition
-            // because the value change from `auto` to `0` has no
-            // interpolatable state.
             content.style.maxHeight = content.scrollHeight + 'px';
-            void content.offsetHeight; // force reflow
+            void content.offsetHeight;
             content.style.maxHeight = '0';
             spoiler.classList.remove('expanded');
         } else {
-            // Expanding — measure the content's natural height and
-            // animate from 0 up to it.
             const targetHeight = content.scrollHeight;
             if (targetHeight <= 0) return;
             content.style.maxHeight = targetHeight + 'px';
@@ -2618,7 +2644,6 @@ function wrapImagesWithDimensions(container) {
         content.setAttribute('aria-hidden', String(isExpanded));
     }
 
-    // ---- Copy code button ----
     function handleCodeCopy(btn) {
         const codeBlock = btn.closest('.modern-code');
         if (!codeBlock) return;
@@ -2627,7 +2652,6 @@ function wrapImagesWithDimensions(container) {
         const text = codeContent.textContent;
         if (navigator.clipboard && navigator.clipboard.writeText) {
             navigator.clipboard.writeText(text).then(() => {
-                // Visual feedback
                 const icon = btn.querySelector('i');
                 if (icon) {
                     const originalClass = icon.className;
@@ -2636,7 +2660,6 @@ function wrapImagesWithDimensions(container) {
                 }
             }).catch(err => console.error('Copy failed:', err));
         } else {
-            // Fallback
             const textarea = document.createElement('textarea');
             textarea.value = text;
             document.body.appendChild(textarea);
@@ -2783,7 +2806,6 @@ document.addEventListener('keydown', function (e) {
             const spoilerHeader = e.target.closest('.spoiler-header');
             if (spoilerHeader) { e.preventDefault(); handleSpoilerToggle(spoilerHeader); }
         });
-        // ---- Code copy button ----
         document.addEventListener('click', function (e) {
             const btn = e.target.closest('.code-copy-btn');
             if (btn) { e.preventDefault(); handleCodeCopy(btn); }
@@ -2805,11 +2827,6 @@ function transformLegacyCodeBlocks(htmlContent) {
     const tempDiv = document.createElement('div');
     tempDiv.innerHTML = htmlContent;
 
-    // Extract language markers before processing code blocks.
-    // A marker is a <span class="ff-code-lang"> that sits immediately
-    // before the .code_top, with optional <br> between them. ForumFree
-    // can wrap the [CODE] block in a div[align="center"], so we probe
-    // both the marker's direct next sibling and its subtree.
     const langMarkers = tempDiv.querySelectorAll('.ff-code-lang');
     langMarkers.forEach(marker => {
         let next = marker.nextElementSibling;
@@ -2837,17 +2854,10 @@ function transformLegacyCodeBlocks(htmlContent) {
         }
         if (!codeBody) return;
 
-        // Prefer the stashed language marker over the default "CODE"
-        // title. The <b> tag inside .code_top is ForumFree's own label
-        // ("CODE" or "SPOILER"); we only override it when the author
-        // provided a language.
         const titleTag = codeTop.querySelector('b');
         const defaultTitle = titleTag ? titleTag.textContent.trim() : 'CODE';
         const title = codeTop.getAttribute('data-ff-lang') || defaultTitle;
 
-        // textContent gives us the plain-text body — the browser has
-        // already decoded entities like &lt;. highlightCode then escapes
-        // it back to HTML and layers on the token spans.
         const codeContent = highlightCode(codeBody.textContent || '');
 
         const modernHtml = `<div class="modern-code">
@@ -2889,12 +2899,6 @@ function transformLegacyCodeBlocks(htmlContent) {
 
     // ============================================================================
 // EMBEDS — synchronous transforms + async post-insertion hydration
-//   Pipeline transforms (run on HTML before insertion):
-//     • transformLegacySocialEmbeds — Twitter/Instagram blockquotes → skeletons
-//     • transformLegacyIframes      — raw <iframe> → lite-embed wrappers
-//   Hydration (runs on DOM after insertion):
-//     • hydrateSocialEmbeds         — fills skeleton cards from OG worker
-//     • hydrateLiteEmbeds           — fills lite wrapper captions from OG worker
 // ============================================================================
 function transformLegacySocialEmbeds(htmlContent) {
     if (!htmlContent || typeof htmlContent !== 'string') return htmlContent;
@@ -2908,11 +2912,6 @@ function transformLegacySocialEmbeds(htmlContent) {
     );
 
     blockquotes.forEach(bq => {
-        // Twitter: the canonical tweet URL is the last <a> inside the
-        // blockquote (the "replies/likes" link points at the same status,
-        // but the first <a> is usually the author handle, so taking the
-        // last one is more reliable across templates).
-        // Instagram: same shape — one <a href> per post.
         const links = bq.querySelectorAll('a[href]');
         let url = '';
         for (let i = links.length - 1; i >= 0; i--) {
@@ -2922,8 +2921,6 @@ function transformLegacySocialEmbeds(htmlContent) {
         if (!url && links.length) url = links[links.length - 1].href || '';
         if (!url) { bq.remove(); return; }
 
-        // Skeleton card. Same classes the stylesheet styles, so the frame
-        // renders with correct dimensions the instant the post appears.
         const skeleton = document.createElement('span');
         skeleton.className = 'link-preview-card link-preview-card--loading';
         skeleton.setAttribute('data-type', 'link-preview');
@@ -2968,18 +2965,13 @@ function transformLegacySocialEmbeds(htmlContent) {
     return tempDiv.innerHTML;
 }
 
-// Runs once per card after insertion. Handles all the async work.
-// Deduplicated per URL across the page so a tweet embedded in five
-// posts still triggers one worker request.
-const _socialHydrationCache = new Map();  // url → Promise<metadata | null>
-
+const _socialHydrationCache = new Map();
 const _liteEmbedCache = new Map();
 
 function hydrateLiteEmbeds(root) {
     if (!root) return;
     const wrappers = root.querySelectorAll('.lite-embed-wrapper[data-videoid]');
     wrappers.forEach(wrapper => {
-        // Skip if the wrapper already has a caption (new posts from v10)
         if (wrapper.querySelector('.lite-embed-caption')) return;
         const videoid = wrapper.getAttribute('data-videoid');
         if (!videoid) return;
@@ -3033,7 +3025,6 @@ function hydrateSocialEmbeds(root) {
         const url = skeleton.getAttribute('data-social-hydrate');
         if (!url) return;
 
-        // One promise per unique URL
         let promise = _socialHydrationCache.get(url);
         if (!promise) {
             promise = fetch(OG_WORKER_URL + encodeURIComponent(url))
@@ -3043,12 +3034,9 @@ function hydrateSocialEmbeds(root) {
         }
 
         promise.then(data => {
-            // Card may have been removed while the fetch was in flight
             if (!skeleton.parentNode) return;
 
             if (!data || data.error || !data.title) {
-                // Graceful fallback — strip the loading state, keep the
-                // hostname-only card that already rendered. No layout shift.
                 skeleton.classList.remove('link-preview-card--loading');
                 return;
             }
@@ -3057,11 +3045,9 @@ function hydrateSocialEmbeds(root) {
             const text = skeleton.querySelector('.link-preview-text');
             if (!link || !text) return;
 
-            // Replace the placeholder title with the real one
             const titleEl = text.querySelector('.link-preview-title');
             if (titleEl) titleEl.textContent = data.title || url;
 
-            // Insert author line + description between title and url row
             const urlRow = text.querySelector('.link-preview-url-wrapper');
 
             if (data.author) {
@@ -3078,12 +3064,9 @@ function hydrateSocialEmbeds(root) {
                 text.insertBefore(desc, urlRow);
             }
 
-            // If the worker returned a thumbnail, convert the card from
-            // the simple text-only form to the rich two-column form.
             if (data.imageSrc) {
                 const finalImageUrl = data.imageSrc;
-                const proxied = finalImageUrl;  // simple pass-through; the worker already
-                                                 // returns a resolved URL
+                const proxied = finalImageUrl;
                 const imageWrap = document.createElement('span');
                 imageWrap.className = 'embedded-link-image';
                 const img = document.createElement('img');
@@ -3092,7 +3075,6 @@ function hydrateSocialEmbeds(root) {
                 img.alt = '';
                 img.src = proxied;
                 imageWrap.appendChild(img);
-                // Insert image column before the text column
                 const contentWrap = skeleton.querySelector('.link-preview-content');
                 if (contentWrap) contentWrap.insertBefore(imageWrap, text);
             }
@@ -3101,19 +3083,7 @@ function hydrateSocialEmbeds(root) {
         });
     });
 }
-    // ============================================================================
-// LEGACY IFRAME TRANSFORMATION
-// ForumFree historically rendered [youtube]ID[/youtube] and similar
-// BBCode as raw <iframe> elements. The sanitizer strips every iframe, so
-// legacy embeds vanish from modern cards. This transform runs BEFORE the
-// sanitizer sees the content: it matches known providers and rewrites
-// each iframe into the same .lite-embed-wrapper structure the composer
-// produces, so the CDN custom element upgrades it and the existing
-// stylesheet handles layout.
-//
-// Non-whitelisted iframes are left in place — the sanitizer removes them,
-// same as today.
-// ============================================================================
+
 function transformLegacyIframes(htmlContent) {
     if (!htmlContent || typeof htmlContent !== 'string') return htmlContent;
     if (htmlContent.indexOf('<iframe') === -1) return htmlContent;
@@ -3125,7 +3095,7 @@ function transformLegacyIframes(htmlContent) {
     iframes.forEach(iframe => {
         const src = iframe.getAttribute('src') || '';
         const parsed = parseLegacyIframeProvider(src);
-        if (!parsed) return;   // leave for the sanitizer
+        if (!parsed) return;
 
         const wrapper = document.createElement('div');
         wrapper.className = 'lite-embed-wrapper';
@@ -3137,8 +3107,6 @@ function transformLegacyIframes(htmlContent) {
         lite.setAttribute('videoid', parsed.videoid);
         wrapper.appendChild(lite);
 
-        // If the iframe sits alone inside a div[align="center"], replace
-        // that too so no empty centered container is left behind.
         const parent = iframe.parentNode;
         const target = (
             parent && parent.tagName === 'DIV' &&
@@ -3154,15 +3122,10 @@ function transformLegacyIframes(htmlContent) {
 
 function parseLegacyIframeProvider(src) {
     if (!src) return null;
-
-    // YouTube — three historical URL shapes
     let m = src.match(/(?:youtube(?:-nocookie)?\.com\/(?:embed\/|v\/)|youtu\.be\/)([A-Za-z0-9_-]{6,})/);
     if (m) return { kind: 'youtube', videoid: m[1] };
-
-    // Vimeo
     m = src.match(/player\.vimeo\.com\/video\/(\d+)/);
     if (m) return { kind: 'vimeo', videoid: m[1] };
-
     return null;
 }
 
@@ -3173,35 +3136,29 @@ function parseLegacyIframeProvider(src) {
     function getFileIcon(extension) {
         const ext = extension.toLowerCase();
         const map = {
-            // Archives
             'zip': 'fa-file-zipper',
             'rar': 'fa-file-zipper',
             '7z': 'fa-file-zipper',
             'gz': 'fa-file-zipper',
             'tar': 'fa-file-zipper',
-            // Documents
             'pdf': 'fa-file-pdf',
             'doc': 'fa-file-word',
             'docx': 'fa-file-word',
             'odt': 'fa-file-word',
             'rtf': 'fa-file-word',
-            // Spreadsheets
             'xls': 'fa-file-excel',
             'xlsx': 'fa-file-excel',
             'ods': 'fa-file-excel',
             'csv': 'fa-file-excel',
-            // Presentations
             'ppt': 'fa-file-powerpoint',
             'pptx': 'fa-file-powerpoint',
             'odp': 'fa-file-powerpoint',
-            // Images (shouldn't hit this branch, but just in case)
             'jpg': 'fa-file-image',
             'jpeg': 'fa-file-image',
             'png': 'fa-file-image',
             'gif': 'fa-file-image',
             'svg': 'fa-file-image',
             'webp': 'fa-file-image',
-            // Code / Text
             'txt': 'fa-file-lines',
             'log': 'fa-file-lines',
             'js': 'fa-file-code',
@@ -3209,22 +3166,18 @@ function parseLegacyIframeProvider(src) {
             'html': 'fa-file-code',
             'xml': 'fa-file-code',
             'json': 'fa-file-code',
-            // Audio
             'mp3': 'fa-file-audio',
             'wav': 'fa-file-audio',
             'flac': 'fa-file-audio',
-            // Video
             'mp4': 'fa-file-video',
             'avi': 'fa-file-video',
             'mkv': 'fa-file-video',
-            // Fallback
             'default': 'fa-file'
         };
         return map[ext] || map['default'];
     }
 
     function buildModernImageAttachment(imageUrl, alt, width, height, previewSrc) {
-        // Extract filename from URL (last part of path)
         let filename = alt || 'image';
         try {
             const urlObj = new URL(imageUrl);
@@ -3234,7 +3187,6 @@ function parseLegacyIframeProvider(src) {
             if (lastPart && lastPart.includes('.')) {
                 filename = lastPart;
             } else {
-                // Fallback: use alt if no extension found
                 filename = alt || 'image';
             }
         } catch (e) {
@@ -3266,7 +3218,6 @@ function parseLegacyIframeProvider(src) {
         const details = filename + ' • ' + fileType;
         const downloadsLabel = downloads === 1 ? '1 download' : `${downloads} downloads`;
         
-        // Get extension from filename
         const extension = filename.split('.').pop() || '';
         const iconClass = 'fa-regular ' + getFileIcon(extension);
         const iconHtml = `<i class="${iconClass}" aria-hidden="true"></i>`;
@@ -3299,7 +3250,6 @@ function parseLegacyIframeProvider(src) {
             let isImage = false;
             let next = fancyTop.nextElementSibling;
 
-            // Check for image pattern: <div align="center"><a class="fancyborder"...>
             if (next && next.tagName === 'DIV' && next.hasAttribute('align') && next.getAttribute('align') === 'center') {
                 const link = next.querySelector('a.fancyborder');
                 if (link && link.querySelector('img')) {
@@ -3307,7 +3257,6 @@ function parseLegacyIframeProvider(src) {
                     isImage = true;
                 }
             }
-            // If not image, check for file pattern: <div class="fancyborder"> (direct sibling)
             if (!container && next && next.classList && next.classList.contains('fancyborder')) {
                 const fileLink = next.querySelector('a[title="Download attachment"]');
                 if (fileLink) {
@@ -3339,7 +3288,6 @@ function parseLegacyIframeProvider(src) {
                     const match = small.textContent.match(/\(Number of downloads:\s*(\d+)\)/i);
                     if (match) downloads = parseInt(match[1], 10) || 0;
                 }
-                // Extract file type from extension
                 const extension = filename.split('.').pop().toLowerCase();
                 const fileType = extension.toUpperCase() + ' FILE';
                 modernHtml = buildModernFileAttachment(filename, downloadUrl, downloads, fileType);
@@ -3353,7 +3301,6 @@ function parseLegacyIframeProvider(src) {
                     fancyTop.remove();
                     container.remove();
 
-                    // ---- Remove following <br> tags ----
                     let nextSibling = modernNode.nextSibling;
                     while (nextSibling && nextSibling.tagName === 'BR') {
                         const toRemove = nextSibling;
@@ -3371,25 +3318,19 @@ function parseLegacyIframeProvider(src) {
     // ============================================================================
 
     function convertPoll() {
-        // Only run on topic pages and if a poll exists
         if (document.body.id !== 'topic') return;
         const legacyPoll = document.querySelector('div.poll');
         if (!legacyPoll) return;
-
-        // Avoid double conversion
         if (legacyPoll.dataset.converted === 'true') return;
         legacyPoll.dataset.converted = 'true';
 
-        // Extract poll data
         const pollData = parseLegacyPoll(legacyPoll);
         if (!pollData) return;
 
-        // Build modern poll HTML
         const modernHtml = buildModernPoll(pollData);
         const modernPoll = createElementFromHTML(modernHtml);
         if (!modernPoll) return;
 
-        // Insert modern poll before the first modern post
         const container = getPostsContainer();
         const firstPost = container.querySelector('.post-card');
         if (firstPost) {
@@ -3398,24 +3339,21 @@ function parseLegacyIframeProvider(src) {
             container.prepend(modernPoll);
         }
 
-        // Attach event handlers to modern poll
         attachPollHandlers(modernPoll, legacyPoll, pollData);
     }
 
     function parseLegacyPoll(legacyPoll) {
         try {
-            // Get title
             const titleEl = legacyPoll.querySelector('.sunbar.top.Item');
             const title = titleEl ? titleEl.textContent.trim() : 'Poll';
 
-            // Determine state
             const hasRadio = legacyPoll.querySelector('input[name="poll_vote"]') !== null;
             const hasBar = legacyPoll.querySelector('.bar') !== null;
             const hasDelVote = legacyPoll.querySelector('input[name="delvote"]') !== null;
             const hasNullVote = legacyPoll.querySelector('input[name="nullvote"]') !== null;
             const hasYouVoted = legacyPoll.textContent.includes('You have voted');
 
-            let state = 'vote'; // default
+            let state = 'vote';
             if (hasYouVoted && hasDelVote) {
                 state = 'voted';
             } else if (hasBar && !hasRadio) {
@@ -3427,13 +3365,11 @@ function parseLegacyIframeProvider(src) {
                 else state = 'results';
             }
 
-            // Extract choices
             let choices = [];
             let totalVotes = 0;
-            let userVoteIndex = -1; // 0-based
+            let userVoteIndex = -1;
 
             if (state === 'vote') {
-                // Radio buttons: each li contains a label with text
                 const items = legacyPoll.querySelectorAll('li.Item');
                 for (const li of items) {
                     const label = li.querySelector('label');
@@ -3449,7 +3385,6 @@ function parseLegacyIframeProvider(src) {
                 }
                 totalVotes = 0;
             } else {
-                // Results or voted: each li has .left.Sub.Item (choice), .center.Sub.Item (bar & percentage), .right.Sub.Item (votes)
                 const items = legacyPoll.querySelectorAll('li');
                 for (const li of items) {
                     const left = li.querySelector('.left.Sub.Item');
@@ -3474,7 +3409,6 @@ function parseLegacyIframeProvider(src) {
                     totalVotes += votes;
                 }
 
-                // If voted, find user's choice: the one with 'max' class or strong in left
                 if (state === 'voted') {
                     const itemsWithMax = legacyPoll.querySelectorAll('li.max');
                     if (itemsWithMax.length === 1) {
@@ -3495,7 +3429,6 @@ function parseLegacyIframeProvider(src) {
                     }
                 }
 
-                // Recalculate percentages based on totalVotes
                 if (totalVotes > 0) {
                     for (let c of choices) {
                         c.percentage = (c.votes / totalVotes) * 100;
@@ -3503,12 +3436,10 @@ function parseLegacyIframeProvider(src) {
                 }
             }
 
-            // Get voter count
             let voters = 0;
             const votersMatch = legacyPoll.textContent.match(/\(Voters:\s*(\d+)\)/);
             if (votersMatch) voters = parseInt(votersMatch[1], 10);
 
-            // Find the form that contains the poll
             const form = legacyPoll.closest('form');
 
             return {
@@ -3556,7 +3487,6 @@ function buildModernPoll(data) {
         `;
     }
 
-    // Build choices HTML
     let choicesHtml = '';
     const maxVotes = choices.length ? Math.max(...choices.map(c => c.votes)) : 0;
 
@@ -3575,7 +3505,6 @@ function buildModernPoll(data) {
             radioHtml = `<input type="radio" class="choice-radio" checked disabled>`;
         }
 
-        // --- FIX: allow <strong> in label, sanitize the rest ---
         let labelHtml = sanitizeHTML(choice.label);
         if (pollState === 'voted' && isSelected) {
             labelHtml += '&nbsp;<strong>(Your vote)</strong>';
@@ -3624,13 +3553,11 @@ function attachPollHandlers(modernPoll, legacyPoll, pollData) {
     const form = pollData.form;
     if (!form) return;
 
-    // Helper: find and click the original submit button by its name
     function clickOriginalButton(name) {
         const btn = form.querySelector(`input[type="submit"][name="${name}"]`);
         if (btn) {
             btn.click();
         } else {
-            // Fallback: add a hidden input with that name and submit
             const input = document.createElement('input');
             input.type = 'hidden';
             input.name = name;
@@ -3639,7 +3566,6 @@ function attachPollHandlers(modernPoll, legacyPoll, pollData) {
         }
     }
 
-    // ---- Vote button ----
     const voteBtn = modernPoll.querySelector('.vote-btn');
     if (voteBtn) {
         voteBtn.addEventListener('click', function(e) {
@@ -3650,12 +3576,10 @@ function attachPollHandlers(modernPoll, legacyPoll, pollData) {
                 const originalRadio = form.querySelector(`input[name="poll_vote"][value="${value}"]`);
                 if (originalRadio) originalRadio.checked = true;
             }
-            // Click the original "Vote!" button (name="submit")
             clickOriginalButton('submit');
         });
     }
 
-    // ---- View Results button ----
     const viewResultsBtn = modernPoll.querySelector('.view-results-btn');
     if (viewResultsBtn) {
         viewResultsBtn.addEventListener('click', function(e) {
@@ -3664,7 +3588,6 @@ function attachPollHandlers(modernPoll, legacyPoll, pollData) {
         });
     }
 
-    // ---- Cancel Vote button ----
     const cancelVoteBtn = modernPoll.querySelector('.cancel-vote-btn');
     if (cancelVoteBtn) {
         cancelVoteBtn.addEventListener('click', function(e) {
@@ -3673,7 +3596,6 @@ function attachPollHandlers(modernPoll, legacyPoll, pollData) {
         });
     }
 
-    // ---- Click on choice row to select radio ----
     const choiceRows = modernPoll.querySelectorAll('.poll-choice');
     choiceRows.forEach(row => {
         row.addEventListener('click', function(e) {
@@ -3687,7 +3609,6 @@ function attachPollHandlers(modernPoll, legacyPoll, pollData) {
         });
     });
 
-    // ---- Label clicks ----
     modernPoll.querySelectorAll('.choice-label').forEach(label => {
         label.addEventListener('click', function(e) {
             const row = this.closest('.poll-choice');
@@ -3760,11 +3681,8 @@ function attachPollHandlers(modernPoll, legacyPoll, pollData) {
             }
             attachEventHandlers();
             initQuotesAndSpoilers();
-            // Convert any remaining native titles into tippys
             whenTippyReady(function () { autoTippyFromTitle(container); });
-            // Init lightGallery on the new cards
             waitForLightGallery();
-            // Fix any remaining broken images globally
             setTimeout(fixBrokenWeservImages, 300);
             console.log('[PostsModule] Messages ready - ' + postsData.length + ' messages converted');
         } catch (err) { console.error('[PostsModule] Messages conversion error:', err); }
@@ -3781,10 +3699,8 @@ function attachPollHandlers(modernPoll, legacyPoll, pollData) {
             convertedPostIds.clear();
             postReactions.clear();
 
-            // ---- Convert legacy poll ----
             convertPoll();
 
-            // ---- Blog articles ----
             const blogArticles = document.querySelectorAll('.blog .article');
             let blogCount = 0;
             const allMids = [];
@@ -3815,7 +3731,6 @@ function attachPollHandlers(modernPoll, legacyPoll, pollData) {
                 blogCount++;
             }
 
-            // ---- Topic posts ----
             const posts = document.querySelectorAll(CONFIG.POST_SELECTOR);
             const validPosts = Array.from(posts).filter(isValidPost);
             let globalMid = null, globalUsername = null, isMemberPostsPage = false;
@@ -3895,11 +3810,8 @@ function attachPollHandlers(modernPoll, legacyPoll, pollData) {
             }
             attachEventHandlers();
             initQuotesAndSpoilers();
-            // Convert any remaining native titles into tippys
             whenTippyReady(function () { autoTippyFromTitle(container); });
-            // Init lightGallery on the new cards
             waitForLightGallery();
-            // Fix any remaining broken images globally
             setTimeout(fixBrokenWeservImages, 300);
             console.log('[PostsModule] Ready - ' + (postsData.length + blogCount) + ' posts converted');
         } catch (err) { console.error('[PostsModule] Conversion error:', err); }
@@ -3959,6 +3871,7 @@ function attachPollHandlers(modernPoll, legacyPoll, pollData) {
                 contentHtml = transformLegacySocialEmbeds(contentHtml);
                 contentHtml = transformUserTags(contentHtml);
                 contentHtml = transformNSFWTags(contentHtml);
+                contentHtml = paragraphizeHtml(contentHtml);
             }
             postsData.push({
                 postId: 'summary_' + i, mid, username, groupText: groupName, contentHtml,
@@ -3992,11 +3905,8 @@ function attachPollHandlers(modernPoll, legacyPoll, pollData) {
             }
         }
         initQuotesAndSpoilers();
-        // Convert any remaining native titles into tippys
         whenTippyReady(function () { autoTippyFromTitle(container); });
-        // Init lightGallery on the summary container
         waitForLightGallery();
-        // Fix any remaining broken images globally
         setTimeout(fixBrokenWeservImages, 300);
         console.log('[PostsModule] Summary conversion ready - ' + postsData.length + ' posts');
     }
@@ -4020,16 +3930,13 @@ function attachPollHandlers(modernPoll, legacyPoll, pollData) {
             if (isInitialized) return;
             isInitialized = true;
 
-            // Set up global image error handler
             setupGlobalImageErrorHandler();
 
-            // Kick off tooltip infrastructure immediately (in case Tippy is already loaded)
             setupTooltipObserver();
             whenTippyReady(function () {
                 initAllTippys(document);
             });
 
-            // Kick off lightGallery watcher
             waitForLightGallery();
 
             if (!isValidPage()) {
