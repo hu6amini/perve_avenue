@@ -1037,14 +1037,22 @@ function transformLegacyQuotesAndSpoilers(htmlContent) {
         if (modernQuote) wrapper.parentNode.replaceChild(modernQuote, wrapper);
     });
 
-    // Extract spoiler title markers before converting spoilers.
+        // Extract spoiler title markers before converting spoilers. The
+    // marker span sits immediately before the legacy .spoiler div, with
+    // optional <br>s between them; its text becomes the modern spoiler's
+    // data-title attribute. The attribute name matches the one the
+    // composer's TipTap Spoiler node uses, so the reader pipeline and
+    // the editor pipeline speak the same language if they ever need to
+    // be unified. It's set and consumed within this function — the
+    // wrapper element is discarded immediately after conversion, so
+    // there is no collision with an incoming data-title.
     const titleMarkers = tempDiv.querySelectorAll('.ff-spoiler-title');
     titleMarkers.forEach(marker => {
         let next = marker.nextElementSibling;
         while (next && next.tagName === 'BR') next = next.nextElementSibling;
         if (next && next.classList && next.classList.contains('spoiler')) {
             const title = (marker.textContent || '').trim();
-            if (title) next.setAttribute('data-ff-title', title);
+            if (title) next.setAttribute('data-title', title);
         }
         marker.remove();
     });
@@ -1054,7 +1062,7 @@ function transformLegacyQuotesAndSpoilers(htmlContent) {
         const codeTop = spoiler.querySelector('.code_top');
         const codeBody = spoiler.querySelector('.code');
         if (!codeTop || !codeBody) return;
-        const title = spoiler.getAttribute('data-ff-title') || 'Spoiler';
+        const title = spoiler.getAttribute('data-title') || 'Spoiler';
         const modernSpoiler = convertLegacySpoiler(codeTop, codeBody, title);
         if (modernSpoiler) spoiler.parentNode.replaceChild(modernSpoiler, spoiler);
     });
@@ -1412,11 +1420,11 @@ function wrapImagesWithDimensions(container) {
                     } catch (e) {}
                 }
                 if (originalSrc && originalSrc !== src) {
-                    target.src = originalSrc;
-                    target.setAttribute('data-optimized', 'failed');
-                    target.onerror = null;
-                    console.log('[PostsModule] Global error handler fixed lazy image:', originalSrc);
-                }
+    target.src = originalSrc;
+    target.setAttribute('data-optimized', 'failed');
+    target.onerror = null;
+    console.log('[PostsModule] Global error handler fixed lazy image:', originalSrc);
+}
             }
         }, true); // Use capture phase to catch errors early
     }
