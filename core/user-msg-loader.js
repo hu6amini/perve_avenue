@@ -230,7 +230,7 @@ whenBodyReady(() => {
                     loadScript("https://cdn.jsdelivr.net/gh/hu6amini/perve_avenue@3051b903c91564b713f0963e1553a1fde0921e81/modules/breadcrumbs.js"),
                     loadScript("https://cdn.jsdelivr.net/gh/hu6amini/perve_avenue@a88198b93bbc0093b0d0d64be88d2e2472e79a89/modules/twemoji.min.js"),
                     loadScript("https://cdn.jsdelivr.net/gh/hu6amini/perve_avenue@542dedb572fef90b64ec5ea91274ead2e347680d/modules/boards.js"),
-                    loadScript("https://cdn.jsdelivr.net/gh/hu6amini/perve_avenue@213c8946da3ee63d60761cf76db5a1d3f88dd818/modules/posts.min.js"),
+                    loadScript("https://cdn.jsdelivr.net/gh/hu6amini/perve_avenue@2b3a68d5ddb8a258869cd8ff0aa07571b8b4602c/modules/posts.min.js"),
                     loadScript("https://cdn.jsdelivr.net/gh/hu6amini/perve_avenue@403484e8351e4fd2b9f757b5c340979cf7d452b8/modules/modals.min.js"),
                     loadScript("https://cdn.jsdelivr.net/gh/hu6amini/perve_avenue@8e0effa4f38bcb5294140ac9df7dbe8c72b8a167/modules/messenger.js")
                 ]);
