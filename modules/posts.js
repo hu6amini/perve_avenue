@@ -1114,47 +1114,47 @@ function transformLiteEmbeds(htmlContent) {
     tempDiv.innerHTML = htmlContent;
 
     function buildWrapper(kind, marker) {
-        const videoid = marker.getAttribute('data-videoid') || '';
-        if (!videoid) { marker.remove(); return; }
-        const title = marker.getAttribute('data-title') || '';
-        const author = marker.getAttribute('data-author') || '';
+    const videoid = marker.getAttribute('data-videoid') || '';
+    if (!videoid) { marker.remove(); return; }
+    const title  = marker.getAttribute('data-title')  || '';
+    const author = marker.getAttribute('data-author') || '';
+    const start  = marker.getAttribute('data-start')  || '';
+    const end    = marker.getAttribute('data-end')    || '';
 
-        const wrapper = document.createElement('div');
-        wrapper.className = 'lite-embed-wrapper';
-        wrapper.setAttribute('data-videoid', videoid);
-        if (title) wrapper.setAttribute('data-title', title);
-        if (author) wrapper.setAttribute('data-author', author);
+    const wrapper = document.createElement('div');
+    wrapper.className = 'lite-embed-wrapper';
+    wrapper.setAttribute('data-videoid', videoid);
+    if (title)  wrapper.setAttribute('data-title', title);
+    if (author) wrapper.setAttribute('data-author', author);
+    if (start)  wrapper.setAttribute('data-start', start);
+    if (end)    wrapper.setAttribute('data-end', end);
 
-        const lite = document.createElement(kind === 'youtube' ? 'lite-youtube' : 'lite-vimeo');
-        lite.setAttribute('videoid', videoid);
-        if (title) lite.setAttribute('data-title', title);
-        wrapper.appendChild(lite);
+    const lite = document.createElement(kind === 'youtube' ? 'lite-youtube' : 'lite-vimeo');
+    lite.setAttribute('videoid', videoid);
+    if (title) lite.setAttribute('data-title', title);
+    if (start) lite.setAttribute('start', start);
+    if (end)   lite.setAttribute('end', end);
+    wrapper.appendChild(lite);
 
-        if (title || author) {
-            const caption = document.createElement('div');
-            caption.className = 'lite-embed-caption';
-            if (title) {
-                const t = document.createElement('span');
-                t.className = 'lite-embed-title';
-                t.textContent = title;
-                caption.appendChild(t);
-            }
-            if (author) {
-                const a = document.createElement('span');
-                a.className = 'lite-embed-author';
-                a.textContent = author;
-                caption.appendChild(a);
-            }
-            wrapper.appendChild(caption);
+    if (title || author) {
+        const caption = document.createElement('div');
+        caption.className = 'lite-embed-caption';
+        if (title) {
+            const t = document.createElement('span');
+            t.className = 'lite-embed-title';
+            t.textContent = title;
+            caption.appendChild(t);
         }
-
-        marker.parentNode.replaceChild(wrapper, marker);
+        if (author) {
+            const a = document.createElement('span');
+            a.className = 'lite-embed-author';
+            a.textContent = author;
+            caption.appendChild(a);
+        }
+        wrapper.appendChild(caption);
     }
 
-    tempDiv.querySelectorAll('span.ff-lite-youtube').forEach(span => buildWrapper('youtube', span));
-    tempDiv.querySelectorAll('span.ff-lite-vimeo').forEach(span => buildWrapper('vimeo', span));
-
-    return tempDiv.innerHTML;
+    marker.parentNode.replaceChild(wrapper, marker);
 }
 
     // ============================================================================
@@ -3129,14 +3129,18 @@ function transformLegacyIframes(htmlContent) {
         if (!parsed) return;
 
         const wrapper = document.createElement('div');
-        wrapper.className = 'lite-embed-wrapper';
-        wrapper.setAttribute('data-videoid', parsed.videoid);
+wrapper.className = 'lite-embed-wrapper';
+wrapper.setAttribute('data-videoid', parsed.videoid);
+if (parsed.start != null) wrapper.setAttribute('data-start', String(parsed.start));
+if (parsed.end   != null) wrapper.setAttribute('data-end',   String(parsed.end));
 
-        const lite = document.createElement(
-            parsed.kind === 'youtube' ? 'lite-youtube' : 'lite-vimeo'
-        );
-        lite.setAttribute('videoid', parsed.videoid);
-        wrapper.appendChild(lite);
+const lite = document.createElement(
+    parsed.kind === 'youtube' ? 'lite-youtube' : 'lite-vimeo'
+);
+lite.setAttribute('videoid', parsed.videoid);
+if (parsed.start != null) lite.setAttribute('start', String(parsed.start));
+if (parsed.end   != null) lite.setAttribute('end',   String(parsed.end));
+wrapper.appendChild(lite);
 
         const parent = iframe.parentNode;
         const target = (
@@ -3153,13 +3157,51 @@ function transformLegacyIframes(htmlContent) {
 
 function parseLegacyIframeProvider(src) {
     if (!src) return null;
+
     let m = src.match(/(?:youtube(?:-nocookie)?\.com\/(?:embed\/|v\/)|youtu\.be\/)([A-Za-z0-9_-]{6,})/);
-    if (m) return { kind: 'youtube', videoid: m[1] };
+    if (m) {
+        const result = { kind: 'youtube', videoid: m[1], start: null, end: null };
+        try {
+            const qIndex = src.indexOf('?');
+            if (qIndex >= 0) {
+                const hashIndex = src.indexOf('#', qIndex);
+                const queryStr = src.slice(qIndex + 1, hashIndex >= 0 ? hashIndex : undefined);
+                const params = new URLSearchParams(queryStr);
+                const start = params.get('start');
+                const end   = params.get('end');
+                if (start) {
+                    const parsed = parseTimeString(start);
+                    if (parsed != null) result.start = parsed;
+                }
+                if (end) {
+                    const parsed = parseInt(end, 10);
+                    if (!isNaN(parsed) && parsed > 0) result.end = parsed;
+                }
+            }
+        } catch (e) {}
+        return result;
+    }
+
     m = src.match(/player\.vimeo\.com\/video\/(\d+)/);
-    if (m) return { kind: 'vimeo', videoid: m[1] };
+    if (m) {
+        const result = { kind: 'vimeo', videoid: m[1], start: null };
+        try {
+            const hashIndex = src.indexOf('#');
+            if (hashIndex >= 0) {
+                const frag = src.slice(hashIndex + 1);
+                const fragMatch = frag.match(/^t=(.+)$/);
+                if (fragMatch) {
+                    const parsed = parseTimeString(fragMatch[1]);
+                    if (parsed != null) result.start = parsed;
+                }
+            }
+        } catch (e) {}
+        return result;
+    }
+
     return null;
 }
-
+    
     // ============================================================================
     // ATTACHMENT CONVERSION
     // ============================================================================
