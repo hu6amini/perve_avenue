@@ -484,41 +484,72 @@ function parseDateFromTitle(title) {
         return { title: title || 'Member', iconClass: iconClass };
     }
 
-    function getCleanContent($post) {
-        let contentTable = $post.querySelector('.right.Item table.color');
-        if (!contentTable) contentTable = $post.querySelector('td.Item table.color');
-        if (!contentTable) return '';
-        const contentClone = contentTable.cloneNode(true);
-        const editSpans = contentClone.querySelectorAll('.edit');
-        editSpans.forEach(edit => {
-            let prev = edit.previousSibling;
-            while (prev && prev.nodeType === Node.ELEMENT_NODE && prev.tagName === 'BR') {
-                const toRemove = prev;
-                prev = prev.previousSibling;
-                toRemove.remove();
-            }
-        });
-        contentClone.querySelectorAll('.signature, .edit').forEach(el => el.remove());
-        contentClone.querySelectorAll('.bottomborder').forEach(el => el.remove());
-        contentClone.querySelectorAll('br').forEach(br => {
-            const prev = br.previousElementSibling;
-            const next = br.nextElementSibling;
-            if ((next?.classList?.contains('bottomborder')) || (prev?.classList?.contains('bottomborder'))) br.remove();
-        });
-        let html = contentClone.innerHTML || '';
-        html = html.replace(/<p>\s*<\/p>/g, '');
-        html = html.trim();
-        html = transformEmbeddedLinks(html);
-        html = transformLegacyQuotesAndSpoilers(html);
-        html = transformLegacyAttachments(html);
-        html = transformLegacyCodeBlocks(html);
-        html = transformLegacyIframes(html);
-        html = transformLiteEmbeds(html);
-        html = transformLegacySocialEmbeds(html);
-        html = transformUserTags(html);
-        html = transformNSFWTags(html);
-        return html;
+function getCleanContent($post) {
+    let contentTable = $post.querySelector('.right.Item table.color');
+    if (!contentTable) contentTable = $post.querySelector('td.Item table.color');
+    if (!contentTable) return '';
+    const contentClone = contentTable.cloneNode(true);
+
+    // Strip <br>s that sit immediately before the .edit marker. These
+    // separated the post body from the edit note and have no purpose
+    // once the note is removed.
+    const editSpans = contentClone.querySelectorAll('.edit');
+    editSpans.forEach(edit => {
+        let prev = edit.previousSibling;
+        while (prev && prev.nodeType === Node.ELEMENT_NODE && prev.tagName === 'BR') {
+            const toRemove = prev;
+            prev = prev.previousSibling;
+            toRemove.remove();
+        }
+    });
+
+    contentClone.querySelectorAll('.signature, .edit').forEach(el => el.remove());
+
+    // Strip <br>s adjacent to .bottomborder. Must run BEFORE the
+    // .bottomborder elements themselves are removed — otherwise the
+    // adjacency check has nothing to match against and orphan <br>s
+    // survive at the end of the content.
+    contentClone.querySelectorAll('br').forEach(br => {
+        const prev = br.previousElementSibling;
+        const next = br.nextElementSibling;
+        if ((next?.classList?.contains('bottomborder')) ||
+            (prev?.classList?.contains('bottomborder'))) {
+            br.remove();
+        }
+    });
+
+    contentClone.querySelectorAll('.bottomborder').forEach(el => el.remove());
+
+    // Trailing net. Any <br> or whitespace-only text node left at the
+    // very end of the content is orphaned metadata residue — nothing
+    // meaningful can follow it inside the post body. Strip until we
+    // hit real content.
+    let last = contentClone.lastChild;
+    while (last) {
+        if (last.nodeType === Node.TEXT_NODE && !last.nodeValue.trim()) {
+            contentClone.removeChild(last);
+        } else if (last.nodeType === Node.ELEMENT_NODE && last.tagName === 'BR') {
+            contentClone.removeChild(last);
+        } else {
+            break;
+        }
+        last = contentClone.lastChild;
     }
+
+    let html = contentClone.innerHTML || '';
+    html = html.replace(/<p>\s*<\/p>/g, '');
+    html = html.trim();
+    html = transformEmbeddedLinks(html);
+    html = transformLegacyQuotesAndSpoilers(html);
+    html = transformLegacyAttachments(html);
+    html = transformLegacyCodeBlocks(html);
+    html = transformLegacyIframes(html);
+    html = transformLiteEmbeds(html);
+    html = transformLegacySocialEmbeds(html);
+    html = transformUserTags(html);
+    html = transformNSFWTags(html);
+    return html;
+}
 
     function getSignatureHtml($post) {
         const signature = $post.querySelector('.signature');
