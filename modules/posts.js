@@ -1400,104 +1400,135 @@ function convertLegacySpoiler(codeTopElem, codeBodyElem, title) {
 function wrapImagesWithDimensions(container) {
     if (!container) return;
     const images = container.querySelectorAll('.post-message img, .post-signature img, .attachment-preview img');
-    images.forEach(img => {
-        // Skip if already wrapped or inside embed
-        if (img.closest('.modern-embedded-link, .image-wrapper, .nsfw-image')) return;
-        if (img.classList.contains('twemoji')) return;
-        const alt = img.getAttribute('alt');
-        if (alt && alt.startsWith(':') && alt.endsWith(':')) return;
+    images.forEach(img => attemptWrapImage(img));
+}
 
-        const isNSFW = img.getAttribute('data-nsfw') === 'true';
-        const dataSize = img.getAttribute('data-size');
+function attemptWrapImage(img) {
+    if (!img || !img.parentNode) return;
 
-        const currentSrc = img.src;
-        const isWeserv = currentSrc.indexOf('weserv.nl') !== -1 || currentSrc.indexOf('wsrv.nl') !== -1;
+    // Skip if already wrapped or inside an embed / wrapper
+    if (img.closest('.modern-embedded-link, .image-wrapper, .nsfw-image')) return;
+    if (img.classList.contains('twemoji')) return;
+    const alt = img.getAttribute('alt');
+    if (alt && alt.startsWith(':') && alt.endsWith(':')) return;
 
-        // --- Extract original source for fallback ---
-        let originalSrc = img.getAttribute('data-original');
-        if (!originalSrc && isWeserv) {
-            try {
-                const url = new URL(currentSrc);
-                const param = url.searchParams.get('url');
-                if (param) originalSrc = decodeURIComponent(param);
-            } catch (e) {}
-        }
-        if (!originalSrc) originalSrc = currentSrc;
+    const isNSFW = img.getAttribute('data-nsfw') === 'true';
+    const dataSize = img.getAttribute('data-size');
 
-        // --- BROKEN WESERV IMAGES: revert immediately ---
-        if (isWeserv && img.complete && img.naturalWidth === 0) {
-            if (originalSrc && originalSrc !== currentSrc) {
-                img.src = originalSrc;
-                img.setAttribute('data-optimized', 'failed');
-                img.onerror = null;
-                img.removeEventListener('error', () => {});
-            }
-            return;
-        }
+    const width = img.getAttribute('width');
+    const height = img.getAttribute('height');
+    const hasDimensions = width && height && !isNaN(width) && !isNaN(height) && parseInt(width) > 0 && parseInt(height) > 0;
 
-        // --- Only wrap if image has width/height attributes ---
-        const width = img.getAttribute('width');
-        const height = img.getAttribute('height');
-        const hasDimensions = width && height && !isNaN(width) && !isNaN(height) && parseInt(width) > 0 && parseInt(height) > 0;
-
-        // NSFW images without dimensions still need to be hidden —
-        // wrap them in a bare .nsfw-image span (no aspect-ratio reserve).
-        if (isNSFW && !hasDimensions) {
-            const wrapper = document.createElement('span');
-            wrapper.className = 'nsfw-image';
-            wrapper.setAttribute('role', 'button');
-            wrapper.setAttribute('tabindex', '0');
-            wrapper.setAttribute('aria-pressed', 'false');
-            wrapper.setAttribute('aria-label', 'Hidden image, click to reveal');
-            if (dataSize === 'small') wrapper.style.maxWidth = '25%';
-            else if (dataSize === 'medium') wrapper.style.maxWidth = '50%';
-            else if (dataSize === 'large') wrapper.style.maxWidth = '75%';
-            img.parentNode.insertBefore(wrapper, img);
-            wrapper.appendChild(img);
-            return;
-        }
-
-        if (!hasDimensions) return;
-
-        // --- Wrap in a div for CLS prevention ---
-        const wrapper = document.createElement('div');
-        wrapper.className = 'image-wrapper' + (isNSFW ? ' nsfw-image' : '');
-        if (isNSFW) {
-            wrapper.setAttribute('role', 'button');
-            wrapper.setAttribute('tabindex', '0');
-            wrapper.setAttribute('aria-pressed', 'false');
-            wrapper.setAttribute('aria-label', 'Hidden image, click to reveal');
-        }
-        wrapper.style.width = width + 'px';
-        wrapper.style.aspectRatio = width + '/' + height;
-        wrapper.style.maxWidth = '100%';
-        // Apply the author's chosen display size (overrides the default
-        // 100% max-width).
+    // NSFW images without dimensions still need to be hidden — wrap
+    // them in a bare .nsfw-image span immediately. Hiding takes
+    // priority over CLS prevention for hidden content, so no deferral.
+    if (isNSFW && !hasDimensions) {
+        const wrapper = document.createElement('span');
+        wrapper.className = 'nsfw-image';
+        wrapper.setAttribute('role', 'button');
+        wrapper.setAttribute('tabindex', '0');
+        wrapper.setAttribute('aria-pressed', 'false');
+        wrapper.setAttribute('aria-label', 'Hidden image, click to reveal');
         if (dataSize === 'small') wrapper.style.maxWidth = '25%';
         else if (dataSize === 'medium') wrapper.style.maxWidth = '50%';
         else if (dataSize === 'large') wrapper.style.maxWidth = '75%';
-        wrapper.style.position = 'relative';
-        wrapper.style.overflow = 'hidden';
-        img.style.width = '100%';
-        img.style.height = '100%';
-        img.style.objectFit = 'contain';
         img.parentNode.insertBefore(wrapper, img);
         wrapper.appendChild(img);
+        return;
+    }
 
-        // --- Set fallback for images that might fail later ---
-        if (isWeserv && originalSrc && originalSrc !== currentSrc) {
-            const fallbackHandler = function() {
-                if (this.src !== originalSrc) {
-                    this.src = originalSrc;
-                    this.setAttribute('data-optimized', 'failed');
-                    this.onerror = null;
-                    this.removeEventListener('error', fallbackHandler);
-                }
-            };
-            img.onerror = fallbackHandler;
-            img.addEventListener('error', fallbackHandler);
+    // No dimensions yet. The image is probably still loading. Defer
+    // the wrap to a load listener; fixMissingImageDimensions registers
+    // its listener first, so its callback fires before ours and sets
+    // width/height on the element.
+    if (!hasDimensions) {
+        if (img.complete && img.naturalWidth > 0) {
+            // Already loaded but dimensions never landed on the element.
+            // Set them synchronously and retry.
+            img.setAttribute('width', img.naturalWidth);
+            img.setAttribute('height', img.naturalHeight);
+            img.style.aspectRatio = img.naturalWidth + '/' + img.naturalHeight;
+            return attemptWrapImage(img);
         }
-    });
+        // Guard against stacking listeners if attemptWrapImage is
+        // called more than once for the same image.
+        if (!img._wrapPending) {
+            img._wrapPending = true;
+            img.addEventListener('load', function onLoad() {
+                img.removeEventListener('load', onLoad);
+                img._wrapPending = false;
+                attemptWrapImage(img);
+            }, { once: true });
+        }
+        return;
+    }
+
+    // --- Dimensions present. Proceed with the wrap. ---
+
+    const currentSrc = img.src;
+    const isWeserv = currentSrc.indexOf('weserv.nl') !== -1 || currentSrc.indexOf('wsrv.nl') !== -1;
+
+    let originalSrc = img.getAttribute('data-original');
+    if (!originalSrc && isWeserv) {
+        try {
+            const url = new URL(currentSrc);
+            const param = url.searchParams.get('url');
+            if (param) originalSrc = decodeURIComponent(param);
+        } catch (e) {}
+    }
+    if (!originalSrc) originalSrc = currentSrc;
+
+    // Broken weserv image that hasn't reverted yet — revert and stop.
+    // Wrapping a broken image would give the wrapper a bogus
+    // aspect-ratio. The revert changes img.src, which will trigger a
+    // fresh load event; on that pass the source is the original and
+    // the wrap proceeds normally.
+    if (isWeserv && img.complete && img.naturalWidth === 0) {
+        if (originalSrc && originalSrc !== currentSrc) {
+            img.src = originalSrc;
+            img.setAttribute('data-optimized', 'failed');
+            img.onerror = null;
+        }
+        return;
+    }
+
+    // --- Wrap in a div for CLS prevention ---
+    const wrapper = document.createElement('div');
+    wrapper.className = 'image-wrapper' + (isNSFW ? ' nsfw-image' : '');
+    if (isNSFW) {
+        wrapper.setAttribute('role', 'button');
+        wrapper.setAttribute('tabindex', '0');
+        wrapper.setAttribute('aria-pressed', 'false');
+        wrapper.setAttribute('aria-label', 'Hidden image, click to reveal');
+    }
+    wrapper.style.width = width + 'px';
+    wrapper.style.aspectRatio = width + '/' + height;
+    wrapper.style.maxWidth = '100%';
+    if (dataSize === 'small') wrapper.style.maxWidth = '25%';
+    else if (dataSize === 'medium') wrapper.style.maxWidth = '50%';
+    else if (dataSize === 'large') wrapper.style.maxWidth = '75%';
+    wrapper.style.position = 'relative';
+    wrapper.style.overflow = 'hidden';
+    img.style.width = '100%';
+    img.style.height = '100%';
+    img.style.objectFit = 'contain';
+    img.parentNode.insertBefore(wrapper, img);
+    wrapper.appendChild(img);
+
+    // Fallback for images that fail later. Only needed when the src
+    // was swapped to weserv.
+    if (isWeserv && originalSrc && originalSrc !== currentSrc) {
+        const fallbackHandler = function() {
+            if (this.src !== originalSrc) {
+                this.src = originalSrc;
+                this.setAttribute('data-optimized', 'failed');
+                this.onerror = null;
+                this.removeEventListener('error', fallbackHandler);
+            }
+        };
+        img.onerror = fallbackHandler;
+        img.addEventListener('error', fallbackHandler);
+    }
 }
 
     // ============================================================================
