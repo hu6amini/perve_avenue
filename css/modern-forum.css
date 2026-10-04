@@ -331,13 +331,13 @@
   padding-top: 1rem;
   font-size: 0.8rem;
   color: var(--text-tertiary);
+  text-align: left;
 }
 
 .post-signature img {
    display: inline-block; 
    max-width: 100%; 
    height:auto;
-   text-align: left;
 }
 
 .post-footer {
