@@ -79,6 +79,26 @@ const ForumPostsModule = (function () {
         Array.from(node.childNodes).forEach(decodeTextNodesInPlace);
     }
 };
+
+    // Normalise a YouTube/Vimeo time value into seconds.
+// Handles "90", "90s", "1m30s", "1h2m3s".
+// Returns null if the input is empty, malformed, or resolves to 0.
+function parseTimeString(t) {
+    if (t == null) return null;
+    const s = String(t).trim().toLowerCase();
+    if (!s) return null;
+    if (/^\d+$/.test(s)) {
+        const n = parseInt(s, 10);
+        return n > 0 ? n : null;
+    }
+    const m = s.match(/^(?:(\d+)h)?(?:(\d+)m)?(?:(\d+)s)?$/);
+    if (!m || (!m[1] && !m[2] && !m[3])) return null;
+    const h  = parseInt(m[1] || '0', 10);
+    const mn = parseInt(m[2] || '0', 10);
+    const sc = parseInt(m[3] || '0', 10);
+    const total = h * 3600 + mn * 60 + sc;
+    return total > 0 ? total : null;
+}
     // ----------------------------------------------------------------------------
 // SYNTAX HIGHLIGHTING
 // A deliberately small generic tokenizer. Handles the shapes common to every
@@ -1114,47 +1134,53 @@ function transformLiteEmbeds(htmlContent) {
     tempDiv.innerHTML = htmlContent;
 
     function buildWrapper(kind, marker) {
-    const videoid = marker.getAttribute('data-videoid') || '';
-    if (!videoid) { marker.remove(); return; }
-    const title  = marker.getAttribute('data-title')  || '';
-    const author = marker.getAttribute('data-author') || '';
-    const start  = marker.getAttribute('data-start')  || '';
-    const end    = marker.getAttribute('data-end')    || '';
+        const videoid = marker.getAttribute('data-videoid') || '';
+        if (!videoid) { marker.remove(); return; }
+        const title  = marker.getAttribute('data-title')  || '';
+        const author = marker.getAttribute('data-author') || '';
+        const start  = marker.getAttribute('data-start')  || '';
+        const end    = marker.getAttribute('data-end')    || '';
 
-    const wrapper = document.createElement('div');
-    wrapper.className = 'lite-embed-wrapper';
-    wrapper.setAttribute('data-videoid', videoid);
-    if (title)  wrapper.setAttribute('data-title', title);
-    if (author) wrapper.setAttribute('data-author', author);
-    if (start)  wrapper.setAttribute('data-start', start);
-    if (end)    wrapper.setAttribute('data-end', end);
+        const wrapper = document.createElement('div');
+        wrapper.className = 'lite-embed-wrapper';
+        wrapper.setAttribute('data-videoid', videoid);
+        if (title)  wrapper.setAttribute('data-title', title);
+        if (author) wrapper.setAttribute('data-author', author);
+        if (start)  wrapper.setAttribute('data-start', start);
+        if (end)    wrapper.setAttribute('data-end', end);
 
-    const lite = document.createElement(kind === 'youtube' ? 'lite-youtube' : 'lite-vimeo');
-    lite.setAttribute('videoid', videoid);
-    if (title) lite.setAttribute('data-title', title);
-    if (start) lite.setAttribute('start', start);
-    if (end)   lite.setAttribute('end', end);
-    wrapper.appendChild(lite);
+        const lite = document.createElement(kind === 'youtube' ? 'lite-youtube' : 'lite-vimeo');
+        lite.setAttribute('videoid', videoid);
+        if (title) lite.setAttribute('data-title', title);
+        if (start) lite.setAttribute('start', start);
+        if (end)   lite.setAttribute('end', end);
+        wrapper.appendChild(lite);
 
-    if (title || author) {
-        const caption = document.createElement('div');
-        caption.className = 'lite-embed-caption';
-        if (title) {
-            const t = document.createElement('span');
-            t.className = 'lite-embed-title';
-            t.textContent = title;
-            caption.appendChild(t);
+        if (title || author) {
+            const caption = document.createElement('div');
+            caption.className = 'lite-embed-caption';
+            if (title) {
+                const t = document.createElement('span');
+                t.className = 'lite-embed-title';
+                t.textContent = title;
+                caption.appendChild(t);
+            }
+            if (author) {
+                const a = document.createElement('span');
+                a.className = 'lite-embed-author';
+                a.textContent = author;
+                caption.appendChild(a);
+            }
+            wrapper.appendChild(caption);
         }
-        if (author) {
-            const a = document.createElement('span');
-            a.className = 'lite-embed-author';
-            a.textContent = author;
-            caption.appendChild(a);
-        }
-        wrapper.appendChild(caption);
+
+        marker.parentNode.replaceChild(wrapper, marker);
     }
 
-    marker.parentNode.replaceChild(wrapper, marker);
+    tempDiv.querySelectorAll('span.ff-lite-youtube').forEach(span => buildWrapper('youtube', span));
+    tempDiv.querySelectorAll('span.ff-lite-vimeo').forEach(span => buildWrapper('vimeo', span));
+
+    return tempDiv.innerHTML;
 }
 
     // ============================================================================
