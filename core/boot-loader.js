@@ -17,8 +17,6 @@
       "all.min.css"
     ],
     skipRelease: [
-      "lite-vimeo-embed",
-      "+esm",
       "challenges.cloudflare.com",
       "turnstile",
      
