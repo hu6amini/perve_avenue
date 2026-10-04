@@ -1,8 +1,11 @@
-// Forum Modernizer - Posts Module v2.4 (with anchor ID for scrolling) + Poll + Attachments + Code Blocks + Image Wrapper + Global Broken Image Fix + Event Listener + Tooltips (auto title conversion) + User Tags + LightGallery
+// Forum Modernizer - Posts Module v2.5 (with anchor ID for scrolling) + Poll + Attachments + Code Blocks + Image Wrapper + Global Broken Image Fix + Event Listener + Tooltips (auto title conversion) + User Tags + LightGallery
+// v2.5: lite embeds now backed by the self-hosted lite-embed.js module.
+//       transformLiteEmbeds and hydrateLiteEmbeds unchanged — they operate
+//       on the wrapper / marker level, not the custom element internals.
 'use strict';
 
 const ForumPostsModule = (function () {
-    console.log('🔥 ForumPostsModule v2.4 loaded');
+    console.log('🔥 ForumPostsModule v2.5 loaded');
 
     // ===== USER TIMING: mark script start =====
     if (typeof performance !== 'undefined' && performance.mark) {
@@ -964,7 +967,7 @@ function transformNSFWTags(htmlContent) {
 // reverses that on the reader side, building the same wrapper structure
 // the composer's renderHTML produces so the caption and facade styling in
 // the stylesheet applies. The custom element itself is upgraded by the
-// lite-youtube-embed / lite-vimeo-embed scripts loaded in Phase C.
+// self-hosted lite-embed.js module loaded in Phase C.
 // ============================================================================
 function transformLiteEmbeds(htmlContent) {
     if (!htmlContent || typeof htmlContent !== 'string') return htmlContent;
@@ -1412,7 +1415,6 @@ function wrapImagesWithDimensions(container) {
                     target.src = originalSrc;
                     target.setAttribute('data-optimized', 'failed');
                     target.onerror = null;
-                    target.removeEventListener('error', arguments.callee);
                     console.log('[PostsModule] Global error handler fixed lazy image:', originalSrc);
                 }
             }
