@@ -19,6 +19,12 @@
 // v11: lite embeds now backed by the self-hosted lite-embed.js module.
 //      No DOM contract changes — same tag names, same wrapper, same
 //      caption classes.
+// v12: start / end time support. Parser normalises YouTube's t=,
+//      start=, and end= query params plus Vimeo's #t= fragment into
+//      integer seconds, stored as start / end attributes on the
+//      custom element and data-start / data-end on the wrapper. The
+//      custom element translates them into the provider's native
+//      iframe URL syntax at activation time.
 var MessengerModule = (function(Utils, EventBus) {
     'use strict';
 
@@ -82,6 +88,26 @@ var MessengerModule = (function(Utils, EventBus) {
         return txt.value;
     }
 
+    // Normalise a YouTube/Vimeo time value into seconds.
+    // Handles "90", "90s", "1m30s", "1h2m3s".
+    // Returns null if the input is empty, malformed, or resolves to 0.
+    function parseTimeString(t) {
+        if (t == null) return null;
+        var s = String(t).trim().toLowerCase();
+        if (!s) return null;
+        if (/^\d+$/.test(s)) {
+            var n = parseInt(s, 10);
+            return n > 0 ? n : null;
+        }
+        var m = s.match(/^(?:(\d+)h)?(?:(\d+)m)?(?:(\d+)s)?$/);
+        if (!m || (!m[1] && !m[2] && !m[3])) return null;
+        var h  = parseInt(m[1] || '0', 10);
+        var mn = parseInt(m[2] || '0', 10);
+        var sc = parseInt(m[3] || '0', 10);
+        var total = h * 3600 + mn * 60 + sc;
+        return total > 0 ? total : null;
+    }
+
     function editorContentIsEmpty(html) {
         if (!html || typeof html !== 'string') return true;
         var text = html
@@ -135,8 +161,9 @@ var MessengerModule = (function(Utils, EventBus) {
 
     // Unwrap .lite-embed-wrapper containers produced by the LiteYouTube /
     // LiteVimeo renderHTML, emitting the legacy marker span that the
-    // forum stores. Title and author ride along as data-* attributes so
-    // replies and drafts can restore the caption without re-fetching.
+    // forum stores. Title, author, and any start/end timestamps ride
+    // along as data-* attributes so replies and drafts can restore the
+    // full state without re-fetching.
     function unwrapLiteEmbedWrappers(html) {
         if (!html || html.indexOf('lite-embed-wrapper') === -1) return html;
         var temp = document.createElement('div');
@@ -146,16 +173,20 @@ var MessengerModule = (function(Utils, EventBus) {
             if (!lite) return;
             var videoid = lite.getAttribute('videoid') || wrapper.getAttribute('data-videoid') || '';
             if (!videoid) { wrapper.remove(); return; }
-            var title = wrapper.getAttribute('data-title') || '';
+            var title  = wrapper.getAttribute('data-title')  || '';
             var author = wrapper.getAttribute('data-author') || '';
+            var start  = wrapper.getAttribute('data-start')  || lite.getAttribute('start') || '';
+            var end    = wrapper.getAttribute('data-end')    || lite.getAttribute('end')   || '';
             var kind = lite.tagName.toLowerCase() === 'lite-youtube'
                 ? 'ff-lite-youtube'
                 : 'ff-lite-vimeo';
             var span = document.createElement('span');
             span.className = kind;
             span.setAttribute('data-videoid', videoid);
-            if (title) span.setAttribute('data-title', title);
+            if (title)  span.setAttribute('data-title', title);
             if (author) span.setAttribute('data-author', author);
+            if (start)  span.setAttribute('data-start', start);
+            if (end)    span.setAttribute('data-end', end);
             wrapper.parentNode.replaceChild(span, wrapper);
         });
         return temp.innerHTML;
@@ -191,34 +222,27 @@ var MessengerModule = (function(Utils, EventBus) {
             return key;
         }
 
-        // Block comments
         html = html.replace(/\/\*[\s\S]*?\*\//g, function(m) {
             return keep('<span class="code-comment">' + m + '</span>');
         });
 
-        // // line comments (not part of URLs)
         html = html.replace(/(^|[^:\w])(\/\/[^\n]*)/g, function(m, pre, com) {
             return pre + keep('<span class="code-comment">' + com + '</span>');
         });
 
-        // # line comments at line start (Python). Guard against hex colors.
         html = html.replace(/^(\s*)(#[^\n]*)/gm, function(m, ws, com) {
             if (/^#[0-9a-fA-F]{3,8}$/.test(com.trim())) return m;
             return ws + keep('<span class="code-comment">' + com + '</span>');
         });
 
-        // Strings
         html = html.replace(/"(?:[^"\\\n]|\\.)*"|'(?:[^'\\\n]|\\.)*'|`(?:[^`\\]|\\.)*`/g, function(m) {
             return keep('<span class="code-string">' + m + '</span>');
         });
 
-        // Numbers
         html = html.replace(/\b\d+(?:\.\d+)?\b/g, '<span class="code-number">$&</span>');
 
-        // Keywords
         html = html.replace(new RegExp('\\b(' + CODE_HIGHLIGHT_KEYWORDS + ')\\b', 'g'), '<span class="code-keyword">$1</span>');
 
-        // Restore
         html = html.replace(/\uE000A([0-9a-z]+)Z\uE001/g, function(m, idx) {
             return stash[parseInt(idx, 36)];
         });
@@ -1047,37 +1071,47 @@ var MessengerModule = (function(Utils, EventBus) {
 
         // Lite embed markers → custom elements. Round-trips the payload
         // written by htmlToLegacy; the LiteYouTube/LiteVimeo parseHTML
-        // picks up title and author from data-title / data-author, and
-        // the caption renders without a second fetch.
+        // picks up title, author, and any start/end timestamps from
+        // data-* attributes, so the caption and playback range render
+        // without a second fetch.
         html = html.replace(
             /<span\b[^>]*\bff-lite-youtube\b[^>]*>([\s\S]*?)<\/span>/gis,
             function(match) {
-                var idMatch = match.match(/data-videoid="([^"]*)"/);
-                var videoid = idMatch ? decodeHtmlEntities(idMatch[1]) : '';
+                var idMatch     = match.match(/data-videoid="([^"]*)"/);
+                var videoid     = idMatch ? decodeHtmlEntities(idMatch[1]) : '';
                 if (!videoid) return '';
-                var titleMatch = match.match(/data-title="([^"]*)"/);
+                var titleMatch  = match.match(/data-title="([^"]*)"/);
                 var authorMatch = match.match(/data-author="([^"]*)"/);
-                var title = titleMatch ? decodeHtmlEntities(titleMatch[1]) : '';
+                var startMatch  = match.match(/data-start="([^"]*)"/);
+                var endMatch    = match.match(/data-end="([^"]*)"/);
+                var title  = titleMatch  ? decodeHtmlEntities(titleMatch[1])  : '';
                 var author = authorMatch ? decodeHtmlEntities(authorMatch[1]) : '';
+                var start  = startMatch  ? decodeHtmlEntities(startMatch[1])  : '';
+                var end    = endMatch    ? decodeHtmlEntities(endMatch[1])    : '';
                 var attrs = 'videoid="' + escapeHtml(videoid) + '"';
-                if (title)  attrs += ' data-title="' + escapeHtml(title) + '"';
+                if (title)  attrs += ' data-title="'  + escapeHtml(title)  + '"';
                 if (author) attrs += ' data-author="' + escapeHtml(author) + '"';
+                if (start)  attrs += ' start="'       + escapeHtml(start)  + '"';
+                if (end)    attrs += ' end="'         + escapeHtml(end)    + '"';
                 return '<lite-youtube ' + attrs + '></lite-youtube>';
             }
         );
         html = html.replace(
             /<span\b[^>]*\bff-lite-vimeo\b[^>]*>([\s\S]*?)<\/span>/gis,
             function(match) {
-                var idMatch = match.match(/data-videoid="([^"]*)"/);
-                var videoid = idMatch ? decodeHtmlEntities(idMatch[1]) : '';
+                var idMatch     = match.match(/data-videoid="([^"]*)"/);
+                var videoid     = idMatch ? decodeHtmlEntities(idMatch[1]) : '';
                 if (!videoid) return '';
-                var titleMatch = match.match(/data-title="([^"]*)"/);
+                var titleMatch  = match.match(/data-title="([^"]*)"/);
                 var authorMatch = match.match(/data-author="([^"]*)"/);
-                var title = titleMatch ? decodeHtmlEntities(titleMatch[1]) : '';
+                var startMatch  = match.match(/data-start="([^"]*)"/);
+                var title  = titleMatch  ? decodeHtmlEntities(titleMatch[1])  : '';
                 var author = authorMatch ? decodeHtmlEntities(authorMatch[1]) : '';
+                var start  = startMatch  ? decodeHtmlEntities(startMatch[1])  : '';
                 var attrs = 'videoid="' + escapeHtml(videoid) + '"';
-                if (title)  attrs += ' data-title="' + escapeHtml(title) + '"';
+                if (title)  attrs += ' data-title="'  + escapeHtml(title)  + '"';
                 if (author) attrs += ' data-author="' + escapeHtml(author) + '"';
+                if (start)  attrs += ' start="'       + escapeHtml(start)  + '"';
                 return '<lite-vimeo ' + attrs + '></lite-vimeo>';
             }
         );
@@ -1143,16 +1177,25 @@ html = html.replace(
             // Lite embeds. Run first so an embed nested inside a quote
             // or spoiler gets serialized before the outer container's
             // regex can strip or re-escape the custom element.
+            // Start / end timestamps are preserved on the marker.
             result = result.replace(
                 /<lite-youtube\b[^>]*\bvideoid="([^"]*)"[^>]*>\s*<\/lite-youtube>/gi,
                 function(match, videoid) {
-                    return '<span class="ff-lite-youtube" data-videoid="' + escapeHtml(videoid) + '"></span>';
+                    var startMatch = match.match(/\bstart="([^"]*)"/);
+                    var endMatch   = match.match(/\bend="([^"]*)"/);
+                    var span = '<span class="ff-lite-youtube" data-videoid="' + escapeHtml(videoid) + '"';
+                    if (startMatch) span += ' data-start="' + escapeHtml(startMatch[1]) + '"';
+                    if (endMatch)   span += ' data-end="'   + escapeHtml(endMatch[1])   + '"';
+                    return span + '></span>';
                 }
             );
             result = result.replace(
                 /<lite-vimeo\b[^>]*\bvideoid="([^"]*)"[^>]*>\s*<\/lite-vimeo>/gi,
                 function(match, videoid) {
-                    return '<span class="ff-lite-vimeo" data-videoid="' + escapeHtml(videoid) + '"></span>';
+                    var startMatch = match.match(/\bstart="([^"]*)"/);
+                    var span = '<span class="ff-lite-vimeo" data-videoid="' + escapeHtml(videoid) + '"';
+                    if (startMatch) span += ' data-start="' + escapeHtml(startMatch[1]) + '"';
+                    return span + '></span>';
                 }
             );
 
@@ -1849,12 +1892,17 @@ function fetchEmbedMetadata(kind, videoid) {
 
 // One entry point for all four paste-handler branches. Inserts the
 // node, moves the cursor into the trailing paragraph, and kicks off
-// the metadata fetch.
-function insertLiteEmbed(kind, videoid) {
+// the metadata fetch. opts.start / opts.end (integer seconds) are
+// forwarded to the node attrs when present.
+function insertLiteEmbed(kind, videoid, opts) {
     if (!editor) return;
+    opts = opts || {};
+    var attrs = { videoid: videoid };
+    if (opts.start != null) attrs.start = String(opts.start);
+    if (opts.end   != null) attrs.end   = String(opts.end);
     editor.chain().focus().insertContent({
         type: kind,
-        attrs: { videoid: videoid }
+        attrs: attrs
     }).run();
     focusTrailingEmbedParagraph();
     fetchEmbedMetadata(kind, videoid);
@@ -3505,16 +3553,73 @@ addSeparator();
 
                 // ------------------------------------------------------------------
                 // Lite embed URL extractors. Used by the paste handler below.
+                // Return an object so start / end timestamps ride along to the
+                // node attrs when present.
                 // ------------------------------------------------------------------
                 function parseYouTubeUrl(url) {
                     if (!url || typeof url !== 'string') return null;
                     const m = url.match(/(?:youtube\.com\/(?:watch\?(?:.*&)?v=|embed\/|shorts\/)|youtu\.be\/)([A-Za-z0-9_-]{6,})/);
-                    return m ? m[1] : null;
+                    if (!m) return null;
+                    const videoid = m[1];
+
+                    let start = null;
+                    let end = null;
+
+                    const qIndex = url.indexOf('?');
+                    if (qIndex >= 0) {
+                        const hashIndex = url.indexOf('#', qIndex);
+                        const queryStr = url.slice(qIndex + 1, hashIndex >= 0 ? hashIndex : undefined);
+                        try {
+                            const params = new URLSearchParams(queryStr);
+                            const t = params.get('t') || params.get('start');
+                            if (t) {
+                                const parsed = parseTimeString(t);
+                                if (parsed != null) start = parsed;
+                            }
+                            const e = params.get('end');
+                            if (e) {
+                                const parsed = parseInt(e, 10);
+                                if (!isNaN(parsed) && parsed > 0) end = parsed;
+                            }
+                        } catch (err) { /* malformed URL — no timestamps */ }
+                    }
+
+                    return { videoid, start, end };
                 }
                 function parseVimeoUrl(url) {
                     if (!url || typeof url !== 'string') return null;
                     const m = url.match(/vimeo\.com\/(?:[^\/\s]+\/)*?(\d+)/);
-                    return m ? m[1] : null;
+                    if (!m) return null;
+                    const videoid = m[1];
+
+                    let start = null;
+
+                    try {
+                        const hashIndex = url.indexOf('#');
+                        if (hashIndex >= 0) {
+                            const frag = url.slice(hashIndex + 1);
+                            const fragMatch = frag.match(/^t=(.+)$/);
+                            if (fragMatch) {
+                                const parsed = parseTimeString(fragMatch[1]);
+                                if (parsed != null) start = parsed;
+                            }
+                        }
+                        if (start == null) {
+                            const qIndex = url.indexOf('?');
+                            if (qIndex >= 0) {
+                                const hashIndex2 = url.indexOf('#', qIndex);
+                                const queryStr = url.slice(qIndex + 1, hashIndex2 >= 0 ? hashIndex2 : undefined);
+                                const params = new URLSearchParams(queryStr);
+                                const t = params.get('t');
+                                if (t) {
+                                    const parsed = parseTimeString(t);
+                                    if (parsed != null) start = parsed;
+                                }
+                            }
+                        }
+                    } catch (err) { /* malformed URL */ }
+
+                    return { videoid, start };
                 }
 
                 const LinkPreview = Node.create({
@@ -3646,12 +3751,11 @@ description ? ['span', { class: 'link-preview-description' }, description] : '',
                 // ------------------------------------------------------------------
                 // Lite embeds — YouTube and Vimeo.
                 // Atom block nodes that render a caption wrapper around the
-                // lite-* custom element. The wrapper carries the video id
-                // plus optional title/author, which are populated by the
-                // fetchEmbedMetadata helper on first insert and restored
-                // from the legacy marker span on reply / draft load.
-                // The custom element itself is defined by the self-hosted
-                // lite-embed.js module (Phase C). DOM contract is unchanged.
+                // lite-* custom element. The wrapper carries the video id,
+                // optional title/author, and any start/end timestamps.
+                // The custom element itself (defined by the self-hosted
+                // lite-embed.js module) reads start/end at activation and
+                // translates them into the provider's native iframe URL.
                 // ------------------------------------------------------------------
                 const LiteYouTube = Node.create({
                     name: 'liteYouTube',
@@ -3668,6 +3772,16 @@ description ? ['span', { class: 'link-preview-description' }, description] : '',
                             },
                             title:  { default: '' },
                             author: { default: '' },
+                            start: {
+                                default: null,
+                                parseHTML: el => el.getAttribute('start') || null,
+                                renderHTML: attrs => attrs.start ? { start: String(attrs.start) } : {},
+                            },
+                            end: {
+                                default: null,
+                                parseHTML: el => el.getAttribute('end') || null,
+                                renderHTML: attrs => attrs.end ? { end: String(attrs.end) } : {},
+                            },
                         };
                     },
                     parseHTML() {
@@ -3681,6 +3795,8 @@ description ? ['span', { class: 'link-preview-description' }, description] : '',
                                         videoid: lite.getAttribute('videoid') || el.getAttribute('data-videoid') || null,
                                         title: el.getAttribute('data-title') || '',
                                         author: el.getAttribute('data-author') || '',
+                                        start: el.getAttribute('data-start') || lite.getAttribute('start') || null,
+                                        end: el.getAttribute('data-end') || lite.getAttribute('end') || null,
                                     };
                                 },
                             },
@@ -3690,6 +3806,8 @@ description ? ['span', { class: 'link-preview-description' }, description] : '',
                                     videoid: el.getAttribute('videoid') || el.getAttribute('data-videoid') || null,
                                     title: el.getAttribute('data-title') || '',
                                     author: el.getAttribute('data-author') || '',
+                                    start: el.getAttribute('start') || null,
+                                    end: el.getAttribute('end') || null,
                                 }),
                             },
                             { tag: 'span.ff-lite-youtube' },
@@ -3711,6 +3829,8 @@ description ? ['span', { class: 'link-preview-description' }, description] : '',
                                 'data-videoid': node.attrs.videoid || '',
                                 'data-title': title || null,
                                 'data-author': author || null,
+                                'data-start': node.attrs.start != null ? String(node.attrs.start) : null,
+                                'data-end':   node.attrs.end   != null ? String(node.attrs.end)   : null,
                             },
                             ['lite-youtube', HTMLAttributes],
                             caption,
@@ -3733,6 +3853,11 @@ description ? ['span', { class: 'link-preview-description' }, description] : '',
                             },
                             title:  { default: '' },
                             author: { default: '' },
+                            start: {
+                                default: null,
+                                parseHTML: el => el.getAttribute('start') || null,
+                                renderHTML: attrs => attrs.start ? { start: String(attrs.start) } : {},
+                            },
                         };
                     },
                     parseHTML() {
@@ -3746,6 +3871,7 @@ description ? ['span', { class: 'link-preview-description' }, description] : '',
                                         videoid: lite.getAttribute('videoid') || el.getAttribute('data-videoid') || null,
                                         title: el.getAttribute('data-title') || '',
                                         author: el.getAttribute('data-author') || '',
+                                        start: el.getAttribute('data-start') || lite.getAttribute('start') || null,
                                     };
                                 },
                             },
@@ -3755,6 +3881,7 @@ description ? ['span', { class: 'link-preview-description' }, description] : '',
                                     videoid: el.getAttribute('videoid') || el.getAttribute('data-videoid') || null,
                                     title: el.getAttribute('data-title') || '',
                                     author: el.getAttribute('data-author') || '',
+                                    start: el.getAttribute('start') || null,
                                 }),
                             },
                             { tag: 'span.ff-lite-vimeo' },
@@ -3776,6 +3903,7 @@ description ? ['span', { class: 'link-preview-description' }, description] : '',
                                 'data-videoid': node.attrs.videoid || '',
                                 'data-title': title || null,
                                 'data-author': author || null,
+                                'data-start': node.attrs.start != null ? String(node.attrs.start) : null,
                             },
                             ['lite-vimeo', HTMLAttributes],
                             caption,
@@ -4353,41 +4481,57 @@ handlePaste: function(view, event) {
     // ----- 4. Lite embeds (YouTube, Vimeo) -----
     // Two entry points: pasted iframe HTML from an embed code, or a
     // bare video URL. Both resolve to the same atom nodes so the reader
-    // side can render the lite facade.
+    // side can render the lite facade. Start / end timestamps, when
+    // present in the source, are captured and forwarded to the node.
     var clipboard = event.clipboardData;
     if (clipboard) {
-        // 4a. iframe HTML — user copied an embed code from a provider
+        // 4a. iframe HTML — extract the src and hand it to the URL
+        // parser so start/end params ride along.
         var htmlData = clipboard.getData('text/html');
         if (htmlData && htmlData.indexOf('<iframe') !== -1) {
-            var ytIframe = htmlData.match(/youtube\.com\/embed\/([A-Za-z0-9_-]{6,})/);
-            if (ytIframe) {
-                event.preventDefault();
-                insertLiteEmbed('liteYouTube', ytIframe[1]);
-                return true;
-            }
-            var vimeoIframe = htmlData.match(/player\.vimeo\.com\/video\/(\d+)/);
-            if (vimeoIframe) {
-                event.preventDefault();
-                insertLiteEmbed('liteVimeo', vimeoIframe[1]);
-                return true;
+            var srcMatch = htmlData.match(/<iframe[^>]+src=["']([^"']+)["']/i);
+            var iframeSrc = srcMatch ? srcMatch[1].replace(/&amp;/g, '&') : '';
+            if (iframeSrc) {
+                var ytFromIframe = parseYouTubeUrl(iframeSrc);
+                if (ytFromIframe) {
+                    event.preventDefault();
+                    insertLiteEmbed('liteYouTube', ytFromIframe.videoid, {
+                        start: ytFromIframe.start,
+                        end: ytFromIframe.end
+                    });
+                    return true;
+                }
+                var vmFromIframe = parseVimeoUrl(iframeSrc);
+                if (vmFromIframe) {
+                    event.preventDefault();
+                    insertLiteEmbed('liteVimeo', vmFromIframe.videoid, {
+                        start: vmFromIframe.start
+                    });
+                    return true;
+                }
             }
         }
 
-        // 4b. Bare URL — user copied a share link
+        // 4b. Bare URL
         var textData = clipboard.getData('text/plain');
         if (textData) {
             var candidate = textData.trim();
             if (/^https?:\/\/\S+$/.test(candidate)) {
-                var ytId = parseYouTubeUrl(candidate);
-                if (ytId) {
+                var yt = parseYouTubeUrl(candidate);
+                if (yt) {
                     event.preventDefault();
-                    insertLiteEmbed('liteYouTube', ytId);
+                    insertLiteEmbed('liteYouTube', yt.videoid, {
+                        start: yt.start,
+                        end: yt.end
+                    });
                     return true;
                 }
-                var vmId = parseVimeoUrl(candidate);
-                if (vmId) {
+                var vm = parseVimeoUrl(candidate);
+                if (vm) {
                     event.preventDefault();
-                    insertLiteEmbed('liteVimeo', vmId);
+                    insertLiteEmbed('liteVimeo', vm.videoid, {
+                        start: vm.start
+                    });
                     return true;
                 }
             }
