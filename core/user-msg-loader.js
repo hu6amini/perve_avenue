@@ -33,13 +33,12 @@ whenBodyReady(() => {
     // 1. STYLESHEETS (global – no lightgallery)
     // ============================================================================
     STYLESHEETS.forEach(url => {
-        const n = document.createElement("link");
-        Object.assign(n, { rel: "preload", as: "style", href: url });
-        const t = document.createElement("link");
-        Object.assign(t, { rel: "stylesheet", href: url, media: "print" });
-        t.onload = () => { t.media = "all"; };
-        document.head.append(n, t);
-    });
+    const n = document.createElement("link");
+    Object.assign(n, { rel: "preload", as: "style", href: url });
+    const t = document.createElement("link");
+    Object.assign(t, { rel: "stylesheet", href: url });
+    document.head.append(n, t);
+});
 
     // ============================================================================
     // 2. SCRIPT LOADER ENGINE
