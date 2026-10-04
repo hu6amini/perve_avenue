@@ -16,6 +16,9 @@
 //      OG worker (provider oEmbed + JSON-LD), rendered as a two-line
 //      caption below the facade and round-tripped through the legacy
 //      serialization so replies and drafts keep the metadata.
+// v11: lite embeds now backed by the self-hosted lite-embed.js module.
+//      No DOM contract changes — same tag names, same wrapper, same
+//      caption classes.
 var MessengerModule = (function(Utils, EventBus) {
     'use strict';
 
@@ -3647,6 +3650,8 @@ description ? ['span', { class: 'link-preview-description' }, description] : '',
                 // plus optional title/author, which are populated by the
                 // fetchEmbedMetadata helper on first insert and restored
                 // from the legacy marker span on reply / draft load.
+                // The custom element itself is defined by the self-hosted
+                // lite-embed.js module (Phase C). DOM contract is unchanged.
                 // ------------------------------------------------------------------
                 const LiteYouTube = Node.create({
                     name: 'liteYouTube',
