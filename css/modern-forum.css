@@ -3944,7 +3944,7 @@ lite-vimeo > iframe {
     border: 0;
     padding: 0;
     cursor: pointer;
-    font-size: clamp(48px, 12vmin, 88px);
+    font-size: clamp(40px, 8vmin, 64px);
     line-height: 1;
     transition: background-color 0.2s ease, color 0.2s ease;
 }
