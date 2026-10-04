@@ -3877,80 +3877,150 @@ section.modern-stats { flex-direction: column; width: 100%; }
 }
 
 /* ------------------------------------------------------------------
-   Lite embeds — the custom element (lite-youtube / lite-vimeo) itself.
-   The surrounding .lite-embed-wrapper layout rules already exist in
-   modern-forum.css section 19 and are unchanged.
+   Lite embeds (lite-youtube / lite-vimeo)
+   The custom element internals live in the self-hosted lite-embed.js
+   module. These rules cover the wrapper produced by the serialization
+   layer, the caption below the embed, the play button, selection
+   states in the TipTap editor, and mobile tweaks.
    ------------------------------------------------------------------ */
+
+/* --- Wrapper: layout container produced by serialization --- */
+.modern-wysiwyg .ProseMirror .lite-embed-wrapper,
+.modern-preview .preview-content .lite-embed-wrapper,
+.post-message .lite-embed-wrapper {
+    display: block;
+    width: 100%;
+    max-width: 560px;
+    margin: var(--space-md) var(--space-sm);
+}
+
+/* --- Custom element base --- */
 lite-youtube,
 lite-vimeo {
-  display: block;
-  position: relative;
-  width: 100%;
-  aspect-ratio: 16 / 9;
-  background-color: var(--bg-color);
-  background-position: center center;
-  background-size: cover;
-  background-repeat: no-repeat;
-  overflow: hidden;
-  cursor: pointer;
-  contain: content;
+    display: block;
+    position: relative;
+    width: 100%;
+    aspect-ratio: 16 / 9;
+    background-color: var(--bg-color);
+    background-position: center center;
+    background-size: cover;
+    background-repeat: no-repeat;
+    overflow: hidden;
+    cursor: pointer;
+    contain: content;
 }
 
 lite-youtube > iframe,
 lite-vimeo > iframe {
-  position: absolute;
-  inset: 0;
-  width: 100%;
-  height: 100%;
-  border: 0;
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    border: 0;
 }
 
+/* --- Play button --- */
 .lite-embed-playbtn {
-  position: absolute;
-  inset: 0;
-  width: 100%;
-  height: 100%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: rgba(0, 0, 0, 0.45);
-  color: #fff;
-  border: 0;
-  padding: 0;
-  cursor: pointer;
-  font-size: clamp(48px, 12vmin, 88px);
-  line-height: 1;
-  transition: background-color 0.2s ease, color 0.2s ease;
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: rgba(0, 0, 0, 0.45);
+    color: #fff;
+    border: 0;
+    padding: 0;
+    cursor: pointer;
+    font-size: clamp(48px, 12vmin, 88px);
+    line-height: 1;
+    transition: background-color 0.2s ease, color 0.2s ease;
 }
 
 .lite-embed-playbtn i {
-  pointer-events: none;
-  transition: transform 0.2s cubic-bezier(0.4, 0, 0.2, 1);
-  text-shadow: 0 2px 8px rgba(0, 0, 0, 0.5);
+    pointer-events: none;
+    transition: transform 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+    text-shadow: 0 2px 8px rgba(0, 0, 0, 0.5);
 }
 
 .lite-embed-playbtn:hover {
-  background: rgba(0, 0, 0, 0.55);
-  color: var(--primary-light);
+    background: rgba(0, 0, 0, 0.55);
+    color: var(--primary-light);
 }
 
 .lite-embed-playbtn:hover i {
-  transform: scale(1.06);
+    transform: scale(1.06);
 }
 
 .lite-embed-playbtn:focus-visible {
-  outline: 2px solid var(--primary-color);
-  outline-offset: -4px;
+    outline: 2px solid var(--primary-color);
+    outline-offset: -4px;
 }
 
 lite-youtube.lite-activated,
 lite-vimeo.lite-activated {
-  cursor: default;
+    cursor: default;
 }
 
 lite-youtube.lite-activated > .lite-embed-playbtn,
 lite-vimeo.lite-activated > .lite-embed-playbtn {
-  display: none;
+    display: none;
+}
+
+/* --- Selection states (editor only) --- */
+.modern-wysiwyg .ProseMirror .lite-embed-wrapper.ProseMirror-selectednode > lite-youtube,
+.modern-wysiwyg .ProseMirror .lite-embed-wrapper.ProseMirror-selectednode > lite-vimeo {
+    box-shadow:
+        0 0 0 2px var(--primary-color),
+        0 0 0 4px var(--focus-ring);
+}
+
+.modern-wysiwyg .ProseMirror .lite-embed-wrapper.lite-embed-in-selection > lite-youtube,
+.modern-wysiwyg .ProseMirror .lite-embed-wrapper.lite-embed-in-selection > lite-vimeo {
+    box-shadow: 0 0 0 2px var(--focus-ring);
+}
+
+/* --- Caption --- */
+.lite-embed-caption {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    padding: var(--space-xs) var(--space-sm) 0;
+}
+
+.lite-embed-title {
+    font-size: var(--text-sm);
+    font-weight: 600;
+    color: var(--text-primary);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    line-height: 1.35;
+}
+
+.lite-embed-author {
+    font-size: var(--text-xs);
+    color: var(--text-tertiary);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    line-height: 1.35;
+}
+
+/* --- Mobile --- */
+@media (max-width: 680px) {
+    .modern-wysiwyg .ProseMirror .lite-embed-wrapper,
+    .modern-preview .preview-content .lite-embed-wrapper,
+    .post-message .lite-embed-wrapper {
+        margin: var(--space-sm) var(--space-xs);
+    }
+    .lite-embed-title {
+        white-space: normal;
+        display: -webkit-box;
+        -webkit-line-clamp: 2;
+        -webkit-box-orient: vertical;
+    }
 }
 
 .modern-checkbox {
