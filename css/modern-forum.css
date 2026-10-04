@@ -333,6 +333,11 @@
   color: var(--text-tertiary);
 }
 
+.post-signature img {
+   display: inline-block; 
+   max-width: 100%; 
+   height:auto}
+
 .post-footer {
   background: var(--bg-color);
   border-top: 1px solid var(--border-color);
