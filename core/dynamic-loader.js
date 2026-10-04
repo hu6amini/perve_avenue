@@ -8,8 +8,7 @@ document.documentElement.lang = "en";
 const CONTENT_PAGE_IDS = Object.freeze(['topic', 'send', 'search', 'blog']);
 
 const STYLESHEETS = Object.freeze([
-    "https://cdnjs.cloudflare.com/ajax/libs/slick-carousel/1.9.0/slick.min.css",
-    "https://cdnjs.cloudflare.com/ajax/libs/lite-youtube-embed/0.3.3/lite-yt-embed.min.css"
+    "https://cdnjs.cloudflare.com/ajax/libs/slick-carousel/1.9.0/slick.min.css"
 ]);
 
 const IDLE_TIMEOUT_SLICK = 500;
@@ -175,12 +174,11 @@ async function bootSystem() {
         }
         console.debug(`[Boot] Phase B completed in ${(performance.now() - phaseBStart).toFixed(2)}ms`);
 
-        // PHASE C: Third‑party libraries (twemoji, lite-youtube, lite-vimeo)
+        // PHASE C: Third‑party libraries (twemoji, lite-embed)
         const phaseCStart = performance.now();
         const resultsC = await Promise.allSettled([
             loadScript("https://cdn.jsdelivr.net/npm/twemoji@14.0.2/dist/twemoji.min.js"),
-            loadScript("https://cdnjs.cloudflare.com/ajax/libs/lite-youtube-embed/0.3.3/lite-yt-embed.js"),
-            loadScript("https://cdn.jsdelivr.net/npm/lite-vimeo-embed@0.3.0/+esm", true)
+            loadScript("https://cdn.jsdelivr.net/gh/hu6amini/perve_avenue@e3a9363346bed26f3b83c726e642e08ec852fd0c/modules/lite-embed.js")
         ]);
         const failedC = resultsC.filter(r => r.status === 'rejected');
         if (failedC.length > 0) {
