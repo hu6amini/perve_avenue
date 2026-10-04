@@ -31,6 +31,25 @@
     document.head.append(link);
   }
 
+  // Normalise a YouTube/Vimeo time value into seconds.
+// Handles "90", "90s", "1m30s", "1h2m3s".
+function parseTimeString(t) {
+    if (t == null) return null;
+    const s = String(t).trim().toLowerCase();
+    if (!s) return null;
+    if (/^\d+$/.test(s)) {
+        const n = parseInt(s, 10);
+        return n > 0 ? n : null;
+    }
+    const m = s.match(/^(?:(\d+)h)?(?:(\d+)m)?(?:(\d+)s)?$/);
+    if (!m || (!m[1] && !m[2] && !m[3])) return null;
+    const h  = parseInt(m[1] || '0', 10);
+    const mn = parseInt(m[2] || '0', 10);
+    const sc = parseInt(m[3] || '0', 10);
+    const total = h * 3600 + mn * 60 + sc;
+    return total > 0 ? total : null;
+}
+
   // -------------------------------------------------------------------------
   // BASE CLASS
   // -------------------------------------------------------------------------
@@ -154,19 +173,27 @@
     }
 
     buildIframe() {
-      const iframe = document.createElement('iframe');
-      iframe.width  = '560';
-      iframe.height = '315';
-      iframe.title  = this.playLabel;
-      iframe.allow =
+    const iframe = document.createElement('iframe');
+    iframe.width  = '560';
+    iframe.height = '315';
+    iframe.title  = this.playLabel;
+    iframe.allow =
         'accelerometer; autoplay; encrypted-media; gyroscope; picture-in-picture';
-      iframe.allowFullscreen = true;
-      iframe.src =
+    iframe.allowFullscreen = true;
+
+    // YouTube accepts start/end as plain query params.
+    const params = this.getParams();
+    const start = this.getAttribute('start');
+    const end   = this.getAttribute('end');
+    if (start && !params.has('start')) params.set('start', start);
+    if (end   && !params.has('end'))   params.set('end', end);
+
+    iframe.src =
         'https://www.youtube-nocookie.com/embed/' +
         encodeURIComponent(this.videoId) +
-        '?' + this.getParams().toString();
-      return iframe;
-    }
+        '?' + params.toString();
+    return iframe;
+}
   }
 
   // -------------------------------------------------------------------------
@@ -217,19 +244,27 @@
     }
 
     buildIframe() {
-      const iframe = document.createElement('iframe');
-      iframe.width  = '640';
-      iframe.height = '360';
-      iframe.title  = this.playLabel;
-      iframe.allow =
+    const iframe = document.createElement('iframe');
+    iframe.width  = '640';
+    iframe.height = '360';
+    iframe.title  = this.playLabel;
+    iframe.allow =
         'accelerometer; autoplay; encrypted-media; gyroscope; picture-in-picture';
-      iframe.allowFullscreen = true;
-      iframe.src =
+    iframe.allowFullscreen = true;
+
+    let url =
         'https://player.vimeo.com/video/' +
         encodeURIComponent(this.videoId) +
         '?' + this.getParams().toString();
-      return iframe;
-    }
+
+    // Vimeo takes start time as a fragment (#t=90s), not a query param.
+    // It has no native end-time parameter.
+    const start = this.getAttribute('start');
+    if (start) url += '#t=' + encodeURIComponent(start) + 's';
+
+    iframe.src = url;
+    return iframe;
+}
   }
 
   // -------------------------------------------------------------------------
