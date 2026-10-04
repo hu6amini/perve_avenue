@@ -192,7 +192,7 @@ whenBodyReady(() => {
             const phaseCStart = performance.now();
             const resultsC = await Promise.allSettled([
                 loadScript("https://cdn.jsdelivr.net/npm/twemoji@14.0.2/dist/twemoji.min.js"),
-                loadScript("https://cdn.jsdelivr.net/gh/hu6amini/perve_avenue@e3a9363346bed26f3b83c726e642e08ec852fd0c/modules/lite-embed.js")
+                loadScript("https://cdn.jsdelivr.net/gh/hu6amini/perve_avenue@9cdcc6c87d99bfce1f64f07fb1523b8b28f5a516/modules/lite-embed.js")
             ]);
             const failedC = resultsC.filter(r => r.status === 'rejected');
             if (failedC.length > 0) {
