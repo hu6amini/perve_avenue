@@ -2425,6 +2425,10 @@ body.modal-open {
   .notify-modal-content { padding: 1rem; }
 }
 
+.forumfree-modal.\.report-modal-notify.Blocker.current {
+    display: none;
+}
+
 /* ------------------------------------------------------------
    13. LOADING SHIMMER & UTILITIES
    ------------------------------------------------------------ */
