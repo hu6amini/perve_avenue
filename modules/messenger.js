@@ -1,38 +1,46 @@
 // Messenger Module – TipTap based, modern preview, relies solely on forumObserver
-// v16: editor UX overhaul.
-//   - Images are inline nodes: the caret can sit left / right of an image,
-//     images can share a line with text, Backspace / Delete / arrow keys
-//     behave natively.
-//   - Gap cursor is visible (TipTap's default was black-on-dark).
-//   - Block-boundary scaffolding covers nested containers and runs once on
-//     load; when a deletion leaves only empty scaffolding the document
-//     collapses to ONE empty paragraph so the placeholder returns at once.
-//   - Image-by-URL inserts instantly (dimensions probed in background).
-//   - Image uploads use an id-tracked placeholder node (robust against
-//     typing / undo during upload); Send is disabled while uploading;
-//     multiple files and drop-position are supported.
-//   - Paste an image URL -> image; paste URL over a selection -> link;
-//     Ctrl+Shift+V -> plain text.
-//   - Fixed: emoticon rule ate the preceding space; syntax highlighter
-//     corrupted markup when numbers were present; searches shared one
-//     AbortController (recipient / mention / avatar lookups cancelled each
-//     other); duplicate Gapcursor extension; foreign selection handling on
-//     Escape; toolbar buttons stealing editor focus / hiding before click;
-//     nested quote / spoiler serialization; link URL validation
-//     (javascript: etc.); preview toggle + preserved expanded state; draft
-//     is only cleared once the message is confirmed sent.
+// v2: preview area renders quotes / spoilers / code blocks using the same
+//     .modern-quote / .modern-spoiler / .modern-code structures the posts
+//     module uses on the reader side.
+// v3: spoiler titles.
+// v4: code block language labels.
+// v5: NSFW inline tag. Image-level NSFW added on top.
+// v6: recipient recents + per-recipient drafts.
+// v7: emoticon autocomplete on `:` prefix.
+// v8: syntax highlighting (preview + reader side), live preview refresh,
+//     touch-friendly image toolbar, inline-code button, image edit modal
+//     (alt text + size), edit-in-place for code language / spoiler title /
+//     link URL.
+// v9: lite YouTube and Vimeo embeds (lite-youtube-embed, lite-vimeo-embed).
+// v10: caption wrapper for lite embeds — title + author pulled from the
+//      OG worker (provider oEmbed + JSON-LD), rendered as a two-line
+//      caption below the facade and round-tripped through the legacy
+//      serialization so replies and drafts keep the metadata.
+// v11: lite embeds now backed by the self-hosted lite-embed.js module.
+//      No DOM contract changes — same tag names, same wrapper, same
+//      caption classes.
+// v12: start / end time support. Parser normalises YouTube's t=,
+//      start=, and end= query params plus Vimeo's #t= fragment into
+//      integer seconds, stored as start / end attributes on the
+//      custom element and data-start / data-end on the wrapper. The
+//      custom element translates them into the provider's native
+//      iframe URL syntax at activation time.
+// v13: schema split — CustomImage is block-level, new Emoji node is
+//      inline. Three insertion paths (picker, autocomplete, ASCII
+//      input rule) route to Emoji so twemoji render inline. The
+//      TrailingEmbedParagraph plugin now also fires for a trailing
+//      image and moves the selection into the trailing paragraph so
+//      typing works immediately after an insert. TextSelection
+//      imported from prosemirror-state.
 var MessengerModule = (function(Utils, EventBus) {
     'use strict';
 
     var isInitialized = false;
-    var isBuilding = false;
     var observerCallbacks = [];
-    var cleanupFns = [];
     var _originalEmoticon = null;
 
     var MAX_MESSAGE_LENGTH = 0;
     var OG_FETCH_TIMEOUT = 8000;
-    var UPLOAD_TIMEOUT = 60000;
     var UPLOAD_WORKER_URL = 'https://imgbb-upload-proxy.nhristakiev.workers.dev/';
     var OG_WORKER_URL = 'https://og-worker.nhristakiev.workers.dev/?url=';
     var TWEMOJI_BASE = 'https://twemoji.maxcdn.com/v/latest/svg/';
@@ -87,6 +95,9 @@ var MessengerModule = (function(Utils, EventBus) {
         return txt.value;
     }
 
+    // Normalise a YouTube/Vimeo time value into seconds.
+    // Handles "90", "90s", "1m30s", "1h2m3s".
+    // Returns null if the input is empty, malformed, or resolves to 0.
     function parseTimeString(t) {
         if (t == null) return null;
         var s = String(t).trim().toLowerCase();
@@ -104,6 +115,21 @@ var MessengerModule = (function(Utils, EventBus) {
         return total > 0 ? total : null;
     }
 
+    function editorContentIsEmpty(html) {
+        if (!html || typeof html !== 'string') return true;
+        var text = html
+            .replace(/<[^>]*>/g, '')
+            .replace(/&nbsp;/gi, ' ')
+            .replace(/&zeroWidthSpace;/gi, '')
+            .replace(/\s+/g, ' ')
+            .trim();
+        if (text.length > 0) return false;
+        if (/<img[^>]+src\s*=/i.test(html)) return false;
+        if (/<hr\b/i.test(html)) return false;
+        if (/<(video|audio|iframe)\b/i.test(html)) return false;
+        return true;
+    }
+
     function ensureTrailingParagraphInHtml(html) {
         if (!html || typeof html !== 'string') return html;
         var d = document.createElement('div');
@@ -117,7 +143,7 @@ var MessengerModule = (function(Utils, EventBus) {
 
     function escapeHtml(str) {
         if (!str) return '';
-        return String(str).replace(/[&<>"']/g, function(m) {
+        return str.replace(/[&<>"']/g, function(m) {
             return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[m];
         });
     }
@@ -140,37 +166,11 @@ var MessengerModule = (function(Utils, EventBus) {
         } catch(e) { return dateStr; }
     }
 
-    // Validate + normalise a user-typed URL. Returns an absolute href or null.
-    function normalizeUrl(raw, allowed) {
-        var v = String(raw == null ? '' : raw).trim();
-        if (!v || /\s/.test(v)) return null;
-        if (/^\/\//.test(v)) v = 'https:' + v;
-        if (!/^[a-z][a-z0-9+.\-]*:/i.test(v)) {
-            if (/^[^\s\/?#]+\.[^\s\/?#]{2,}/.test(v)) v = 'https://' + v;
-            else return null;
-        }
-        var u;
-        try { u = new URL(v); } catch (e) { return null; }
-        if (allowed.indexOf(u.protocol) === -1) return null;
-        return u.href;
-    }
-
-    var IMAGE_URL_RE = /\.(png|jpe?g|gif|webp|avif|bmp|svg)(\?[^#]*)?(#.*)?$/i;
-
-    function docIsBlank(doc) {
-        var blank = true;
-        doc.descendants(function(node) {
-            if (!blank) return false;
-            if (node.isText) {
-                if (/\S/.test(node.text || '')) blank = false;
-                return false;
-            }
-            if (node.isLeaf && node.type.name !== 'hardBreak') blank = false;
-            return blank;
-        });
-        return blank;
-    }
-
+    // Unwrap .lite-embed-wrapper containers produced by the LiteYouTube /
+    // LiteVimeo renderHTML, emitting the legacy marker span that the
+    // forum stores. Title, author, and any start/end timestamps ride
+    // along as data-* attributes so replies and drafts can restore the
+    // full state without re-fetching.
     function unwrapLiteEmbedWrappers(html) {
         if (!html || html.indexOf('lite-embed-wrapper') === -1) return html;
         var temp = document.createElement('div');
@@ -201,6 +201,10 @@ var MessengerModule = (function(Utils, EventBus) {
 
     // ------------------------------------------------------------------------
     // SYNTAX HIGHLIGHTING
+    // A deliberately small generic tokenizer. Handles the shapes common to
+    // every language in CODE_LANGUAGE_SUGGESTIONS — line/block comments,
+    // strings, numbers, and a curated keyword union. Not a real parser;
+    // it produces a visual hint, not a correctness guarantee.
     // ------------------------------------------------------------------------
     var CODE_HIGHLIGHT_KEYWORDS = [
         'abstract','as','assert','async','await','bool','break','case','catch','class','const','continue',
@@ -211,13 +215,8 @@ var MessengerModule = (function(Utils, EventBus) {
         'True','true','try','typeof','var','void','while','with','yield'
     ].join('|');
 
-    var HIGHLIGHT_TOKEN_RE = new RegExp('\\b(\\d+(?:\\.\\d+)?)\\b|\\b(' + CODE_HIGHLIGHT_KEYWORDS + ')\\b', 'g');
-    var NO_HASH_COMMENT_LANGS = /^(c|c\+\+|c#|java|javascript|typescript|css|html|json|xml|sql|rust|go|php|swift|kotlin|lua)$/i;
-    var DASH_COMMENT_LANGS = /^(lua|sql)$/i;
-
-    function highlightCode(codeText, lang) {
+    function highlightCode(codeText) {
         if (codeText == null) return '';
-        lang = (lang || '').trim();
         var html = String(codeText)
             .replace(/&/g, '&amp;')
             .replace(/</g, '&lt;')
@@ -238,27 +237,18 @@ var MessengerModule = (function(Utils, EventBus) {
             return pre + keep('<span class="code-comment">' + com + '</span>');
         });
 
-        if (DASH_COMMENT_LANGS.test(lang)) {
-            html = html.replace(/(--[^\n]*)/g, function(m) {
-                return keep('<span class="code-comment">' + m + '</span>');
-            });
-        }
-
-        if (!NO_HASH_COMMENT_LANGS.test(lang)) {
-            html = html.replace(/^(\s*)(#[^\n]*)/gm, function(m, ws, com) {
-                if (/^#[0-9a-fA-F]{3,8}$/.test(com.trim())) return m;
-                return ws + keep('<span class="code-comment">' + com + '</span>');
-            });
-        }
+        html = html.replace(/^(\s*)(#[^\n]*)/gm, function(m, ws, com) {
+            if (/^#[0-9a-fA-F]{3,8}$/.test(com.trim())) return m;
+            return ws + keep('<span class="code-comment">' + com + '</span>');
+        });
 
         html = html.replace(/"(?:[^"\\\n]|\\.)*"|'(?:[^'\\\n]|\\.)*'|`(?:[^`\\]|\\.)*`/g, function(m) {
             return keep('<span class="code-string">' + m + '</span>');
         });
 
-        html = html.replace(HIGHLIGHT_TOKEN_RE, function(m, num, kw) {
-            if (num != null) return '<span class="code-number">' + num + '</span>';
-            return '<span class="code-keyword">' + kw + '</span>';
-        });
+        html = html.replace(/\b\d+(?:\.\d+)?\b/g, '<span class="code-number">$&</span>');
+
+        html = html.replace(new RegExp('\\b(' + CODE_HIGHLIGHT_KEYWORDS + ')\\b', 'g'), '<span class="code-keyword">$1</span>');
 
         html = html.replace(/\uE000A([0-9a-z]+)Z\uE001/g, function(m, idx) {
             return stash[parseInt(idx, 36)];
@@ -493,23 +483,20 @@ var MessengerModule = (function(Utils, EventBus) {
             var targetReady = false;
 
             function tryBuild() {
-                if (wrapperReady && targetReady && !isInitialized && !isBuilding && !document.getElementById('modern-messenger')) {
-                    isBuilding = true;
+                if (wrapperReady && targetReady && !isInitialized && !document.getElementById('modern-messenger')) {
                     waitForGlobalFunctions()
                         .then(function() {
                             try {
                                 buildModernMessenger();
                                 isInitialized = true;
-                                isBuilding = false;
                                 if (EventBus) EventBus.trigger('messenger:ready');
                                 resolve();
                             } catch (err) {
-                                isBuilding = false;
                                 console.error('[MessengerModule] Build failed:', err);
                                 reject(err);
                             }
                         })
-                        .catch(function(err) { isBuilding = false; reject(err); });
+                        .catch(reject);
                 }
             }
 
@@ -523,7 +510,6 @@ var MessengerModule = (function(Utils, EventBus) {
                     tryBuild();
                 }
             });
-            if (wrapperObserverId) observerCallbacks.push(wrapperObserverId);
 
             var targetSelector = '';
             if (currentSection === 'messages') {
@@ -544,7 +530,6 @@ var MessengerModule = (function(Utils, EventBus) {
                     tryBuild();
                 }
             });
-            if (targetObserverId) observerCallbacks.push(targetObserverId);
 
             setTimeout(function() {
                 if (!wrapperReady) wrapperReady = true;
@@ -556,7 +541,6 @@ var MessengerModule = (function(Utils, EventBus) {
 
     function reset() {
         isInitialized = false;
-        isBuilding = false;
         if (_originalEmoticon !== null) {
             window.emoticon = _originalEmoticon;
             _originalEmoticon = null;
@@ -567,8 +551,6 @@ var MessengerModule = (function(Utils, EventBus) {
             }
         });
         observerCallbacks = [];
-        cleanupFns.forEach(function(fn) { try { fn(); } catch (e) {} });
-        cleanupFns = [];
     }
 
     function waitForGlobalFunctions() {
@@ -785,25 +767,23 @@ var MessengerModule = (function(Utils, EventBus) {
     }
 
     // ------------------------------------------------------------------------
-    // MENTION / USER SEARCH
+    // MENTION SEARCH
     // ------------------------------------------------------------------------
-    var _searchAborts = {};
+    var _mentionSearchAbort = null;
 
-    function searchMentions(query, channel) {
-        channel = channel || 'default';
+    function searchMentions(query) {
         if (!query || query.length < 1) return Promise.resolve([]);
 
-        if (_searchAborts[channel]) {
-            try { _searchAborts[channel].abort(); } catch (e) {}
+        if (_mentionSearchAbort) {
+            try { _mentionSearchAbort.abort(); } catch (e) {}
         }
-        var controller = new AbortController();
-        _searchAborts[channel] = controller;
+        _mentionSearchAbort = new AbortController();
 
         var url = '/api.php?search&name=' + encodeURIComponent(query) + '&n=10&cookie=1';
 
         return fetch(url, {
             credentials: 'include',
-            signal: controller.signal
+            signal: _mentionSearchAbort.signal
         })
         .then(function (r) {
             if (!r.ok) throw new Error('HTTP ' + r.status);
@@ -819,7 +799,7 @@ var MessengerModule = (function(Utils, EventBus) {
             });
         })
         .catch(function (err) {
-            if (err && err.name === 'AbortError') return null;
+            if (err && err.name === 'AbortError') return [];
             console.warn('[MessengerModule] Search failed:', err);
             return [];
         });
@@ -901,7 +881,6 @@ var MessengerModule = (function(Utils, EventBus) {
             popup.innerHTML = '';
             itemEls = [];
             items = users;
-            selectedIndex = 0;
 
             if (opts.headerText) {
                 var header = document.createElement('div');
@@ -977,8 +956,7 @@ var MessengerModule = (function(Utils, EventBus) {
         }
 
         function runSearch(query) {
-            searchMentions(query, 'recipient').then(function(users) {
-                if (users === null) return;
+            searchMentions(query).then(function(users) {
                 if (inputEl.value.trim() !== query) return;
                 ensurePopup();
                 buildPopup(users, {
@@ -1098,6 +1076,11 @@ var MessengerModule = (function(Utils, EventBus) {
             }
         );
 
+        // Lite embed markers → custom elements. Round-trips the payload
+        // written by htmlToLegacy; the LiteYouTube/LiteVimeo parseHTML
+        // picks up title, author, and any start/end timestamps from
+        // data-* attributes, so the caption and playback range render
+        // without a second fetch.
         html = html.replace(
             /<span\b[^>]*\bff-lite-youtube\b[^>]*>([\s\S]*?)<\/span>/gis,
             function(match) {
@@ -1169,13 +1152,16 @@ var MessengerModule = (function(Utils, EventBus) {
                 : content;
         });
 
-        html = html.replace(
-            /<span[^>]*\bff-inline-code\b[^>]*>([\s\S]*?)<\/span>/gis,
-            function(_, content) {
-                var decoded = decodeHtmlEntities(content);
-                return '<code>' + escapeHtml(decoded) + '</code>';
-            }
-        );
+        // Inline code marker → <code>. ForumFree re-escapes the & in &lt;
+// when it round-trips, so one decode pass undoes that and the
+// subsequent escape restores well-formed HTML for TipTap to parse.
+html = html.replace(
+    /<span[^>]*\bff-inline-code\b[^>]*>([\s\S]*?)<\/span>/gis,
+    function(_, content) {
+        var decoded = decodeHtmlEntities(content);
+        return '<code>' + escapeHtml(decoded) + '</code>';
+    }
+);
 
         html = html.replace(/\[EMAIL\](.*?)\[\/EMAIL\]/gi, '<a href="mailto:$1">$1</a>');
         return html;
@@ -1184,7 +1170,10 @@ var MessengerModule = (function(Utils, EventBus) {
     function htmlToLegacy(html) {
         if (!html || typeof html !== 'string') return html;
 
-        html = html.replace(/<span\b[^>]*\bupload-placeholder\b[^>]*>[\s\S]*?<\/span>/gi, '');
+        // Unwrap the lite-embed caption wrapper first, converting each
+        // .lite-embed-wrapper into the marker span form. Runs before the
+        // regex loop so the existing lite-youtube / lite-vimeo replacements
+        // below only serve as defensive coverage for stray bare elements.
         html = unwrapLiteEmbedWrappers(html);
 
         var result = html;
@@ -1192,6 +1181,10 @@ var MessengerModule = (function(Utils, EventBus) {
         for (var i = 0; i < maxIterations; i++) {
             var before = result;
 
+            // Lite embeds. Run first so an embed nested inside a quote
+            // or spoiler gets serialized before the outer container's
+            // regex can strip or re-escape the custom element.
+            // Start / end timestamps are preserved on the marker.
             result = result.replace(
                 /<lite-youtube\b[^>]*\bvideoid="([^"]*)"[^>]*>\s*<\/lite-youtube>/gi,
                 function(match, videoid) {
@@ -1213,13 +1206,13 @@ var MessengerModule = (function(Utils, EventBus) {
                 }
             );
 
-            result = result.replace(/<blockquote[^>]*>((?:(?!<blockquote)[\s\S])*?)<\/blockquote>/gi, function(match, inner) {
+            result = result.replace(/<blockquote[^>]*>([\s\S]*?)<\/blockquote>/gi, function(match, inner) {
                 var cleaned = inner.replace(/<p[^>]*>/gi, '').replace(/<\/p>\s*/gi, '\n');
                 cleaned = cleaned.replace(/\n+$/, '');
                 return '[QUOTE]' + cleaned + '[/QUOTE]';
             });
 
-            result = result.replace(/<div\b([^>]*\bclass="[^"]*\bspoiler\b[^"]*"[^>]*)>((?:(?!<div\b)[\s\S])*?)<\/div>/gi, function(match, attrs, inner) {
+            result = result.replace(/<div\b([^>]*\bclass="[^"]*\bspoiler\b[^"]*"[^>]*)>([\s\S]*?)<\/div>/gi, function(match, attrs, inner) {
                 var cleaned = inner.replace(/<p[^>]*>/gi, '').replace(/<\/p>\s*/gi, '\n');
                 cleaned = cleaned.replace(/\n+$/, '');
 
@@ -1233,6 +1226,8 @@ var MessengerModule = (function(Utils, EventBus) {
             });
 
             result = result.replace(/<pre([^>]*)>\s*<code[^>]*>([\s\S]*?)<\/code>\s*<\/pre>/gi, function(match, preAttrs, inner) {
+                // Inner may contain syntax-highlight spans from the editor
+                // itself; strip them before emitting the legacy payload.
                 var plain = inner.replace(/<[^>]*>/g, '');
                 var decoded = plain
                     .replace(/&lt;/g, '<')
@@ -1250,15 +1245,15 @@ var MessengerModule = (function(Utils, EventBus) {
                 return prefix + '[CODE]' + decoded + '[/CODE]';
             });
 
-            result = result.replace(/<code\b[^>]*>([\s\S]*?)<\/code>/gi, function(match, inner) {
-                return '<span class="ff-inline-code">' + inner + '</span>';
-            });
+            // Inline code → ff-inline-code marker. Runs after the pre pass, so
+// any <code> still present is guaranteed to be inline (the block
+// form was already consumed by the <pre><code> pair above).
+result = result.replace(/<code\b[^>]*>([\s\S]*?)<\/code>/gi, function(match, inner) {
+    return '<span class="ff-inline-code">' + inner + '</span>';
+});
 
             if (result === before) break;
         }
-
-        result = result.replace(/<p>\s*<\/p>/g, '');
-
         return result;
     }
 
@@ -1271,7 +1266,7 @@ var MessengerModule = (function(Utils, EventBus) {
         var temp = document.createElement('div');
         temp.innerHTML = html;
 
-        Array.from(temp.querySelectorAll('blockquote')).reverse().forEach(function(bq) {
+        Array.from(temp.querySelectorAll('blockquote')).forEach(function(bq) {
             var innerHtml = bq.innerHTML;
             var modernHtml =
                 '<div class="modern-quote long-quote">' +
@@ -1293,7 +1288,7 @@ var MessengerModule = (function(Utils, EventBus) {
             if (bq.parentNode) bq.parentNode.replaceChild(wrapper.firstElementChild, bq);
         });
 
-        Array.from(temp.querySelectorAll('div.spoiler')).reverse().forEach(function(sp) {
+        Array.from(temp.querySelectorAll('div.spoiler')).forEach(function(sp) {
             var innerHtml = sp.innerHTML;
             var title = sp.getAttribute('data-title') || 'Spoiler';
             var spoilerId = 'preview-spoiler-' + Date.now() + '-' + Math.floor(Math.random() * 100000);
@@ -1319,9 +1314,8 @@ var MessengerModule = (function(Utils, EventBus) {
             if (pre.closest('.modern-code')) return;
             var code = pre.querySelector('code');
             var rawText = code ? (code.textContent || '') : (pre.textContent || '');
-            var langRaw = (pre.getAttribute('data-language') || '').trim();
-            var codeContent = highlightCode(rawText, langRaw);
-            var lang = langRaw || 'Code';
+            var codeContent = highlightCode(rawText);
+            var lang = (pre.getAttribute('data-language') || '').trim() || 'Code';
             var modernHtml =
                 '<div class="modern-code">' +
                     '<div class="code-header" style="cursor: default;">' +
@@ -1448,29 +1442,6 @@ var MessengerModule = (function(Utils, EventBus) {
         }
     }
 
-    function copyTextToClipboard(text, onDone) {
-        function fallback() {
-            var textarea = document.createElement('textarea');
-            textarea.value = text;
-            textarea.setAttribute('readonly', '');
-            textarea.style.cssText = 'position:fixed;top:-1000px;opacity:0;';
-            document.body.appendChild(textarea);
-            textarea.select();
-            var ok = false;
-            try { ok = document.execCommand('copy'); } catch (e) { ok = false; }
-            document.body.removeChild(textarea);
-            if (ok && onDone) onDone();
-            return ok;
-        }
-        if (navigator.clipboard && navigator.clipboard.writeText) {
-            navigator.clipboard.writeText(text).then(function() {
-                if (onDone) onDone();
-            }).catch(function() { fallback(); });
-        } else {
-            fallback();
-        }
-    }
-
     function handlePreviewCodeCopy(btn) {
         var codeBlock = btn.closest('.modern-code');
         if (!codeBlock) return;
@@ -1478,13 +1449,31 @@ var MessengerModule = (function(Utils, EventBus) {
         if (!codeContent) return;
         var text = codeContent.textContent;
 
-        copyTextToClipboard(text, function() {
+        var flashIcon = function() {
             var icon = btn.querySelector('i');
             if (!icon) return;
             var originalClass = icon.className;
             icon.className = 'fa-regular fa-check';
             setTimeout(function() { icon.className = originalClass; }, 1500);
-        });
+        };
+
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+            navigator.clipboard.writeText(text).then(flashIcon).catch(function(err) {
+                console.error('[MessengerModule] Copy failed:', err);
+            });
+        } else {
+            var textarea = document.createElement('textarea');
+            textarea.value = text;
+            document.body.appendChild(textarea);
+            textarea.select();
+            try {
+                document.execCommand('copy');
+                flashIcon();
+            } catch (e) {
+                console.error('[MessengerModule] Copy failed:', e);
+            }
+            document.body.removeChild(textarea);
+        }
     }
 
     function handlePreviewSpoilerToggle(trigger) {
@@ -1671,64 +1660,6 @@ var MessengerModule = (function(Utils, EventBus) {
         });
     }
 
-    function captureExpandedState(area) {
-        function indices(sel) {
-            var out = [];
-            area.querySelectorAll(sel).forEach(function(el, i) {
-                if (el.classList.contains('expanded')) out.push(i);
-            });
-            return out;
-        }
-        return {
-            quotes: indices('.modern-quote'),
-            spoilers: indices('.modern-spoiler'),
-            codes: indices('.modern-code')
-        };
-    }
-
-    function restoreExpandedState(area, st) {
-        var quotes = area.querySelectorAll('.modern-quote');
-        st.quotes.forEach(function(i) {
-            var q = quotes[i];
-            if (!q) return;
-            q.classList.add('expanded');
-            var b = q.querySelector('.quote-expand-btn');
-            if (b) {
-                b.setAttribute('aria-expanded', 'true');
-                var t = b.querySelector('.expand-text');
-                if (t) t.textContent = 'Show less';
-            }
-        });
-
-        var spoilers = area.querySelectorAll('.modern-spoiler');
-        st.spoilers.forEach(function(i) {
-            var s = spoilers[i];
-            if (!s) return;
-            var content = s.querySelector('.spoiler-content');
-            if (!content) return;
-            s.classList.add('expanded');
-            content.style.maxHeight = content.scrollHeight + 'px';
-            content.setAttribute('aria-hidden', 'false');
-            var header = s.querySelector('.spoiler-header');
-            var toggle = s.querySelector('.spoiler-toggle');
-            if (header) header.setAttribute('aria-expanded', 'true');
-            if (toggle) toggle.setAttribute('aria-expanded', 'true');
-        });
-
-        var codes = area.querySelectorAll('.modern-code');
-        st.codes.forEach(function(i) {
-            var c = codes[i];
-            if (!c) return;
-            c.classList.add('expanded');
-            var b = c.querySelector('.code-expand-btn');
-            if (b) {
-                b.setAttribute('aria-expanded', 'true');
-                var t = b.querySelector('.expand-text');
-                if (t) t.textContent = 'Show less';
-            }
-        });
-    }
-
     // ------------------------------------------------------------------------
     // ASCII EMOTICON MAP (Converse.js)
     // ------------------------------------------------------------------------
@@ -1845,31 +1776,6 @@ var MessengerModule = (function(Utils, EventBus) {
         return codePoints.join('-');
     }
 
-    // ------------------------------------------------------------------------
-    // EDITOR STYLE PATCH
-    // ------------------------------------------------------------------------
-    function injectEditorStyles() {
-        if (document.getElementById('messenger-editor-fixes')) return;
-        var css = [
-            '.modern-wysiwyg .ProseMirror { caret-color: var(--text-primary); cursor: text; }',
-            '.modern-wysiwyg .ProseMirror-gapcursor { pointer-events: none; }',
-            '.modern-wysiwyg .ProseMirror-gapcursor:after { border-top: 2px solid var(--primary-light, #34d399) !important; width: 28px !important; top: -1px !important; }',
-            '.modern-wysiwyg .ProseMirror-focused .ProseMirror-gapcursor { display: block; }',
-            '.modern-wysiwyg .ProseMirror img:not([src*="twemoji"]) { vertical-align: bottom; background: var(--surface-light); min-width: 24px; min-height: 24px; }',
-            '.modern-wysiwyg .ProseMirror img[src*="twemoji"] { vertical-align: -0.25em; }',
-            '.modern-wysiwyg .ProseMirror p.is-editor-empty:first-child::before { content: attr(data-placeholder); float: left; height: 0; color: var(--text-tertiary); pointer-events: none; }',
-            '.modern-wysiwyg .ProseMirror blockquote p.is-editor-empty::before, .modern-wysiwyg .ProseMirror div.spoiler p.is-editor-empty::before { content: none; }',
-            '.upload-placeholder { display: inline-flex; align-items: center; gap: .45em; padding: .15em .7em; margin-inline: .15em; border: 1px dashed var(--border-color); border-radius: var(--radius-full, 999px); color: var(--text-tertiary); font-size: .85em; vertical-align: middle; user-select: none; }',
-            '.upload-placeholder::before { content: ""; width: .9em; height: .9em; border: 2px solid var(--border-color); border-top-color: var(--primary-color); border-radius: 50%; animation: messengerSpin .8s linear infinite; }',
-            '@keyframes messengerSpin { to { transform: rotate(360deg); } }',
-            '.modern-input.has-error { border-color: var(--danger-color); box-shadow: 0 0 0 2px rgba(220,38,38,.15); }'
-        ].join('\n');
-        var style = document.createElement('style');
-        style.id = 'messenger-editor-fixes';
-        style.textContent = css;
-        document.head.appendChild(style);
-    }
-
     // ========================================================================
     // COMPOSE SECTION
     // ========================================================================
@@ -1883,8 +1789,6 @@ var MessengerModule = (function(Utils, EventBus) {
             console.warn('[MessengerModule] Compose textarea (#Post) not found – skipping editor');
             return document.createElement('div');
         }
-
-        injectEditorStyles();
 
         var addSentCheckbox     = document.getElementById('add_sent');
         var addTrackingCheckbox = document.getElementById('add_tracking');
@@ -1927,206 +1831,93 @@ var MessengerModule = (function(Utils, EventBus) {
         container.appendChild(composeHeader);
 
         var currentRecipient    = null;
-        var editor              = null;
-        var modernSubmitBtnRef  = null;
-        var modernPreviewBtnRef = null;
-        var charCounter         = null;
-        var draftSaveTimer      = null;
-        var livePreviewTimer    = null;
-        var syncTimer           = null;
-        var pendingUploads      = 0;
-        var plainPasteArmed     = false;
-        var plainPasteTimer     = null;
+var editor              = null;
+var modernSubmitBtnRef  = null;
+var modernPreviewBtnRef = null;
+var charCounter         = null;
+var draftSaveTimer      = null;
+var livePreviewTimer    = null;
 
-        function editorBlank() {
-            return !editor || docIsBlank(editor.state.doc);
-        }
+        // After inserting a lite embed or a block image, if the doc now
+// ends with an empty paragraph directly following the atom, move
+// the cursor into it. The trailing-paragraph plugin guarantees
+// that paragraph exists, but ProseMirror leaves the selection in
+// a gap position — no text cursor, no typing. This helper covers
+// the explicit call sites (paste handler, lite embed inserts)
+// where we want the cursor placed immediately; the plugin itself
+// also sets the selection for the general case.
+function focusTrailingEmbedParagraph() {
+    if (!editor) return;
+    const doc = editor.state.doc;
+    if (doc.childCount < 2) return;
+    const last = doc.child(doc.childCount - 1);
+    const secondLast = doc.child(doc.childCount - 2);
+    if (last.type.name !== 'paragraph' || last.content.size !== 0) return;
+    const atomName = secondLast.type.name;
+    if (atomName !== 'liteYouTube' && atomName !== 'liteVimeo' && atomName !== 'image') return;
+    // doc.content.size - 1 is the single cursor position inside the
+    // empty trailing paragraph. setTextSelection on that puts a real
+    // text cursor there and chain().focus() gives it focus.
+    editor.chain().focus().setTextSelection(doc.content.size - 1).run();
+}
 
-        function syncTextareaNow() {
-            if (syncTimer) { clearTimeout(syncTimer); syncTimer = null; }
-            if (originalTextarea && editor) {
-                originalTextarea.value = editorBlank() ? '' : htmlToLegacy(editor.getHTML());
-            }
-        }
-        function syncTextareaDebounced() {
-            if (syncTimer) clearTimeout(syncTimer);
-            syncTimer = setTimeout(syncTextareaNow, 150);
-        }
-        if (originalForm && originalForm instanceof HTMLFormElement) {
-            originalForm.addEventListener('submit', syncTextareaNow);
-        }
+// Fetch title + author for a fresh embed and patch the node once the
+// worker responds. The worker's provider map (OEMBED_PROVIDERS) hits
+// YouTube's and Vimeo's oEmbed endpoints directly, so both fields
+// usually come back in a single round-trip.
+function fetchEmbedMetadata(kind, videoid) {
+    if (!editor || !videoid) return;
+    var canonicalUrl = kind === 'liteYouTube'
+        ? 'https://www.youtube.com/watch?v=' + encodeURIComponent(videoid)
+        : 'https://vimeo.com/' + encodeURIComponent(videoid);
 
-        function fetchEmbedMetadata(kind, videoid) {
-            if (!editor || !videoid) return;
-            var canonicalUrl = kind === 'liteYouTube'
-                ? 'https://www.youtube.com/watch?v=' + encodeURIComponent(videoid)
-                : 'https://vimeo.com/' + encodeURIComponent(videoid);
-
-            var controller = new AbortController();
-            var timeoutId = setTimeout(function() { controller.abort(); }, OG_FETCH_TIMEOUT);
-
-            fetch(OG_WORKER_URL + encodeURIComponent(canonicalUrl), { signal: controller.signal })
-                .then(function(r) { clearTimeout(timeoutId); return r.ok ? r.json() : null; })
-                .then(function(data) {
-                    if (!data || data.error || !data.title) return;
-                    if (!editor) return;
-                    var positions = [];
-                    editor.state.doc.descendants(function(node, pos) {
-                        if (node.type.name === kind &&
-                            node.attrs.videoid === videoid &&
-                            !node.attrs.title) {
-                            positions.push(pos);
-                        }
-                        return true;
-                    });
-                    if (positions.length === 0) return;
-                    var tr = editor.state.tr;
-                    for (var i = 0; i < positions.length; i++) {
-                        var pos = positions[i];
-                        var node = tr.doc.nodeAt(pos);
-                        if (!node) continue;
-                        tr.setNodeMarkup(pos, undefined, Object.assign({}, node.attrs, {
-                            title: data.title || '',
-                            author: data.author || '',
-                        }));
-                    }
-                    tr.setMeta('addToHistory', false);
-                    editor.view.dispatch(tr);
-                })
-                .catch(function() { clearTimeout(timeoutId); });
-        }
-
-        function insertLiteEmbed(kind, videoid, opts) {
+    fetch(OG_WORKER_URL + encodeURIComponent(canonicalUrl))
+        .then(function(r) { return r.ok ? r.json() : null; })
+        .then(function(data) {
+            if (!data || data.error || !data.title) return;
             if (!editor) return;
-            opts = opts || {};
-            var attrs = { videoid: videoid };
-            if (opts.start != null) attrs.start = String(opts.start);
-            if (opts.end   != null) attrs.end   = String(opts.end);
-            editor.chain().focus().insertContent({
-                type: kind,
-                attrs: attrs
-            }).run();
-            fetchEmbedMetadata(kind, videoid);
-        }
-
-        function probeImageSize(src) {
-            var probe = new Image();
-            probe.onload = function() {
-                if (!editor) return;
-                var w = probe.naturalWidth, h = probe.naturalHeight;
-                if (!w || !h) return;
-                var tr = editor.state.tr;
-                var changed = false;
-                editor.state.doc.descendants(function(node, pos) {
-                    if (node.type.name === 'image' && node.attrs.src === src && !node.attrs.width) {
-                        tr.setNodeMarkup(pos, undefined, Object.assign({}, node.attrs, { width: w, height: h }));
-                        changed = true;
-                    }
-                    return true;
-                });
-                if (changed) {
-                    tr.setMeta('addToHistory', false);
-                    editor.view.dispatch(tr);
+            var positions = [];
+            editor.state.doc.descendants(function(node, pos) {
+                if (node.type.name === kind &&
+                    node.attrs.videoid === videoid &&
+                    !node.attrs.title) {
+                    positions.push(pos);
                 }
-            };
-            probe.onerror = function() {
-                showToast('That image could not be loaded. Check the URL.', { type: 'warning', duration: 4500 });
-            };
-            probe.src = src;
-        }
-
-        function insertImageFromUrl(url, alt) {
-            if (!editor) return false;
-            var src = normalizeUrl(url, ['http:', 'https:']);
-            if (!src) {
-                showToast('Enter a valid http(s) image URL', { type: 'error' });
-                return false;
+                return true;
+            });
+            if (positions.length === 0) return;
+            var tr = editor.state.tr;
+            for (var i = 0; i < positions.length; i++) {
+                var pos = positions[i];
+                var node = tr.doc.nodeAt(pos);
+                if (!node) continue;
+                tr.setNodeMarkup(pos, undefined, Object.assign({}, node.attrs, {
+                    title: data.title || '',
+                    author: data.author || '',
+                }));
             }
-            editor.chain().focus().insertContent({
-                type: 'image',
-                attrs: { src: src, alt: alt || 'image', loading: 'lazy', decoding: 'async' }
-            }).run();
-            probeImageSize(src);
-            return true;
-        }
+            editor.view.dispatch(tr);
+        })
+        .catch(function() { /* caption is optional — silent fail */ });
+}
 
-        function uploadImageToWorker(file) {
-            if (!editor || !file) return;
-
-            var id = 'up' + Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
-            editor.chain().focus().insertContent({
-                type: 'uploadPlaceholder',
-                attrs: { id: id }
-            }).run();
-
-            pendingUploads++;
-            updateSendState();
-
-            function findPlaceholder() {
-                var found = null;
-                editor.state.doc.descendants(function(node, pos) {
-                    if (found) return false;
-                    if (node.type.name === 'uploadPlaceholder' && node.attrs.id === id) {
-                        found = { pos: pos, size: node.nodeSize };
-                        return false;
-                    }
-                    return true;
-                });
-                return found;
-            }
-
-            function finish(imageAttrs) {
-                pendingUploads = Math.max(0, pendingUploads - 1);
-                if (editor) {
-                    var found = findPlaceholder();
-                    if (found) {
-                        var tr = editor.state.tr;
-                        if (imageAttrs) {
-                            tr.replaceWith(found.pos, found.pos + found.size, editor.schema.nodes.image.create(imageAttrs));
-                        } else {
-                            tr.delete(found.pos, found.pos + found.size);
-                        }
-                        editor.view.dispatch(tr);
-                    }
-                }
-                updateSendState();
-            }
-
-            var formData = new FormData();
-            formData.append('image', file);
-
-            var controller = new AbortController();
-            var timeoutId = setTimeout(function() { controller.abort(); }, UPLOAD_TIMEOUT);
-
-            fetch(UPLOAD_WORKER_URL, { method: 'POST', body: formData, signal: controller.signal })
-                .then(function(response) {
-                    if (!response.ok) throw new Error('HTTP ' + response.status);
-                    return response.json();
-                })
-                .then(function(data) {
-                    clearTimeout(timeoutId);
-                    if (data && data.url) {
-                        finish({
-                            src: data.url,
-                            alt: 'Uploaded image',
-                            loading: 'lazy',
-                            decoding: 'async',
-                            width: data.width ? parseInt(data.width, 10) : null,
-                            height: data.height ? parseInt(data.height, 10) : null
-                        });
-                        showToast('Image uploaded', { type: 'success' });
-                    } else {
-                        finish(null);
-                        showToast('Upload failed', { type: 'error' });
-                    }
-                })
-                .catch(function(error) {
-                    clearTimeout(timeoutId);
-                    console.error('Upload error:', error);
-                    finish(null);
-                    showToast(error && error.name === 'AbortError' ? 'Upload timed out' : 'Upload error', { type: 'error' });
-                });
-        }
+// One entry point for all four paste-handler branches. Inserts the
+// node, moves the cursor into the trailing paragraph, and kicks off
+// the metadata fetch. opts.start / opts.end (integer seconds) are
+// forwarded to the node attrs when present.
+function insertLiteEmbed(kind, videoid, opts) {
+    if (!editor) return;
+    opts = opts || {};
+    var attrs = { videoid: videoid };
+    if (opts.start != null) attrs.start = String(opts.start);
+    if (opts.end   != null) attrs.end   = String(opts.end);
+    editor.chain().focus().insertContent({
+        type: kind,
+        attrs: attrs
+    }).run();
+    focusTrailingEmbedParagraph();
+    fetchEmbedMetadata(kind, videoid);
+}
 
         var modernRecipient     = container.querySelector('#modern-recipient');
         var modernTitle         = container.querySelector('#modern-title');
@@ -2135,6 +1926,9 @@ var MessengerModule = (function(Utils, EventBus) {
         var recipientChipName   = container.querySelector('.modern-recipient-chip-name');
         var recipientChipRemove = container.querySelector('.modern-recipient-chip-remove');
 
+        // ------------------------------------------------------------------
+        // DRAFT MANAGEMENT
+        // ------------------------------------------------------------------
         function getCurrentDraftKey() {
             return (currentRecipient && currentRecipient.id)
                 ? String(currentRecipient.id)
@@ -2144,11 +1938,12 @@ var MessengerModule = (function(Utils, EventBus) {
         function captureCurrentDraft() {
             if (!editor) return null;
             var subject = modernTitle ? modernTitle.value.trim() : '';
-            var bodyHasContent = !editorBlank();
+            var bodyHtml = editor.getHTML();
+            var bodyHasContent = !editor.isEmpty;
             if (!subject && !bodyHasContent) return null;
             return {
                 subject: subject,
-                bodyHtml: bodyHasContent ? editor.getHTML() : ''
+                bodyHtml: bodyHasContent ? bodyHtml : ''
             };
         }
 
@@ -2173,7 +1968,7 @@ var MessengerModule = (function(Utils, EventBus) {
         }
 
         function isComposerEmpty() {
-            if (editor && !editorBlank()) return false;
+            if (editor && !editor.isEmpty) return false;
             if (modernTitle && modernTitle.value.trim()) return false;
             return true;
         }
@@ -2196,35 +1991,34 @@ var MessengerModule = (function(Utils, EventBus) {
             if (document.visibilityState === 'hidden') flushPendingDraft();
         });
 
-        function setPreviewOpen(open) {
-            var area = container.querySelector('#modern-preview-area');
-            var btn = container.querySelector('#modern-preview');
-            if (area) area.style.display = open ? 'block' : 'none';
-            if (btn) {
-                btn.innerHTML = open
-                    ? '<i class="fa-regular fa-eye-slash"></i> Hide preview'
-                    : '<i class="fa-regular fa-eye"></i> Preview';
-                btn.setAttribute('aria-pressed', String(open));
-            }
-        }
-
+        // ------------------------------------------------------------------
+        // LIVE PREVIEW REFRESH
+        // Debounced. Runs only while the preview panel is open, and never
+        // resets expansion state inside expanded quotes / spoilers.
+        // ------------------------------------------------------------------
         function updateLivePreview() {
-            if (!editor || editorBlank()) return;
+            if (!editor || editor.isEmpty) return;
             var previewArea = container.querySelector('#modern-preview-area');
             if (!previewArea || previewArea.style.display === 'none') return;
 
-            var expanded = captureExpandedState(previewArea);
+            // Preserve expanded state of quotes and spoilers across re-render.
+            var expandedQuotes = Array.from(previewArea.querySelectorAll('.modern-quote.expanded')).length;
+            var expandedSpoilers = Array.from(previewArea.querySelectorAll('.modern-spoiler.expanded')).length;
 
-            var previewHtml = transformPreviewHtml(editor.getHTML().replace(/<span\b[^>]*\bupload-placeholder\b[^>]*>[\s\S]*?<\/span>/gi, ''));
+            var previewHtml = transformPreviewHtml(editor.getHTML());
             var previewContent = previewArea.querySelector('.preview-content');
             if (previewContent) {
                 previewContent.innerHTML = previewHtml;
                 if (window.twemoji) {
                     window.twemoji.parse(previewContent, { base: TWEMOJI_BASE, ext: '.svg' });
                 }
+                // Note: expansion state is intentionally not restored because
+                // the DOM is regenerated from scratch. If a user is reading a
+                // preview and typing simultaneously, they're probably looking
+                // at the top of the doc. Long-form reading scenarios don't
+                // involve concurrent typing.
             }
             initPreviewQuotesAndSpoilers(previewArea);
-            restoreExpandedState(previewArea, expanded);
         }
 
         function scheduleLivePreviewRefresh() {
@@ -2237,48 +2031,46 @@ var MessengerModule = (function(Utils, EventBus) {
             }, 800);
         }
 
-        function updateSendState() {
-            var hasRecipient = !!currentRecipient;
-            var hasSubject   = !!(modernTitle && modernTitle.value.trim().length > 0);
-            var hasBody      = !editorBlank();
-            var uploading    = pendingUploads > 0;
+function updateSendState() {
+    var hasRecipient = !!currentRecipient;
+    var hasSubject   = !!(modernTitle && modernTitle.value.trim().length > 0);
+    var hasBody      = !!(editor && !editor.isEmpty);
 
-            if (modernSubmitBtnRef) {
-                var sendReady = hasRecipient && hasSubject && hasBody && !uploading;
-                modernSubmitBtnRef.disabled = !sendReady;
-                modernSubmitBtnRef.setAttribute('aria-disabled', String(!sendReady));
+    if (modernSubmitBtnRef) {
+        var sendReady = hasRecipient && hasSubject && hasBody;
+        modernSubmitBtnRef.disabled = !sendReady;
+        modernSubmitBtnRef.setAttribute('aria-disabled', String(!sendReady));
 
-                if (sendReady) {
-                    modernSubmitBtnRef.removeAttribute('title');
-                } else if (uploading) {
-                    modernSubmitBtnRef.setAttribute('title', 'Wait for the image upload to finish');
-                } else {
-                    var missing = [];
-                    if (!hasRecipient) missing.push('a recipient');
-                    if (!hasSubject)   missing.push('a subject');
-                    if (!hasBody)      missing.push('a message body');
-                    modernSubmitBtnRef.setAttribute('title', 'Add ' + missing.join(', ') + ' to send');
-                }
-            }
-
-            if (modernPreviewBtnRef) {
-                modernPreviewBtnRef.disabled = !hasBody;
-                modernPreviewBtnRef.setAttribute('aria-disabled', String(!hasBody));
-
-                if (hasBody) {
-                    modernPreviewBtnRef.removeAttribute('title');
-                } else {
-                    modernPreviewBtnRef.setAttribute('title', 'Write a message to preview it');
-                }
-            }
-
-            if (!hasBody) {
-                var previewArea = container.querySelector('#modern-preview-area');
-                if (previewArea && previewArea.style.display !== 'none') {
-                    setPreviewOpen(false);
-                }
-            }
+        if (sendReady) {
+            modernSubmitBtnRef.removeAttribute('title');
+        } else {
+            var missing = [];
+            if (!hasRecipient) missing.push('a recipient');
+            if (!hasSubject)   missing.push('a subject');
+            if (!hasBody)      missing.push('a message body');
+            modernSubmitBtnRef.setAttribute('title', 'Add ' + missing.join(', ') + ' to send');
         }
+    }
+
+    if (modernPreviewBtnRef) {
+        var previewReady = hasBody;
+        modernPreviewBtnRef.disabled = !previewReady;
+        modernPreviewBtnRef.setAttribute('aria-disabled', String(!previewReady));
+
+        if (previewReady) {
+            modernPreviewBtnRef.removeAttribute('title');
+        } else {
+            modernPreviewBtnRef.setAttribute('title', 'Write a message to preview it');
+        }
+    }
+
+    if (!hasBody) {
+        var previewArea = container.querySelector('#modern-preview-area');
+        if (previewArea && previewArea.style.display !== 'none') {
+            previewArea.style.display = 'none';
+        }
+    }
+}
 
         function updateCharCounter() {
             if (!MAX_MESSAGE_LENGTH) return;
@@ -2484,7 +2276,7 @@ var MessengerModule = (function(Utils, EventBus) {
             }
 
             if (pending.name) {
-                searchMentions(pending.name, 'avatar').then(function(users) {
+                searchMentions(pending.name).then(function(users) {
                     if (currentRecipient !== pending) return;
                     if (!users || users.length === 0) return;
                     var matches = users.filter(function(u) {
@@ -2531,12 +2323,6 @@ var MessengerModule = (function(Utils, EventBus) {
         toolbar.setAttribute('role', 'toolbar');
         toolbar.setAttribute('aria-label', 'Formatting');
         container.appendChild(toolbar);
-
-        toolbar.addEventListener('mousedown', function(e) {
-            if (e.target.closest('.modern-editor-btn, .modern-dropdown-item, .modern-emoji-item')) {
-                e.preventDefault();
-            }
-        });
 
         var syncUser = getCurrentUserSync();
         var currentHeader = null;
@@ -2610,6 +2396,7 @@ var MessengerModule = (function(Utils, EventBus) {
         function exec(cmd) {
             if (!editor) return;
             cmd();
+            editor.commands.focus();
         }
 
         function makeToolbarButton(icon, label, opts) {
@@ -2625,51 +2412,6 @@ var MessengerModule = (function(Utils, EventBus) {
             return btn;
         }
 
-        function openDropdown(btn, menu) {
-            menu.style.display = 'block';
-            btn.setAttribute('aria-expanded', 'true');
-        }
-        function closeDropdown(btn, menu) {
-            menu.style.display = 'none';
-            btn.setAttribute('aria-expanded', 'false');
-        }
-        var emojiPickerPanel = null;
-        function closeAllMenus() {
-            document.querySelectorAll('.modern-dropdown-menu').forEach(function(m) { m.style.display = 'none'; });
-            document.querySelectorAll('.modern-editor-btn[aria-haspopup="menu"]').forEach(function(b) { b.setAttribute('aria-expanded', 'false'); });
-            if (emojiPickerPanel) emojiPickerPanel.style.display = 'none';
-        }
-
-        function makeDropdown(icon, label, menuHtml, minWidth) {
-            var wrap = document.createElement('div');
-            wrap.className = 'modern-dropdown';
-            wrap.style.cssText = 'position:relative;display:inline-block';
-            var btn = document.createElement('button');
-            btn.type = 'button';
-            btn.className = 'modern-editor-btn';
-            btn.innerHTML = '<i class="' + icon + '"></i>';
-            btn.title = label;
-            btn.setAttribute('aria-label', label);
-            btn.setAttribute('aria-haspopup', 'menu');
-            btn.setAttribute('aria-expanded', 'false');
-            var menu = document.createElement('div');
-            menu.className = 'modern-dropdown-menu';
-            menu.setAttribute('role', 'menu');
-            menu.style.cssText = 'position:absolute;top:100%;left:0;background:var(--surface-color);border:1px solid var(--border-color);border-radius:var(--radius-sm);z-index:1000;min-width:' + minWidth + 'px;display:none;';
-            menu.innerHTML = menuHtml;
-            wrap.appendChild(btn);
-            wrap.appendChild(menu);
-            toolbar.appendChild(wrap);
-            btn.onclick = function(e) {
-                e.stopPropagation();
-                var isOpen = menu.style.display === 'block';
-                closeAllMenus();
-                if (!isOpen) openDropdown(btn, menu);
-            };
-            menu.addEventListener('click', function(e) { e.stopPropagation(); });
-            return { container: wrap, btn: btn, menu: menu };
-        }
-
         var undoBtn = makeToolbarButton('fa-regular fa-undo', 'Undo', { shortcut: 'Control+Z' });
         undoBtn.disabled = true;
         var redoBtn = makeToolbarButton('fa-regular fa-redo', 'Redo', { shortcut: 'Control+Shift+Z' });
@@ -2681,17 +2423,50 @@ var MessengerModule = (function(Utils, EventBus) {
         var underlineBtn = makeToolbarButton('fa-regular fa-underline', 'Underline', { shortcut: 'Control+U' });
         var strikeBtn    = makeToolbarButton('fa-regular fa-strikethrough', 'Strikethrough');
 
-        var colorDD = makeDropdown('fa-regular fa-palette', 'Text color', ''
+        var colorDropdownContainer = document.createElement('div');
+        colorDropdownContainer.className = 'modern-dropdown';
+        colorDropdownContainer.style.cssText = 'position:relative;display:inline-block';
+        var colorDropdownBtn = document.createElement('button');
+        colorDropdownBtn.type = 'button';
+        colorDropdownBtn.className = 'modern-editor-btn';
+        colorDropdownBtn.innerHTML = '<i class="fa-regular fa-palette"></i>';
+        colorDropdownBtn.title = 'Text color';
+        colorDropdownBtn.setAttribute('aria-label', 'Text color');
+        colorDropdownBtn.setAttribute('aria-haspopup', 'menu');
+        colorDropdownBtn.setAttribute('aria-expanded', 'false');
+        var colorDropdownMenu = document.createElement('div');
+        colorDropdownMenu.className = 'modern-dropdown-menu';
+        colorDropdownMenu.setAttribute('role', 'menu');
+        colorDropdownMenu.style.cssText = 'position:absolute;top:100%;left:0;background:var(--surface-color);border:1px solid var(--border-color);border-radius:var(--radius-sm);z-index:1000;min-width:180px;display:none;';
+        colorDropdownMenu.innerHTML = ''
             + '<button class="modern-dropdown-item" role="menuitem" data-color="primary"><span class="color-swatch color-swatch--primary"></span> Primary</button>'
             + '<button class="modern-dropdown-item" role="menuitem" data-color="info"><span class="color-swatch color-swatch--info"></span> Info</button>'
             + '<button class="modern-dropdown-item" role="menuitem" data-color="accent"><span class="color-swatch color-swatch--accent"></span> Accent</button>'
             + '<button class="modern-dropdown-item" role="menuitem" data-color="warning"><span class="color-swatch color-swatch--warning"></span> Warning</button>'
             + '<button class="modern-dropdown-item" role="menuitem" data-color="danger"><span class="color-swatch color-swatch--danger"></span> Danger</button>'
             + '<button class="modern-dropdown-item" role="menuitem" data-color="muted"><span class="color-swatch color-swatch--muted"></span> Muted</button>'
-            + '<button class="modern-dropdown-item" role="menuitem" data-color="remove"><i class="fa-regular fa-eraser" aria-hidden="true"></i> Remove color</button>',
-            180);
-        var colorDropdownBtn = colorDD.btn;
-        var colorDropdownMenu = colorDD.menu;
+            + '<button class="modern-dropdown-item" role="menuitem" data-color="remove"><i class="fa-regular fa-eraser" aria-hidden="true"></i> Remove color</button>';
+        colorDropdownContainer.appendChild(colorDropdownBtn);
+        colorDropdownContainer.appendChild(colorDropdownMenu);
+        toolbar.appendChild(colorDropdownContainer);
+
+        function openDropdown(btn, menu) {
+            menu.style.display = 'block';
+            btn.setAttribute('aria-expanded', 'true');
+        }
+        function closeDropdown(btn, menu) {
+            menu.style.display = 'none';
+            btn.setAttribute('aria-expanded', 'false');
+        }
+
+        colorDropdownBtn.onclick = function(e) {
+            e.stopPropagation();
+            var isOpen = colorDropdownMenu.style.display === 'block';
+            document.querySelectorAll('.modern-dropdown-menu').forEach(function(m) { m.style.display = 'none'; });
+            document.querySelectorAll('.modern-editor-btn[aria-haspopup="menu"]').forEach(function(b) { b.setAttribute('aria-expanded', 'false'); });
+            if (!isOpen) openDropdown(colorDropdownBtn, colorDropdownMenu);
+        };
+        colorDropdownMenu.addEventListener('click', function(e) { e.stopPropagation(); });
 
         colorDropdownMenu.querySelectorAll('[data-color]').forEach(function(btn) {
             btn.onclick = function() {
@@ -2709,91 +2484,195 @@ var MessengerModule = (function(Utils, EventBus) {
         var clearFormatBtn = makeToolbarButton('fa-regular fa-remove-format', 'Clear formatting');
         addSeparator();
 
-        var headingDD = makeDropdown('fa-regular fa-heading', 'Heading', ''
+        var headingDropdownContainer = document.createElement('div');
+        headingDropdownContainer.className = 'modern-dropdown';
+        headingDropdownContainer.style.cssText = 'position:relative;display:inline-block';
+        var headingDropdownBtn = document.createElement('button');
+        headingDropdownBtn.type = 'button';
+        headingDropdownBtn.className = 'modern-editor-btn';
+        headingDropdownBtn.innerHTML = '<i class="fa-regular fa-heading"></i>';
+        headingDropdownBtn.title = 'Heading';
+        headingDropdownBtn.setAttribute('aria-label', 'Heading');
+        headingDropdownBtn.setAttribute('aria-haspopup', 'menu');
+        headingDropdownBtn.setAttribute('aria-expanded', 'false');
+        var headingDropdownMenu = document.createElement('div');
+        headingDropdownMenu.className = 'modern-dropdown-menu';
+        headingDropdownMenu.setAttribute('role', 'menu');
+        headingDropdownMenu.style.cssText = 'position:absolute;top:100%;left:0;background:var(--surface-color);border:1px solid var(--border-color);border-radius:var(--radius-sm);z-index:1000;min-width:160px;display:none;';
+        headingDropdownMenu.innerHTML = ''
             + '<button class="modern-dropdown-item" role="menuitem" data-level="1">Heading 1</button>'
             + '<button class="modern-dropdown-item" role="menuitem" data-level="2">Heading 2</button>'
-            + '<button class="modern-dropdown-item" role="menuitem" data-level="3">Heading 3</button>',
-            160);
-        var headingDropdownBtn = headingDD.btn;
-        var headingDropdownMenu = headingDD.menu;
+            + '<button class="modern-dropdown-item" role="menuitem" data-level="3">Heading 3</button>';
+        headingDropdownContainer.appendChild(headingDropdownBtn);
+        headingDropdownContainer.appendChild(headingDropdownMenu);
+        toolbar.appendChild(headingDropdownContainer);
+        headingDropdownBtn.onclick = function(e) {
+            e.stopPropagation();
+            var isOpen = headingDropdownMenu.style.display === 'block';
+            document.querySelectorAll('.modern-dropdown-menu').forEach(function(m) { m.style.display = 'none'; });
+            document.querySelectorAll('.modern-editor-btn[aria-haspopup="menu"]').forEach(function(b) { b.setAttribute('aria-expanded', 'false'); });
+            if (!isOpen) openDropdown(headingDropdownBtn, headingDropdownMenu);
+        };
+        headingDropdownMenu.addEventListener('click', function(e) { e.stopPropagation(); });
+
         var headingButtons = {
             h1: headingDropdownMenu.querySelector('[data-level="1"]'),
             h2: headingDropdownMenu.querySelector('[data-level="2"]'),
             h3: headingDropdownMenu.querySelector('[data-level="3"]')
         };
 
-        var listDD = makeDropdown('fa-regular fa-list', 'Insert list', ''
+        var listDropdownContainer = document.createElement('div');
+        listDropdownContainer.className = 'modern-dropdown';
+        listDropdownContainer.style.cssText = 'position:relative;display:inline-block';
+        var listDropdownBtn = document.createElement('button');
+        listDropdownBtn.type = 'button';
+        listDropdownBtn.className = 'modern-editor-btn';
+        listDropdownBtn.innerHTML = '<i class="fa-regular fa-list"></i>';
+        listDropdownBtn.title = 'Insert list';
+        listDropdownBtn.setAttribute('aria-label', 'Insert list');
+        listDropdownBtn.setAttribute('aria-haspopup', 'menu');
+        listDropdownBtn.setAttribute('aria-expanded', 'false');
+        var listDropdownMenu = document.createElement('div');
+        listDropdownMenu.className = 'modern-dropdown-menu';
+        listDropdownMenu.setAttribute('role', 'menu');
+        listDropdownMenu.style.cssText = 'position:absolute;top:100%;left:0;background:var(--surface-color);border:1px solid var(--border-color);border-radius:var(--radius-sm);z-index:1000;min-width:160px;display:none;';
+        listDropdownMenu.innerHTML = ''
             + '<button class="modern-dropdown-item" role="menuitem" id="bullet-list-option"><i class="fa-regular fa-list"></i> Bullet list</button>'
-            + '<button class="modern-dropdown-item" role="menuitem" id="ordered-list-option"><i class="fa-regular fa-list-ol"></i> Ordered list</button>',
-            160);
-        var listDropdownBtn = listDD.btn;
-        var listDropdownMenu = listDD.menu;
+            + '<button class="modern-dropdown-item" role="menuitem" id="ordered-list-option"><i class="fa-regular fa-list-ol"></i> Ordered list</button>';
+        listDropdownContainer.appendChild(listDropdownBtn);
+        listDropdownContainer.appendChild(listDropdownMenu);
+        toolbar.appendChild(listDropdownContainer);
+        listDropdownBtn.onclick = function(e) {
+            e.stopPropagation();
+            var isOpen = listDropdownMenu.style.display === 'block';
+            document.querySelectorAll('.modern-dropdown-menu').forEach(function(m) { m.style.display = 'none'; });
+            document.querySelectorAll('.modern-editor-btn[aria-haspopup="menu"]').forEach(function(b) { b.setAttribute('aria-expanded', 'false'); });
+            if (!isOpen) openDropdown(listDropdownBtn, listDropdownMenu);
+        };
+        listDropdownMenu.addEventListener('click', function(e) { e.stopPropagation(); });
 
         var blockquoteBtn = makeToolbarButton('fa-regular fa-quote-left', 'Blockquote');
 
-        var codeDD = makeDropdown('fa-regular fa-code', 'Code', ''
-            + '<button class="modern-dropdown-item" role="menuitem" id="inline-code-option"><i class="fa-regular fa-code" aria-hidden="true"></i> Inline code</button>'
-            + '<button class="modern-dropdown-item" role="menuitem" id="block-code-option"><i class="fa-regular fa-file-code" aria-hidden="true"></i> Code block</button>',
-            180);
-        var codeDropdownBtn = codeDD.btn;
-        var codeDropdownMenu = codeDD.menu;
+// Unified Code dropdown — replaces the two separate code buttons.
+// Trigger highlights when either inline code or code block is active.
+// Keyboard shortcuts (Ctrl+E for inline) bypass the dropdown and
+// apply directly, since keyboard users don't want extra clicks.
+var codeDropdownContainer = document.createElement('div');
+codeDropdownContainer.className = 'modern-dropdown';
+codeDropdownContainer.style.cssText = 'position:relative;display:inline-block';
+var codeDropdownBtn = document.createElement('button');
+codeDropdownBtn.type = 'button';
+codeDropdownBtn.className = 'modern-editor-btn';
+codeDropdownBtn.innerHTML = '<i class="fa-regular fa-code"></i>';
+codeDropdownBtn.title = 'Code';
+codeDropdownBtn.setAttribute('aria-label', 'Code');
+codeDropdownBtn.setAttribute('aria-haspopup', 'menu');
+codeDropdownBtn.setAttribute('aria-expanded', 'false');
+var codeDropdownMenu = document.createElement('div');
+codeDropdownMenu.className = 'modern-dropdown-menu';
+codeDropdownMenu.setAttribute('role', 'menu');
+codeDropdownMenu.style.cssText = 'position:absolute;top:100%;left:0;background:var(--surface-color);border:1px solid var(--border-color);border-radius:var(--radius-sm);z-index:1000;min-width:180px;display:none;';
+codeDropdownMenu.innerHTML = ''
+    + '<button class="modern-dropdown-item" role="menuitem" id="inline-code-option"><i class="fa-regular fa-code" aria-hidden="true"></i> Inline code</button>'
+    + '<button class="modern-dropdown-item" role="menuitem" id="block-code-option"><i class="fa-regular fa-file-code" aria-hidden="true"></i> Code block</button>';
+codeDropdownContainer.appendChild(codeDropdownBtn);
+codeDropdownContainer.appendChild(codeDropdownMenu);
+toolbar.appendChild(codeDropdownContainer);
 
-        codeDropdownMenu.querySelector('#inline-code-option').onclick = function() {
-            if (!editor) return;
-            exec(function() { editor.chain().focus().toggleCode().run(); });
-            closeDropdown(codeDropdownBtn, codeDropdownMenu);
-        };
+codeDropdownBtn.onclick = function(e) {
+    e.stopPropagation();
+    var isOpen = codeDropdownMenu.style.display === 'block';
+    document.querySelectorAll('.modern-dropdown-menu').forEach(function(m) { m.style.display = 'none'; });
+    document.querySelectorAll('.modern-editor-btn[aria-haspopup="menu"]').forEach(function(b) { b.setAttribute('aria-expanded', 'false'); });
+    if (!isOpen) openDropdown(codeDropdownBtn, codeDropdownMenu);
+};
+codeDropdownMenu.addEventListener('click', function(e) { e.stopPropagation(); });
 
-        codeDropdownMenu.querySelector('#block-code-option').onclick = function() {
-            if (!editor) return;
-            closeDropdown(codeDropdownBtn, codeDropdownMenu);
+codeDropdownMenu.querySelector('#inline-code-option').onclick = function() {
+    if (!editor) return;
+    exec(function() { editor.chain().focus().toggleCode().run(); });
+    closeDropdown(codeDropdownBtn, codeDropdownMenu);
+};
 
-            if (editor.isActive('codeBlock')) {
-                var currentLang = editor.getAttributes('codeBlock').language || '';
-                showCodeLangModal(currentLang, function(lang) {
-                    editor.chain().focus().updateAttributes('codeBlock', {
-                        language: lang || null
-                    }).run();
-                });
-                return;
-            }
+codeDropdownMenu.querySelector('#block-code-option').onclick = function() {
+    if (!editor) return;
+    closeDropdown(codeDropdownBtn, codeDropdownMenu);
 
-            showCodeLangModal('', function(lang) {
-                var chain = editor.chain().focus();
-                if (lang) {
-                    chain.setCodeBlock({ language: lang }).run();
-                } else {
-                    chain.setCodeBlock().run();
-                }
-            });
-        };
+    if (editor.isActive('codeBlock')) {
+        var currentLang = editor.getAttributes('codeBlock').language || '';
+        showCodeLangModal(currentLang, function(lang) {
+            editor.chain().focus().updateAttributes('codeBlock', {
+                language: lang || null
+            }).run();
+        });
+        return;
+    }
 
-        addSeparator();
+    showCodeLangModal('', function(lang) {
+        var chain = editor.chain().focus();
+        if (lang) {
+            chain.setCodeBlock({ language: lang }).run();
+        } else {
+            chain.setCodeBlock().run();
+        }
+    });
+};
+
+addSeparator();
 
         var linkBtn = makeToolbarButton('fa-regular fa-link', 'Insert link', { shortcut: 'Control+K' });
 
-        var imageDD = makeDropdown('fa-regular fa-image', 'Insert image', ''
+        var imageDropdownContainer = document.createElement('div');
+        imageDropdownContainer.className = 'modern-dropdown';
+        imageDropdownContainer.style.cssText = 'position:relative;display:inline-block';
+        var imageDropdownBtn = document.createElement('button');
+        imageDropdownBtn.type = 'button';
+        imageDropdownBtn.className = 'modern-editor-btn';
+        imageDropdownBtn.innerHTML = '<i class="fa-regular fa-image"></i>';
+        imageDropdownBtn.title = 'Insert image';
+        imageDropdownBtn.setAttribute('aria-label', 'Insert image');
+        imageDropdownBtn.setAttribute('aria-haspopup', 'menu');
+        imageDropdownBtn.setAttribute('aria-expanded', 'false');
+        var imageDropdownMenu = document.createElement('div');
+        imageDropdownMenu.className = 'modern-dropdown-menu';
+        imageDropdownMenu.setAttribute('role', 'menu');
+        imageDropdownMenu.style.cssText = 'position:absolute;top:100%;left:0;background:var(--surface-color);border:1px solid var(--border-color);border-radius:var(--radius-sm);z-index:1000;min-width:200px;display:none;';
+        imageDropdownMenu.innerHTML = ''
             + '<button class="modern-dropdown-item" role="menuitem" id="image-url-option"><i class="fa-regular fa-link"></i> By URL</button>'
-            + '<button class="modern-dropdown-item" role="menuitem" id="image-upload-option"><i class="fa-regular fa-cloud-arrow-up"></i> Upload from computer</button>',
-            200);
-        var imageDropdownBtn = imageDD.btn;
-        var imageDropdownMenu = imageDD.menu;
+            + '<button class="modern-dropdown-item" role="menuitem" id="image-upload-option"><i class="fa-regular fa-cloud-arrow-up"></i> Upload from computer</button>';
+        imageDropdownContainer.appendChild(imageDropdownBtn);
+        imageDropdownContainer.appendChild(imageDropdownMenu);
+        toolbar.appendChild(imageDropdownContainer);
+        imageDropdownBtn.onclick = function(e) {
+            e.stopPropagation();
+            var isOpen = imageDropdownMenu.style.display === 'block';
+            document.querySelectorAll('.modern-dropdown-menu').forEach(function(m) { m.style.display = 'none'; });
+            document.querySelectorAll('.modern-editor-btn[aria-haspopup="menu"]').forEach(function(b) { b.setAttribute('aria-expanded', 'false'); });
+            if (!isOpen) openDropdown(imageDropdownBtn, imageDropdownMenu);
+        };
+        imageDropdownMenu.addEventListener('click', function(e) { e.stopPropagation(); });
 
         addSeparator();
         var spoilerBtn = makeToolbarButton('fa-regular fa-eye-slash', 'Spoiler', { shortcut: 'Control+Shift+S' });
         var nsfwBtn = makeToolbarButton('fa-regular fa-fire', 'NSFW (hidden content)', { shortcut: 'Control+Shift+N' });
 
-        document.addEventListener('click', closeAllMenus);
+        document.addEventListener('click', function() {
+            document.querySelectorAll('.modern-dropdown-menu').forEach(function(m) { m.style.display = 'none'; });
+            document.querySelectorAll('.modern-editor-btn[aria-haspopup="menu"]').forEach(function(b) { b.setAttribute('aria-expanded', 'false'); });
+        });
 
         document.addEventListener('keydown', function(e) {
             if (e.key === 'Escape') {
                 var openMenu = document.querySelector('.modern-dropdown-menu[style*="display: block"]');
-                if (openMenu || (emojiPickerPanel && emojiPickerPanel.style.display === 'grid')) closeAllMenus();
+                if (openMenu) {
+                    document.querySelectorAll('.modern-dropdown-menu').forEach(function(m) { m.style.display = 'none'; });
+                    document.querySelectorAll('.modern-editor-btn[aria-haspopup="menu"]').forEach(function(b) { b.setAttribute('aria-expanded', 'false'); });
+                }
             }
         });
 
         var emojiBtn = makeToolbarButton('fa-regular fa-face-smile', 'Insert emoji');
-        emojiPickerPanel = document.createElement('div');
+        var emojiPickerPanel = document.createElement('div');
         emojiPickerPanel.className = 'modern-emoji-picker';
         emojiPickerPanel.setAttribute('role', 'dialog');
         emojiPickerPanel.setAttribute('aria-label', 'Emoji picker');
@@ -2844,6 +2723,9 @@ var MessengerModule = (function(Utils, EventBus) {
                         e.stopPropagation();
                         if (editor) {
                             var emojiChar = this.getAttribute('data-emoji');
+                            // FIX: emoji must use the inline `emoji` node, not
+                            // `image` (which is now block-level). Using `image`
+                            // would place every picked emoji on its own line.
                             editor.chain().focus().insertContent({
                                 type: 'emoji',
                                 attrs: {
@@ -2867,148 +2749,201 @@ var MessengerModule = (function(Utils, EventBus) {
         emojiBtn.onclick = function(e) {
             e.stopPropagation();
             var isVisible = emojiPickerPanel.style.display === 'grid';
-            closeAllMenus();
             if (!isVisible) {
                 renderEmojiPicker();
                 emojiPickerPanel.style.display = 'grid';
+            } else {
+                emojiPickerPanel.style.display = 'none';
             }
         };
-        emojiPickerPanel.addEventListener('click', function(e) { e.stopPropagation(); });
 
-        // ------------------------------------------------------------------
-        // MODALS
-        // ------------------------------------------------------------------
-        function createModal(innerHtml, width) {
-            var overlay = document.createElement('div');
-            overlay.className = 'modern-modal-overlay';
-            overlay.style.cssText = 'position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.7);z-index:10000;display:flex;align-items:center;justify-content:center;';
-            var box = document.createElement('div');
-            box.className = 'modern-modal-box';
-            box.setAttribute('role', 'dialog');
-            box.setAttribute('aria-modal', 'true');
-            box.style.cssText = 'background:var(--surface-color);border-radius:var(--radius-lg);padding:var(--space-lg);width:' + width + 'px;max-width:90%;box-shadow:var(--shadow-lg);';
-            box.innerHTML = innerHtml;
-            overlay.appendChild(box);
-            document.body.appendChild(overlay);
-
-            function onKey(e) {
-                if (e.key === 'Escape') {
-                    e.preventDefault();
-                    e.stopPropagation();
-                    close();
-                }
+        document.addEventListener('click', function(e) {
+            if (emojiPickerPanel && emojiPickerPanel.style.display === 'grid' && !emojiPickerPanel.contains(e.target) && e.target !== emojiBtn && !emojiBtn.contains(e.target)) {
+                emojiPickerPanel.style.display = 'none';
             }
+        });
+
+        function uploadImageToWorker(file, editorInstance) {
+            var formData = new FormData();
+            formData.append('image', file);
+            var currentPos = editorInstance.state.selection.from;
+            var placeholderText = '⬆️ Uploading…';
+            editorInstance.chain().focus().insertContent(placeholderText).run();
+            var placeholderStart = currentPos;
+            var placeholderEnd = currentPos + placeholderText.length;
+
+            fetch(UPLOAD_WORKER_URL, { method: 'POST', body: formData })
+                .then(function(response) { return response.json(); })
+                .then(function(data) {
+                    editorInstance.chain().focus().deleteRange({ from: placeholderStart, to: placeholderEnd }).run();
+                    if (data.url) {
+                        editorInstance.chain().focus().insertContent({
+                            type: 'image',
+                            attrs: {
+                                src: data.url,
+                                alt: 'Uploaded image',
+                                loading: 'lazy',
+                                decoding: 'async',
+                                width: data.width ? parseInt(data.width) : null,
+                                height: data.height ? parseInt(data.height) : null
+                            }
+                        }).run();
+                        showToast('Image uploaded', { type: 'success' });
+                    } else {
+                        editorInstance.chain().focus().insertContent('[Upload failed]').run();
+                        showToast('Upload failed', { type: 'error' });
+                    }
+                })
+                .catch(function(error) {
+                    console.error('Upload error:', error);
+                    editorInstance.chain().focus().deleteRange({ from: placeholderStart, to: placeholderEnd }).run();
+                    editorInstance.chain().focus().insertContent('[Upload error]').run();
+                    showToast('Upload error', { type: 'error' });
+                });
+        }
+
+        function showInputModal(title, placeholder, callback) {
+            var modalOverlay = document.createElement('div');
+            modalOverlay.className = 'modern-modal-overlay';
+            modalOverlay.style.cssText = 'position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.7);z-index:10000;display:flex;align-items:center;justify-content:center;';
+            var modalBox = document.createElement('div');
+            modalBox.className = 'modern-modal-box';
+            modalBox.style.cssText = 'background:var(--surface-color);border-radius:var(--radius-lg);padding:var(--space-lg);width:340px;max-width:90%;box-shadow:var(--shadow-lg);';
+            modalBox.innerHTML = ''
+                + '<h3 style="margin:0 0 var(--space-md) 0;">' + escapeHtml(title) + '</h3>'
+                + '<input type="text" id="modal-input" class="modern-input" placeholder="' + escapeHtml(placeholder) + '" style="width:100%;">'
+                + '<div style="display:flex;gap:var(--space-sm);margin-top:var(--space-md);justify-content:flex-end;">'
+                + '<button id="modal-cancel" class="modern-btn modern-btn-secondary">Cancel</button>'
+                + '<button id="modal-submit" class="modern-btn modern-btn-primary">Insert</button>'
+                + '</div>';
+            modalOverlay.appendChild(modalBox);
+            document.body.appendChild(modalOverlay);
+            var input = modalBox.querySelector('#modal-input');
+            input.focus();
+
             function close() {
-                overlay.remove();
-                document.removeEventListener('keydown', onKey, true);
+                modalOverlay.remove();
+                document.removeEventListener('keydown', onEscape);
                 if (editor) editor.commands.focus();
             }
-            document.addEventListener('keydown', onKey, true);
-            overlay.addEventListener('mousedown', function(e) { if (e.target === overlay) close(); });
-            box.addEventListener('keydown', function(e) {
-                if (e.key !== 'Tab') return;
-                var f = box.querySelectorAll('input:not([type="hidden"]), button, select, textarea');
-                if (!f.length) return;
-                var first = f[0], last = f[f.length - 1];
-                if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
-                else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
-            });
-            return { overlay: overlay, box: box, close: close };
-        }
+            function onEscape(e) { if (e.key === 'Escape') { e.preventDefault(); close(); } }
 
-        function onEnter(input, fn) {
-            input.addEventListener('keydown', function(e) {
-                if (e.key === 'Enter' && !e.isComposing) { e.preventDefault(); fn(); }
+            document.addEventListener('keydown', onEscape);
+            modalBox.querySelector('#modal-cancel').onclick = close;
+            modalBox.querySelector('#modal-submit').onclick = function() {
+                var val = input.value.trim();
+                if (val) callback(val);
+                close();
+            };
+            input.addEventListener('keypress', function(e) {
+                if (e.key === 'Enter') modalBox.querySelector('#modal-submit').click();
             });
         }
 
-        function flagInvalid(input) {
-            input.classList.add('has-error');
-            input.focus();
-            setTimeout(function() { input.classList.remove('has-error'); }, 1200);
-        }
-
-        function showInputModal(title, placeholder, normalizer, callback) {
-            var m = createModal(''
-                + '<h3 style="margin:0 0 var(--space-md) 0;">' + escapeHtml(title) + '</h3>'
-                + '<input type="text" id="modal-input" class="modern-input" placeholder="' + escapeHtml(placeholder) + '" style="width:100%;" autocomplete="off" spellcheck="false">'
-                + '<div style="display:flex;gap:var(--space-sm);margin-top:var(--space-md);justify-content:flex-end;">'
-                + '<button type="button" id="modal-cancel" class="modern-btn modern-btn-secondary">Cancel</button>'
-                + '<button type="button" id="modal-submit" class="modern-btn modern-btn-primary">Insert</button>'
-                + '</div>', 360);
-            var input = m.box.querySelector('#modal-input');
-            input.focus();
-
-            function submit() {
-                var raw = input.value.trim();
-                if (!raw) { flagInvalid(input); return; }
-                var val = normalizer ? normalizer(raw) : raw;
-                if (!val) { flagInvalid(input); return; }
-                callback(val);
-                m.close();
-            }
-            m.box.querySelector('#modal-cancel').onclick = m.close;
-            m.box.querySelector('#modal-submit').onclick = submit;
-            onEnter(input, submit);
-        }
-
+        // initial value pre-fills the field for edit-in-place usage.
         function showSpoilerTitleModal(initial, callback) {
-            var m = createModal(''
+            var modalOverlay = document.createElement('div');
+            modalOverlay.className = 'modern-modal-overlay';
+            modalOverlay.style.cssText = 'position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.7);z-index:10000;display:flex;align-items:center;justify-content:center;';
+            var modalBox = document.createElement('div');
+            modalBox.className = 'modern-modal-box';
+            modalBox.style.cssText = 'background:var(--surface-color);border-radius:var(--radius-lg);padding:var(--space-lg);width:360px;max-width:90%;box-shadow:var(--shadow-lg);';
+            modalBox.innerHTML = ''
                 + '<h3 style="margin:0 0 var(--space-xs) 0;"><i class="fa-regular fa-eye-slash"></i> Spoiler title</h3>'
                 + '<p style="margin:0 0 var(--space-md) 0;color:var(--text-tertiary);font-size:var(--text-xs);">Optional. Leave empty for a plain spoiler.</p>'
                 + '<input type="text" id="modal-spoiler-title" class="modern-input" placeholder="e.g. Route: Lily - Chapter 5" maxlength="80" style="width:100%;" value="' + escapeHtml(initial || '') + '">'
                 + '<div style="display:flex;gap:var(--space-sm);margin-top:var(--space-md);justify-content:flex-end;">'
-                + '<button type="button" id="modal-cancel" class="modern-btn modern-btn-secondary">Cancel</button>'
-                + '<button type="button" id="modal-submit" class="modern-btn modern-btn-primary">Save</button>'
-                + '</div>', 380);
-            var input = m.box.querySelector('#modal-spoiler-title');
+                + '<button id="modal-cancel" class="modern-btn modern-btn-secondary">Cancel</button>'
+                + '<button id="modal-submit" class="modern-btn modern-btn-primary">Save</button>'
+                + '</div>';
+            modalOverlay.appendChild(modalBox);
+            document.body.appendChild(modalOverlay);
+            var input = modalBox.querySelector('#modal-spoiler-title');
             input.focus();
             input.select();
 
+            function close() {
+                modalOverlay.remove();
+                document.removeEventListener('keydown', onEscape);
+                if (editor) editor.commands.focus();
+            }
+            function onEscape(e) { if (e.key === 'Escape') { e.preventDefault(); close(); } }
             function submit() {
                 var cleaned = input.value.trim()
                     .replace(/[{}]/g, '')
                     .replace(/[\r\n]+/g, ' ')
                     .trim();
                 callback(cleaned);
-                m.close();
+                close();
             }
-            m.box.querySelector('#modal-cancel').onclick = m.close;
-            m.box.querySelector('#modal-submit').onclick = submit;
-            onEnter(input, submit);
+
+            document.addEventListener('keydown', onEscape);
+            modalBox.querySelector('#modal-cancel').onclick = close;
+            modalBox.querySelector('#modal-submit').onclick = submit;
+            input.addEventListener('keypress', function(e) {
+                if (e.key === 'Enter') { e.preventDefault(); submit(); }
+            });
         }
 
         function showCodeLangModal(initial, callback) {
+            var modalOverlay = document.createElement('div');
+            modalOverlay.className = 'modern-modal-overlay';
+            modalOverlay.style.cssText = 'position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.7);z-index:10000;display:flex;align-items:center;justify-content:center;';
+            var modalBox = document.createElement('div');
+            modalBox.className = 'modern-modal-box';
+            modalBox.style.cssText = 'background:var(--surface-color);border-radius:var(--radius-lg);padding:var(--space-lg);width:360px;max-width:90%;box-shadow:var(--shadow-lg);';
+
             var optionsHtml = CODE_LANGUAGE_SUGGESTIONS.map(function(lang) {
                 return '<option value="' + escapeHtml(lang) + '"></option>';
             }).join('');
 
-            var m = createModal(''
+            modalBox.innerHTML = ''
                 + '<h3 style="margin:0 0 var(--space-xs) 0;"><i class="fa-regular fa-code"></i> Code language</h3>'
                 + '<p style="margin:0 0 var(--space-md) 0;color:var(--text-tertiary);font-size:var(--text-xs);">Optional. Shown on the code block header. Leave empty for a plain "Code" label.</p>'
                 + '<input type="text" id="modal-code-lang" class="modern-input" list="modal-code-lang-list" placeholder="e.g. Python, Ren\'Py" maxlength="40" autocomplete="off" style="width:100%;" value="' + escapeHtml(initial || '') + '">'
                 + '<datalist id="modal-code-lang-list">' + optionsHtml + '</datalist>'
                 + '<div style="display:flex;gap:var(--space-sm);margin-top:var(--space-md);justify-content:flex-end;">'
-                + '<button type="button" id="modal-cancel" class="modern-btn modern-btn-secondary">Cancel</button>'
-                + '<button type="button" id="modal-submit" class="modern-btn modern-btn-primary">Save</button>'
-                + '</div>', 380);
-            var input = m.box.querySelector('#modal-code-lang');
+                + '<button id="modal-cancel" class="modern-btn modern-btn-secondary">Cancel</button>'
+                + '<button id="modal-submit" class="modern-btn modern-btn-primary">Save</button>'
+                + '</div>';
+            modalOverlay.appendChild(modalBox);
+            document.body.appendChild(modalOverlay);
+            var input = modalBox.querySelector('#modal-code-lang');
             input.focus();
             input.select();
 
+            function close() {
+                modalOverlay.remove();
+                document.removeEventListener('keydown', onEscape);
+                if (editor) editor.commands.focus();
+            }
+            function onEscape(e) { if (e.key === 'Escape') { e.preventDefault(); close(); } }
             function submit() {
                 var cleaned = input.value.trim().replace(/[\r\n]+/g, ' ').trim();
                 callback(cleaned);
-                m.close();
+                close();
             }
-            m.box.querySelector('#modal-cancel').onclick = m.close;
-            m.box.querySelector('#modal-submit').onclick = submit;
-            onEnter(input, submit);
+
+            document.addEventListener('keydown', onEscape);
+            modalBox.querySelector('#modal-cancel').onclick = close;
+            modalBox.querySelector('#modal-submit').onclick = submit;
+            input.addEventListener('keypress', function(e) {
+                if (e.key === 'Enter') { e.preventDefault(); submit(); }
+            });
         }
 
-        function showLinkModal(initialHref, callback, onRemove) {
+        // initialHref pre-fills the URL field for edit-in-place usage.
+        // Text field is hidden when editing (link text stays put).
+        function showLinkModal(initialHref, callback) {
+            var modalOverlay = document.createElement('div');
+            modalOverlay.className = 'modern-modal-overlay';
+            modalOverlay.style.cssText = 'position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.7);z-index:10000;display:flex;align-items:center;justify-content:center;';
+            var modalBox = document.createElement('div');
+            modalBox.className = 'modern-modal-box';
+            modalBox.style.cssText = 'background:var(--surface-color);border-radius:var(--radius-lg);padding:var(--space-lg);width:360px;max-width:90%;box-shadow:var(--shadow-lg);';
+
             var isEdit = initialHref != null;
-            var m = createModal(''
+            modalBox.innerHTML = ''
                 + '<h3 style="margin:0 0 var(--space-md) 0;"><i class="fa-regular fa-link"></i> ' + (isEdit ? 'Edit link' : 'Insert link') + '</h3>'
                 + (isEdit ? '' : '<div style="margin-bottom:var(--space-md);">'
                     + '<label style="display:block;margin-bottom:var(--space-xs);color:var(--text-secondary);">Link text (optional)</label>'
@@ -3016,34 +2951,48 @@ var MessengerModule = (function(Utils, EventBus) {
                     + '</div>')
                 + '<div style="margin-bottom:var(--space-md);">'
                 + '<label style="display:block;margin-bottom:var(--space-xs);color:var(--text-secondary);">URL</label>'
-                + '<input type="text" id="modal-link-url" class="modern-input" placeholder="https://example.com" style="width:100%;" autocomplete="off" spellcheck="false" value="' + escapeHtml(initialHref || '') + '">'
+                + '<input type="url" id="modal-link-url" class="modern-input" placeholder="https://example.com" style="width:100%;" value="' + escapeHtml(initialHref || '') + '">'
                 + '</div>'
                 + '<div style="display:flex;gap:var(--space-sm);justify-content:flex-end;">'
-                + (isEdit && onRemove ? '<button type="button" id="modal-remove" class="modern-btn modern-btn-secondary danger" style="margin-right:auto;">Remove link</button>' : '')
-                + '<button type="button" id="modal-cancel" class="modern-btn modern-btn-secondary">Cancel</button>'
-                + '<button type="button" id="modal-submit" class="modern-btn modern-btn-primary">' + (isEdit ? 'Save' : 'Insert link') + '</button>'
-                + '</div>', 380);
-            var textInput = m.box.querySelector('#modal-link-text');
-            var urlInput = m.box.querySelector('#modal-link-url');
+                + '<button id="modal-cancel" class="modern-btn modern-btn-secondary">Cancel</button>'
+                + '<button id="modal-submit" class="modern-btn modern-btn-primary">' + (isEdit ? 'Save' : 'Insert link') + '</button>'
+                + '</div>';
+            modalOverlay.appendChild(modalBox);
+            document.body.appendChild(modalOverlay);
+            var textInput = modalBox.querySelector('#modal-link-text');
+            var urlInput = modalBox.querySelector('#modal-link-url');
             urlInput.focus();
             if (isEdit) urlInput.select();
 
-            function submit() {
-                var linkUrl = normalizeUrl(urlInput.value, ['http:', 'https:', 'mailto:', 'tel:']);
-                if (!linkUrl) { flagInvalid(urlInput); return; }
-                var linkText = textInput ? textInput.value.trim() : '';
-                callback(linkUrl, linkText || null);
-                m.close();
+            function close() {
+                modalOverlay.remove();
+                document.removeEventListener('keydown', onEscape);
+                if (editor) editor.commands.focus();
             }
-            m.box.querySelector('#modal-cancel').onclick = m.close;
-            m.box.querySelector('#modal-submit').onclick = submit;
-            var removeBtn = m.box.querySelector('#modal-remove');
-            if (removeBtn) removeBtn.onclick = function() { onRemove(); m.close(); };
-            if (textInput) onEnter(textInput, submit);
-            onEnter(urlInput, submit);
+            function onEscape(e) { if (e.key === 'Escape') { e.preventDefault(); close(); } }
+
+            document.addEventListener('keydown', onEscape);
+            modalBox.querySelector('#modal-cancel').onclick = close;
+            modalBox.querySelector('#modal-submit').onclick = function() {
+                var linkText = textInput ? textInput.value.trim() : '';
+                var linkUrl = urlInput.value.trim();
+                if (linkUrl) callback(linkUrl, linkText || null);
+                close();
+            };
+            if (textInput) textInput.addEventListener('keypress', function(e) { if (e.key === 'Enter') modalBox.querySelector('#modal-submit').click(); });
+            urlInput.addEventListener('keypress', function(e) { if (e.key === 'Enter') modalBox.querySelector('#modal-submit').click(); });
         }
 
+        // Image edit modal — alt text + display size. Used from the image
+        // hover toolbar's "pencil" button.
         function showImageEditModal(initialAlt, initialSize, callback) {
+            var modalOverlay = document.createElement('div');
+            modalOverlay.className = 'modern-modal-overlay';
+            modalOverlay.style.cssText = 'position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.7);z-index:10000;display:flex;align-items:center;justify-content:center;';
+            var modalBox = document.createElement('div');
+            modalBox.className = 'modern-modal-box';
+            modalBox.style.cssText = 'background:var(--surface-color);border-radius:var(--radius-lg);padding:var(--space-lg);width:380px;max-width:90%;box-shadow:var(--shadow-lg);';
+
             var sizes = [
                 { value: 'small',  label: 'Small (25%)' },
                 { value: 'medium', label: 'Medium (50%)' },
@@ -3057,7 +3006,7 @@ var MessengerModule = (function(Utils, EventBus) {
                     + '<span>' + s.label + '</span></label>';
             }).join('');
 
-            var m = createModal(''
+            modalBox.innerHTML = ''
                 + '<h3 style="margin:0 0 var(--space-xs) 0;"><i class="fa-regular fa-image"></i> Edit image</h3>'
                 + '<p style="margin:0 0 var(--space-md) 0;color:var(--text-tertiary);font-size:var(--text-xs);">Describe the image for accessibility, and optionally resize it.</p>'
                 + '<div style="margin-bottom:var(--space-md);">'
@@ -3069,75 +3018,51 @@ var MessengerModule = (function(Utils, EventBus) {
                 + '<div style="display:flex;flex-wrap:wrap;gap:var(--space-sm);">' + sizeHtml + '</div>'
                 + '</div>'
                 + '<div style="display:flex;gap:var(--space-sm);justify-content:flex-end;">'
-                + '<button type="button" id="modal-cancel" class="modern-btn modern-btn-secondary">Cancel</button>'
-                + '<button type="button" id="modal-submit" class="modern-btn modern-btn-primary">Save</button>'
-                + '</div>', 400);
+                + '<button id="modal-cancel" class="modern-btn modern-btn-secondary">Cancel</button>'
+                + '<button id="modal-submit" class="modern-btn modern-btn-primary">Save</button>'
+                + '</div>';
 
-            var altInput = m.box.querySelector('#modal-img-alt');
+            modalOverlay.appendChild(modalBox);
+            document.body.appendChild(modalOverlay);
+
+            var altInput = modalBox.querySelector('#modal-img-alt');
             altInput.focus();
             altInput.select();
 
-            function submit() {
-                var checked = m.box.querySelector('input[name="modal-img-size"]:checked');
+            function close() {
+                modalOverlay.remove();
+                document.removeEventListener('keydown', onEscape);
+                if (editor) editor.commands.focus();
+            }
+            function onEscape(e) { if (e.key === 'Escape') { e.preventDefault(); close(); } }
+
+            document.addEventListener('keydown', onEscape);
+            modalBox.querySelector('#modal-cancel').onclick = close;
+            modalBox.querySelector('#modal-submit').onclick = function() {
+                var checked = modalBox.querySelector('input[name="modal-img-size"]:checked');
                 var size = checked ? checked.value : '';
                 callback(altInput.value.trim(), size || null);
-                m.close();
-            }
-            m.box.querySelector('#modal-cancel').onclick = m.close;
-            m.box.querySelector('#modal-submit').onclick = submit;
-            onEnter(altInput, submit);
-        }
-
-        function resolveAtomNode(el, editorInstance, atomTypeNames) {
-            if (!el || !editorInstance) return null;
-            var view = editorInstance.view;
-            var pos;
-            try { pos = view.posAtDOM(el, 0); } catch (e) { return null; }
-            var $pos = view.state.doc.resolve(pos);
-            if ($pos.nodeAfter && atomTypeNames.indexOf($pos.nodeAfter.type.name) !== -1) {
-                return { node: $pos.nodeAfter, pos: pos };
-            }
-            if ($pos.nodeBefore && atomTypeNames.indexOf($pos.nodeBefore.type.name) !== -1) {
-                return { node: $pos.nodeBefore, pos: pos - $pos.nodeBefore.nodeSize };
-            }
-            return null;
-        }
-
-        function getVisibleImageBox(img) {
-            var rect = img.getBoundingClientRect();
-            var cs = window.getComputedStyle(img);
-            var padTop    = parseFloat(cs.paddingTop)    || 0;
-            var padRight  = parseFloat(cs.paddingRight)  || 0;
-            var padLeft   = parseFloat(cs.paddingLeft)   || 0;
-            var padBottom = parseFloat(cs.paddingBottom) || 0;
-            var bTop      = parseFloat(cs.borderTopWidth)    || 0;
-            var bRight    = parseFloat(cs.borderRightWidth)  || 0;
-            var bBottom   = parseFloat(cs.borderBottomWidth) || 0;
-            var bLeft     = parseFloat(cs.borderLeftWidth)   || 0;
-            return {
-                top:    rect.top    + padTop    + bTop,
-                right:  rect.right  - padRight  - bRight,
-                bottom: rect.bottom - padBottom - bBottom,
-                left:   rect.left   + padLeft   + bLeft,
-                width:  rect.width  - padLeft - padRight  - bLeft - bRight,
-                height: rect.height - padTop  - padBottom - bTop  - bBottom
+                close();
             };
         }
 
-        function setupImageToolbar(editorRoot, editorInstance) {
+        // Image hover toolbar. Two buttons positioned near the hovered or
+        // clicked image: NSFW toggle and Edit (alt text + size). Shows on
+        // hover (desktop) and on click (touch). Stays put briefly after
+        // click so touch users have time to hit the buttons.
+        function setupImageNsfwOverlay(editorRoot, editorInstance) {
             if (!editorRoot || !editorInstance) return;
 
             var toolbarEl = document.createElement('div');
             toolbarEl.className = 'editor-image-toolbar';
             toolbarEl.style.display = 'none';
-            toolbarEl.addEventListener('mousedown', function(e) { e.preventDefault(); });
 
-            var nsfwImgBtn = document.createElement('button');
-            nsfwImgBtn.type = 'button';
-            nsfwImgBtn.className = 'editor-image-nsfw-btn';
-            nsfwImgBtn.innerHTML = '<i class="fa-regular fa-eye-slash" aria-hidden="true"></i>';
-            nsfwImgBtn.title = 'Mark as NSFW (hide on reader side)';
-            nsfwImgBtn.setAttribute('aria-label', 'Toggle NSFW for this image');
+            var nsfwBtn = document.createElement('button');
+            nsfwBtn.type = 'button';
+            nsfwBtn.className = 'editor-image-nsfw-btn';
+            nsfwBtn.innerHTML = '<i class="fa-regular fa-eye-slash" aria-hidden="true"></i>';
+            nsfwBtn.title = 'Mark as NSFW (hide on reader side)';
+            nsfwBtn.setAttribute('aria-label', 'Toggle NSFW for this image');
 
             var editBtn = document.createElement('button');
             editBtn.type = 'button';
@@ -3146,18 +3071,9 @@ var MessengerModule = (function(Utils, EventBus) {
             editBtn.title = 'Edit image (alt text, size)';
             editBtn.setAttribute('aria-label', 'Edit image');
 
-            var deleteBtn = document.createElement('button');
-            deleteBtn.type = 'button';
-            deleteBtn.className = 'editor-image-delete-btn';
-            deleteBtn.innerHTML = '<i class="fa-regular fa-trash-can" aria-hidden="true"></i>';
-            deleteBtn.title = 'Delete image';
-            deleteBtn.setAttribute('aria-label', 'Delete image');
-
-            toolbarEl.appendChild(nsfwImgBtn);
+            toolbarEl.appendChild(nsfwBtn);
             toolbarEl.appendChild(editBtn);
-            toolbarEl.appendChild(deleteBtn);
             document.body.appendChild(toolbarEl);
-            cleanupFns.push(function() { toolbarEl.remove(); });
 
             var hoveredImg = null;
             var hideTimer = null;
@@ -3165,70 +3081,68 @@ var MessengerModule = (function(Utils, EventBus) {
             function updateButtonState(img) {
                 if (!img) return;
                 var isNsfw = img.getAttribute('data-nsfw') === 'true';
-                nsfwImgBtn.classList.toggle('is-active', isNsfw);
+                nsfwBtn.classList.toggle('is-active', isNsfw);
                 var label = isNsfw
                     ? 'Unmark NSFW (make visible on reader side)'
                     : 'Mark as NSFW (hide on reader side)';
-                nsfwImgBtn.title = label;
-                nsfwImgBtn.setAttribute('aria-label', label);
+                nsfwBtn.title = label;
+                nsfwBtn.setAttribute('aria-label', label);
             }
 
             function positionToolbar(img) {
-                if (!img) return;
-                var vis = getVisibleImageBox(img);
-                var toolbarWidth = toolbarEl.offsetWidth || 110;
-                toolbarEl.style.top  = (vis.top + window.pageYOffset + 6) + 'px';
-                toolbarEl.style.left = (vis.right + window.pageXOffset - toolbarWidth - 6) + 'px';
-            }
-
-            function hideNow() {
-                toolbarEl.style.display = 'none';
-                hoveredImg = null;
+                var rect = img.getBoundingClientRect();
+                toolbarEl.style.top = (rect.top + window.pageYOffset + 6) + 'px';
+                toolbarEl.style.left = (rect.right + window.pageXOffset - 76) + 'px';
             }
 
             function showToolbar(img) {
                 if (hideTimer) { clearTimeout(hideTimer); hideTimer = null; }
                 hoveredImg = img;
                 updateButtonState(img);
-                toolbarEl.style.display = 'flex';
                 positionToolbar(img);
+                toolbarEl.style.display = 'flex';
             }
 
             function hideToolbarDelayed() {
                 if (hideTimer) clearTimeout(hideTimer);
-                hideTimer = setTimeout(hideNow, 120);
+                hideTimer = setTimeout(function() {
+                    toolbarEl.style.display = 'none';
+                    hoveredImg = null;
+                }, 120);
             }
 
-            function isEligible(img) {
+            function isNsfwEligible(img) {
                 if (!img) return false;
                 if (img.classList.contains('twemoji')) return false;
-                var src = img.getAttribute('src') || '';
-                if (src.indexOf('twemoji') !== -1) return false;
-                if (img.classList.contains('ProseMirror-separator')) return false;
                 var alt = img.getAttribute('alt') || '';
                 if (alt.startsWith(':') && alt.endsWith(':')) return false;
-                if (img.closest('.link-preview-card, .link-preview-simple, .simple-link, .modern-embedded-link')) return false;
+                if (img.closest('.link-preview-card, .simple-link, .modern-embedded-link')) return false;
                 return true;
             }
 
             editorRoot.addEventListener('mouseover', function(e) {
-                var img = e.target.closest && e.target.closest('img');
-                if (!isEligible(img)) return;
+                var img = e.target.closest('img');
+                if (!isNsfwEligible(img)) return;
                 showToolbar(img);
             });
 
+            // Touch-friendly: clicking an image also shows the toolbar.
+            // On desktop this is redundant with hover but harmless.
             editorRoot.addEventListener('click', function(e) {
-                var img = e.target.closest && e.target.closest('img');
-                if (!isEligible(img)) return;
+                var img = e.target.closest('img');
+                if (!isNsfwEligible(img)) return;
                 showToolbar(img);
                 if (hideTimer) clearTimeout(hideTimer);
                 hideTimer = setTimeout(function() {
-                    if (!toolbarEl.matches(':hover')) hideNow();
+                    if (!toolbarEl.matches(':hover')) {
+                        toolbarEl.style.display = 'none';
+                        hoveredImg = null;
+                    }
                 }, 4000);
             });
 
             editorRoot.addEventListener('mouseout', function(e) {
-                var img = e.target.closest && e.target.closest('img');
+                var img = e.target.closest('img');
                 if (!img || img !== hoveredImg) return;
                 if (toolbarEl.contains(e.relatedTarget)) return;
                 var nextImg = e.relatedTarget && e.relatedTarget.closest && e.relatedTarget.closest('img');
@@ -3244,11 +3158,26 @@ var MessengerModule = (function(Utils, EventBus) {
                 hideToolbarDelayed();
             });
 
-            nsfwImgBtn.addEventListener('click', function(e) {
+            function resolveImageNode(img) {
+                if (!img) return null;
+                var view = editorInstance.view;
+                var pos;
+                try { pos = view.posAtDOM(img, 0); } catch (e) { return null; }
+                var $pos = view.state.doc.resolve(pos);
+                if ($pos.nodeAfter && $pos.nodeAfter.type.name === 'image') {
+                    return { node: $pos.nodeAfter, pos: pos };
+                }
+                if ($pos.nodeBefore && $pos.nodeBefore.type.name === 'image') {
+                    return { node: $pos.nodeBefore, pos: pos - $pos.nodeBefore.nodeSize };
+                }
+                return null;
+            }
+
+            nsfwBtn.addEventListener('click', function(e) {
                 e.preventDefault();
                 e.stopPropagation();
                 if (!hoveredImg) return;
-                var resolved = resolveAtomNode(hoveredImg, editorInstance, ['image']);
+                var resolved = resolveImageNode(hoveredImg);
                 if (!resolved) return;
                 var newAttrs = Object.assign({}, resolved.node.attrs, {
                     nsfw: !resolved.node.attrs.nsfw
@@ -3256,211 +3185,51 @@ var MessengerModule = (function(Utils, EventBus) {
                 editorInstance.view.dispatch(
                     editorInstance.view.state.tr.setNodeMarkup(resolved.pos, undefined, newAttrs)
                 );
-                hideNow();
+                toolbarEl.style.display = 'none';
+                hoveredImg = null;
             });
 
             editBtn.addEventListener('click', function(e) {
                 e.preventDefault();
                 e.stopPropagation();
                 if (!hoveredImg) return;
-                var resolved = resolveAtomNode(hoveredImg, editorInstance, ['image']);
+                var resolved = resolveImageNode(hoveredImg);
                 if (!resolved) return;
 
                 var currentAlt = resolved.node.attrs.alt || '';
                 var currentSize = resolved.node.attrs.size || null;
 
                 showImageEditModal(currentAlt, currentSize, function(newAlt, newSize) {
-                    var again = resolveAtomNode(hoveredImg || document.createElement('i'), editorInstance, ['image']);
-                    var target = (again && again.node.attrs.src === resolved.node.attrs.src) ? again : resolved;
-                    var node = editorInstance.state.doc.nodeAt(target.pos);
-                    if (!node || node.type.name !== 'image') return;
-                    var newAttrs = Object.assign({}, node.attrs, {
+                    var newAttrs = Object.assign({}, resolved.node.attrs, {
                         alt: newAlt || 'image',
                         size: newSize
                     });
                     editorInstance.view.dispatch(
-                        editorInstance.view.state.tr.setNodeMarkup(target.pos, undefined, newAttrs)
+                        editorInstance.view.state.tr.setNodeMarkup(resolved.pos, undefined, newAttrs)
                     );
                 });
 
-                hideNow();
-            });
-
-            deleteBtn.addEventListener('click', function(e) {
-                e.preventDefault();
-                e.stopPropagation();
-                if (!hoveredImg) return;
-                var resolved = resolveAtomNode(hoveredImg, editorInstance, ['image']);
-                if (!resolved) return;
-                var view = editorInstance.view;
-                view.dispatch(view.state.tr.delete(resolved.pos, resolved.pos + resolved.node.nodeSize));
-                hideNow();
-                editorInstance.commands.focus();
-            });
-
-            window.addEventListener('scroll', function() {
-                if (hoveredImg && toolbarEl.style.display === 'flex') positionToolbar(hoveredImg);
-            }, true);
-            window.addEventListener('resize', function() {
-                if (hoveredImg && toolbarEl.style.display === 'flex') positionToolbar(hoveredImg);
-            });
-
-            editorInstance.on('blur', hideNow);
-            editorInstance.on('update', function() {
-                if (hoveredImg && !document.body.contains(hoveredImg)) hideNow();
-            });
-        }
-
-        function setupLiteEmbedToolbar(editorRoot, editorInstance) {
-            if (!editorRoot || !editorInstance) return;
-
-            var toolbarEl = document.createElement('div');
-            toolbarEl.className = 'editor-embed-toolbar';
-            toolbarEl.style.display = 'none';
-            toolbarEl.addEventListener('mousedown', function(e) { e.preventDefault(); });
-
-            var copyBtn = document.createElement('button');
-            copyBtn.type = 'button';
-            copyBtn.className = 'editor-embed-copy-btn';
-            copyBtn.innerHTML = '<i class="fa-regular fa-link" aria-hidden="true"></i>';
-            copyBtn.title = 'Copy share URL';
-            copyBtn.setAttribute('aria-label', 'Copy share URL');
-
-            var deleteBtn = document.createElement('button');
-            deleteBtn.type = 'button';
-            deleteBtn.className = 'editor-embed-delete-btn';
-            deleteBtn.innerHTML = '<i class="fa-regular fa-trash-can" aria-hidden="true"></i>';
-            deleteBtn.title = 'Delete embed';
-            deleteBtn.setAttribute('aria-label', 'Delete embed');
-
-            toolbarEl.appendChild(copyBtn);
-            toolbarEl.appendChild(deleteBtn);
-            document.body.appendChild(toolbarEl);
-            cleanupFns.push(function() { toolbarEl.remove(); });
-
-            var hoveredWrapper = null;
-            var hideTimer = null;
-
-            function hideNow() {
                 toolbarEl.style.display = 'none';
-                hoveredWrapper = null;
-            }
-
-            function positionToolbar(wrapper) {
-                if (!wrapper) return;
-                var rect = wrapper.getBoundingClientRect();
-                var toolbarWidth = toolbarEl.offsetWidth || 80;
-                toolbarEl.style.top  = (rect.top + window.pageYOffset + 8) + 'px';
-                toolbarEl.style.left = (rect.right + window.pageXOffset - toolbarWidth - 8) + 'px';
-            }
-
-            function showToolbar(wrapper) {
-                if (hideTimer) { clearTimeout(hideTimer); hideTimer = null; }
-                hoveredWrapper = wrapper;
-                toolbarEl.style.display = 'flex';
-                positionToolbar(wrapper);
-            }
-
-            function hideToolbarDelayed() {
-                if (hideTimer) clearTimeout(hideTimer);
-                hideTimer = setTimeout(hideNow, 120);
-            }
-
-            editorRoot.addEventListener('mouseover', function(e) {
-                var lite = e.target.closest && e.target.closest('lite-youtube, lite-vimeo');
-                if (!lite) return;
-                var wrapper = lite.closest('.lite-embed-wrapper');
-                if (!wrapper) return;
-                showToolbar(wrapper);
-            });
-
-            editorRoot.addEventListener('click', function(e) {
-                var lite = e.target.closest && e.target.closest('lite-youtube, lite-vimeo');
-                if (!lite) return;
-                var wrapper = lite.closest('.lite-embed-wrapper');
-                if (!wrapper) return;
-                showToolbar(wrapper);
-                if (hideTimer) clearTimeout(hideTimer);
-                hideTimer = setTimeout(function() {
-                    if (!toolbarEl.matches(':hover')) hideNow();
-                }, 4000);
-            });
-
-            editorRoot.addEventListener('mouseout', function(e) {
-                var lite = e.target.closest && e.target.closest('lite-youtube, lite-vimeo');
-                if (!lite) return;
-                var wrapper = lite.closest('.lite-embed-wrapper');
-                if (!wrapper || wrapper !== hoveredWrapper) return;
-                if (toolbarEl.contains(e.relatedTarget)) return;
-                var next = e.relatedTarget && e.relatedTarget.closest && e.relatedTarget.closest('lite-youtube, lite-vimeo');
-                if (next && next.closest('.lite-embed-wrapper') === wrapper) return;
-                hideToolbarDelayed();
-            });
-
-            toolbarEl.addEventListener('mouseenter', function() {
-                if (hideTimer) { clearTimeout(hideTimer); hideTimer = null; }
-            });
-            toolbarEl.addEventListener('mouseleave', function() {
-                if (!hoveredWrapper) return;
-                hideToolbarDelayed();
-            });
-
-            copyBtn.addEventListener('click', function(e) {
-                e.preventDefault();
-                e.stopPropagation();
-                if (!hoveredWrapper) return;
-                var resolved = resolveAtomNode(hoveredWrapper, editorInstance, ['liteYouTube', 'liteVimeo']);
-                if (!resolved) return;
-                var attrs = resolved.node.attrs;
-                var isYouTube = resolved.node.type.name === 'liteYouTube';
-                var url;
-                if (isYouTube) {
-                    url = 'https://youtu.be/' + attrs.videoid;
-                    if (attrs.start != null) url += '?t=' + attrs.start;
-                } else {
-                    url = 'https://vimeo.com/' + attrs.videoid;
-                    if (attrs.start != null) url += '#t=' + attrs.start + 's';
-                }
-                copyTextToClipboard(url, function() {
-                    var icon = copyBtn.querySelector('i');
-                    if (icon) {
-                        var orig = icon.className;
-                        icon.className = 'fa-regular fa-check';
-                        setTimeout(function() { icon.className = orig; }, 1500);
-                    }
-                    showToast('Link copied', { type: 'success', duration: 1800 });
-                });
-            });
-
-            deleteBtn.addEventListener('click', function(e) {
-                e.preventDefault();
-                e.stopPropagation();
-                if (!hoveredWrapper) return;
-                var resolved = resolveAtomNode(hoveredWrapper, editorInstance, ['liteYouTube', 'liteVimeo']);
-                if (!resolved) return;
-                var view = editorInstance.view;
-                view.dispatch(view.state.tr.delete(resolved.pos, resolved.pos + resolved.node.nodeSize));
-                hideNow();
-                editorInstance.commands.focus();
+                hoveredImg = null;
             });
 
             window.addEventListener('scroll', function() {
-                if (hoveredWrapper && toolbarEl.style.display === 'flex') positionToolbar(hoveredWrapper);
+                if (hoveredImg && toolbarEl.style.display === 'flex') positionToolbar(hoveredImg);
             }, true);
             window.addEventListener('resize', function() {
-                if (hoveredWrapper && toolbarEl.style.display === 'flex') positionToolbar(hoveredWrapper);
+                if (hoveredImg && toolbarEl.style.display === 'flex') positionToolbar(hoveredImg);
             });
 
-            editorInstance.on('blur', hideNow);
-            editorInstance.on('update', function() {
-                if (hoveredWrapper && !document.body.contains(hoveredWrapper)) hideNow();
+            editorInstance.on('blur', function() {
+                toolbarEl.style.display = 'none';
+                hoveredImg = null;
             });
         }
 
+        // Emoticon autocomplete.
         function setupEmoticonAutocomplete(editorInstance, editorRoot) {
             if (!editorInstance || !editorRoot) return;
 
-            var MIN_QUERY = 2;
             var popup = null;
             var items = [];
             var selectedIndex = 0;
@@ -3545,7 +3314,6 @@ var MessengerModule = (function(Utils, EventBus) {
             function detectTrigger() {
                 var sel = editorInstance.state.selection;
                 if (!sel || !sel.empty) return null;
-                if (sel.$from.parent.type.spec.code) return null;
                 var from = sel.from;
                 var start = Math.max(0, from - 80);
                 var textBefore = editorInstance.state.doc.textBetween(
@@ -3558,7 +3326,7 @@ var MessengerModule = (function(Utils, EventBus) {
 
             function refresh() {
                 var trigger = detectTrigger();
-                if (!trigger || trigger.query.length < MIN_QUERY) { closePopup(); return; }
+                if (!trigger) { closePopup(); return; }
 
                 var query = trigger.query.toLowerCase();
                 var matches = [];
@@ -3593,6 +3361,7 @@ var MessengerModule = (function(Utils, EventBus) {
                 var triggerStart = from - queryLen - 1;
 
                 var cp = emojiToCodePoint(item.emoji);
+                // FIX: emoji must use the inline `emoji` node, not `image`.
                 editorInstance.chain().focus()
                     .deleteRange({ from: triggerStart, to: from })
                     .insertContent({
@@ -3661,8 +3430,6 @@ var MessengerModule = (function(Utils, EventBus) {
                     }
                 }, 0);
             });
-
-            cleanupFns.push(closePopup);
         }
 
         // =================================================================
@@ -3670,19 +3437,7 @@ var MessengerModule = (function(Utils, EventBus) {
         // =================================================================
         (async function initTipTap() {
             try {
-                var mods = await Promise.all([
-                    import('https://esm.sh/@tiptap/core@2.5.2'),
-                    import('https://esm.sh/prosemirror-state@1.4.3'),
-                    import('https://esm.sh/prosemirror-view@1.33.0'),
-                    import('https://esm.sh/@tiptap/starter-kit@2.5.2'),
-                    import('https://esm.sh/@tiptap/extension-placeholder@2.5.2'),
-                    import('https://esm.sh/@tiptap/extension-underline@2.5.2'),
-                    import('https://esm.sh/@tiptap/extension-image@2.5.2'),
-                    import('https://esm.sh/@tiptap/extension-link@2.5.2'),
-                    import('https://esm.sh/@tiptap/extension-mention@2.5.2'),
-                    import('https://esm.sh/@tiptap/extension-code-block@2.5.2')
-                ]);
-                const core = mods[0];
+                const core = await import('https://esm.sh/@tiptap/core@2.5.2');
                 const Editor = core.Editor || (core.default && core.default.Editor);
                 const Node = core.Node || (core.default && core.default.Node);
                 const Mark = core.Mark || (core.default && core.default.Mark);
@@ -3693,16 +3448,18 @@ var MessengerModule = (function(Utils, EventBus) {
                     throw new Error('Editor, Node, Mark, Extension, or InputRule not found in @tiptap/core');
                 }
 
-                const { Plugin, PluginKey, TextSelection } = mods[1];
-                const { Decoration, DecorationSet } = mods[2];
+                // FIX: TextSelection is required by the trailing-paragraph
+                // plugin to move the caret into the paragraph it inserts.
+                const { Plugin, PluginKey, TextSelection } = await import('https://esm.sh/prosemirror-state@1.4.3');
+                const { Decoration, DecorationSet } = await import('https://esm.sh/prosemirror-view@1.33.0');
 
-                const starterKitModule = mods[3];
-                const placeholderModule = mods[4];
-                const underlineModule = mods[5];
-                const imageModule = mods[6];
-                const linkModule = mods[7];
-                const mentionModule = mods[8];
-                const codeBlockModule = mods[9];
+                const starterKitModule = await import('https://esm.sh/@tiptap/starter-kit@2.5.2');
+                const placeholderModule = await import('https://esm.sh/@tiptap/extension-placeholder@2.5.2');
+                const underlineModule = await import('https://esm.sh/@tiptap/extension-underline@2.5.2');
+                const imageModule = await import('https://esm.sh/@tiptap/extension-image@2.5.2');
+                const linkModule = await import('https://esm.sh/@tiptap/extension-link@2.5.2');
+                const mentionModule = await import('https://esm.sh/@tiptap/extension-mention@2.5.2');
+                const codeBlockModule = await import('https://esm.sh/@tiptap/extension-code-block@2.5.2');
 
                 const StarterKit = starterKitModule.StarterKit || (starterKitModule.default && starterKitModule.default.StarterKit);
                 const Placeholder = placeholderModule.Placeholder || (placeholderModule.default && placeholderModule.default.Placeholder);
@@ -3722,23 +3479,10 @@ var MessengerModule = (function(Utils, EventBus) {
                     HTMLAttributes: { target: '_blank', rel: 'noopener noreferrer' },
                 });
 
+                // Block-level image. Each post image occupies its own block.
                 const CustomImage = BaseImage.extend({
-                    inline: true,
-                    group: 'inline',
-                    draggable: true,
-                    parseHTML() {
-                        return [
-                            {
-                                tag: 'img',
-                                getAttrs: el => {
-                                    const src = el.getAttribute('src') || '';
-                                    if (!src) return false;
-                                    if (src.indexOf('twemoji') !== -1) return false;
-                                    return {};
-                                },
-                            },
-                        ];
-                    },
+                    inline: false,
+                    group: 'block',
                     addAttributes() {
                         return {
                             ...this.parent?.(),
@@ -3776,6 +3520,9 @@ var MessengerModule = (function(Utils, EventBus) {
                     },
                 });
 
+                // Inline emoji node. Used by the picker, the emoticon
+                // autocomplete, and the ASCII input rule so twemoji render
+                // inline within text rather than as block elements.
                 const Emoji = Node.create({
                     name: 'emoji',
                     inline: true,
@@ -3806,21 +3553,6 @@ var MessengerModule = (function(Utils, EventBus) {
                             class: 'twemoji'
                         }];
                     },
-                    renderText({ node }) { return node.attrs.alt || ''; },
-                });
-
-                const UploadPlaceholder = Node.create({
-                    name: 'uploadPlaceholder',
-                    inline: true,
-                    group: 'inline',
-                    atom: true,
-                    selectable: false,
-                    addAttributes() { return { id: { default: null } }; },
-                    parseHTML() { return []; },
-                    renderHTML({ node }) {
-                        return ['span', { class: 'upload-placeholder', 'data-upload-id': node.attrs.id || '' }, 'Uploading image…'];
-                    },
-                    renderText() { return ''; },
                 });
 
                 const CustomCodeBlock = BaseCodeBlock.extend({
@@ -3851,17 +3583,13 @@ var MessengerModule = (function(Utils, EventBus) {
                                 handler: function({ state, range, match }) {
                                     const emoticon = match[1];
                                     const codepoint = ASCII_EMOTICON_MAP[emoticon];
-                                    if (!codepoint) return null;
-
-                                    const codeMark = state.schema.marks.code;
-                                    if (codeMark && codeMark.isInSet(state.selection.$from.marks())) return null;
+                                    if (!codepoint) return;
 
                                     const unicodeEmoji = String.fromCodePoint(parseInt(codepoint, 16));
                                     const emojiUrl = TWEMOJI_BASE + codepoint + '.svg';
+                                    const emoticonStart = range.to - emoticon.length;
 
-                                    const leading = match[0].length - emoticon.length;
-                                    const emoticonStart = range.from + leading;
-
+                                    // FIX: use the inline emoji node, not image.
                                     const emojiNode = state.schema.nodes.emoji.create({
                                         src: emojiUrl,
                                         alt: unicodeEmoji,
@@ -3877,6 +3605,11 @@ var MessengerModule = (function(Utils, EventBus) {
                     }
                 });
 
+                // ------------------------------------------------------------------
+                // Lite embed URL extractors. Used by the paste handler below.
+                // Return an object so start / end timestamps ride along to the
+                // node attrs when present.
+                // ------------------------------------------------------------------
                 function parseYouTubeUrl(url) {
                     if (!url || typeof url !== 'string') return null;
                     const m = url.match(/(?:youtube\.com\/(?:watch\?(?:.*&)?v=|embed\/|shorts\/)|youtu\.be\/)([A-Za-z0-9_-]{6,})/);
@@ -3902,7 +3635,7 @@ var MessengerModule = (function(Utils, EventBus) {
                                 const parsed = parseInt(e, 10);
                                 if (!isNaN(parsed) && parsed > 0) end = parsed;
                             }
-                        } catch (err) {}
+                        } catch (err) { /* malformed URL — no timestamps */ }
                     }
 
                     return { videoid, start, end };
@@ -3938,7 +3671,7 @@ var MessengerModule = (function(Utils, EventBus) {
                                 }
                             }
                         }
-                    } catch (err) {}
+                    } catch (err) { /* malformed URL */ }
 
                     return { videoid, start };
                 }
@@ -4052,10 +3785,10 @@ var MessengerModule = (function(Utils, EventBus) {
                                         'span',
                                         { class: 'link-preview-text' },
                                         ['span', { class: 'link-preview-title' }, title || href],
-                                        node.attrs.author
-                                            ? ['span', { class: 'link-preview-author' }, node.attrs.author]
-                                            : '',
-                                        description ? ['span', { class: 'link-preview-description' }, description] : '',
+node.attrs.author
+    ? ['span', { class: 'link-preview-author' }, node.attrs.author]
+    : '',
+description ? ['span', { class: 'link-preview-description' }, description] : '',
                                         [
                                             'span',
                                             { class: 'link-preview-url-wrapper' },
@@ -4069,6 +3802,15 @@ var MessengerModule = (function(Utils, EventBus) {
                     },
                 });
 
+                // ------------------------------------------------------------------
+                // Lite embeds — YouTube and Vimeo.
+                // Atom block nodes that render a caption wrapper around the
+                // lite-* custom element. The wrapper carries the video id,
+                // optional title/author, and any start/end timestamps.
+                // The custom element itself (defined by the self-hosted
+                // lite-embed.js module) reads start/end at activation and
+                // translates them into the provider's native iframe URL.
+                // ------------------------------------------------------------------
                 const LiteYouTube = Node.create({
                     name: 'liteYouTube',
                     group: 'block',
@@ -4082,8 +3824,8 @@ var MessengerModule = (function(Utils, EventBus) {
                                 parseHTML: el => el.getAttribute('videoid') || el.getAttribute('data-videoid') || null,
                                 renderHTML: attrs => attrs.videoid ? { videoid: attrs.videoid } : {},
                             },
-                            title:  { default: '', renderHTML: () => ({}) },
-                            author: { default: '', renderHTML: () => ({}) },
+                            title:  { default: '' },
+                            author: { default: '' },
                             start: {
                                 default: null,
                                 parseHTML: el => el.getAttribute('start') || null,
@@ -4163,8 +3905,8 @@ var MessengerModule = (function(Utils, EventBus) {
                                 parseHTML: el => el.getAttribute('videoid') || el.getAttribute('data-videoid') || null,
                                 renderHTML: attrs => attrs.videoid ? { videoid: attrs.videoid } : {},
                             },
-                            title:  { default: '', renderHTML: () => ({}) },
-                            author: { default: '', renderHTML: () => ({}) },
+                            title:  { default: '' },
+                            author: { default: '' },
                             start: {
                                 default: null,
                                 parseHTML: el => el.getAttribute('start') || null,
@@ -4272,8 +4014,6 @@ var MessengerModule = (function(Utils, EventBus) {
                     },
                 });
 
-                var lastMentionItems = [];
-
                 const CustomMention = Mention.extend({
                     addAttributes() {
                         return {
@@ -4326,13 +4066,7 @@ var MessengerModule = (function(Utils, EventBus) {
                                 return $from.parent.type.name !== 'codeBlock';
                             } catch (e) { return true; }
                         },
-                        items: function({ query }) {
-                            return searchMentions(query, 'mention').then(function(res) {
-                                if (res === null) return lastMentionItems;
-                                lastMentionItems = res;
-                                return res;
-                            });
-                        },
+                        items: function({ query }) { return searchMentions(query); },
                         render: function() {
                             var popup = null;
                             var items = [];
@@ -4473,7 +4207,7 @@ var MessengerModule = (function(Utils, EventBus) {
                                         updateSelected();
                                         return true;
                                     }
-                                    if (props.event.key === 'Enter' || props.event.key === 'Tab') {
+                                    if (props.event.key === 'Enter') {
                                         var user = items[selectedIndex];
                                         if (user) {
                                             props.command({
@@ -4531,22 +4265,9 @@ var MessengerModule = (function(Utils, EventBus) {
                             var trimmed = text.trim();
                             var urlRegex = /^(https?:\/\/[^\s]+)$/;
                             if (!urlRegex.test(trimmed)) return false;
-
-                            var sel = view.state.selection;
-                            if (!sel.empty) return false;
-                            if (sel.$from.parent.type.spec.code) return false;
-                            var codeMark = view.state.schema.marks.code;
-                            if (codeMark && codeMark.isInSet(sel.$from.marks())) return false;
-
                             event.preventDefault();
 
                             var url = trimmed;
-
-                            if (IMAGE_URL_RE.test(url)) {
-                                insertImageFromUrl(url);
-                                return true;
-                            }
-
                             var state = view.state;
                             var tr = state.tr.replaceWith(
                                 state.selection.from, state.selection.to,
@@ -4556,7 +4277,7 @@ var MessengerModule = (function(Utils, EventBus) {
                             );
                             view.dispatch(tr);
 
-                            function findSkeleton() {
+                            function replaceSkeletonWithText() {
                                 var foundPos = -1;
                                 view.state.doc.descendants(function(node, pos) {
                                     if (node.type.name === 'linkPreview' && node.attrs.href === url && node.attrs.loading) {
@@ -4565,11 +4286,6 @@ var MessengerModule = (function(Utils, EventBus) {
                                     }
                                     return true;
                                 });
-                                return foundPos;
-                            }
-
-                            function replaceSkeletonWithText() {
-                                var foundPos = findSkeleton();
                                 if (foundPos === -1) return;
                                 var trPlain = view.state.tr.replaceWith(
                                     foundPos, foundPos + 1, view.state.schema.text(url)
@@ -4586,11 +4302,21 @@ var MessengerModule = (function(Utils, EventBus) {
                                     return res.json();
                                 })
                                 .then(function(data) {
-                                    var foundPos = findSkeleton();
+                                    var foundPos = -1;
+                                    view.state.doc.descendants(function(node, pos) {
+                                        if (node.type.name === 'linkPreview' && node.attrs.href === url && node.attrs.loading) {
+                                            foundPos = pos;
+                                            return false;
+                                        }
+                                        return true;
+                                    });
                                     if (foundPos === -1) return;
 
                                     if (data.error || (!data.imageSrc && (!data.title || data.title === url))) {
-                                        replaceSkeletonWithText();
+                                        var trPlain = view.state.tr.replaceWith(
+                                            foundPos, foundPos + 1, view.state.schema.text(url)
+                                        );
+                                        view.dispatch(trPlain);
                                         return;
                                     }
 
@@ -4607,9 +4333,11 @@ var MessengerModule = (function(Utils, EventBus) {
                                 })
                                 .catch(function(err) {
                                     clearTimeout(timeoutId);
-                                    if (!(err && err.name === 'AbortError')) {
-                                        console.error('Link preview error:', err);
+                                    if (err && err.name === 'AbortError') {
+                                        replaceSkeletonWithText();
+                                        return;
                                     }
+                                    console.error('Link preview error:', err);
                                     replaceSkeletonWithText();
                                 });
                             return true;
@@ -4617,113 +4345,85 @@ var MessengerModule = (function(Utils, EventBus) {
                     },
                 });
 
-                const BOUNDARY_TYPES = new Set(['liteYouTube', 'liteVimeo', 'spoiler', 'codeBlock', 'blockquote']);
-                const CONTAINER_TYPES = new Set(['spoiler', 'blockquote']);
-
-                function collectBoundaryFixes(parent, contentStart, out) {
-                    const kids = [];
-                    parent.forEach((node, offset) => { kids.push({ node, offset }); });
-
-                    for (let i = 0; i < kids.length; i++) {
-                        const { node, offset } = kids[i];
-                        if (!BOUNDARY_TYPES.has(node.type.name)) continue;
-                        const prev = i > 0 ? kids[i - 1].node : null;
-                        const next = i < kids.length - 1 ? kids[i + 1].node : null;
-                        if (!prev || BOUNDARY_TYPES.has(prev.type.name)) out.add(contentStart + offset);
-                        if (!next || BOUNDARY_TYPES.has(next.type.name)) out.add(contentStart + offset + node.nodeSize);
+// ------------------------------------------------------------------
+// Trailing paragraph after a block atom (lite embed or image).
+// A block-level leaf has no internal text positions, so when it's
+// the last node in the doc there is no position after it for a
+// cursor to land on. This plugin inserts an empty paragraph and
+// moves the selection into it — without the selection move, the
+// caret sits in a gap position that ProseMirror won't render,
+// and the user has to click before typing.
+//
+// Wrapped as a TipTap Extension so ProseMirror receives it through
+// the state pipeline — appendTransaction is a state-level hook and
+// cannot be passed via editorProps.plugins.
+// ------------------------------------------------------------------
+const TrailingEmbedParagraph = Extension.create({
+    name: 'trailingEmbedParagraph',
+    addProseMirrorPlugins() {
+        return [
+            new Plugin({
+                key: new PluginKey('trailingEmbedParagraph'),
+                appendTransaction(transactions, oldState, newState) {
+                    if (!transactions.some(tr => tr.docChanged)) return null;
+                    const lastNode = newState.doc.lastChild;
+                    if (!lastNode) return null;
+                    const name = lastNode.type.name;
+                    if (name !== 'liteYouTube' && name !== 'liteVimeo' && name !== 'image') {
+                        return null;
                     }
+                    const paragraph = newState.schema.nodes.paragraph.create();
+                    const tr = newState.tr.insert(newState.doc.content.size, paragraph);
 
-                    kids.forEach(({ node, offset }) => {
-                        if (CONTAINER_TYPES.has(node.type.name)) {
-                            collectBoundaryFixes(node, contentStart + offset + 1, out);
-                        }
-                    });
-                }
+                    // Move the cursor into the new paragraph so typing
+                    // works immediately. Without this the selection sits
+                    // in the gap between the atom and the paragraph.
+                    const $pos = tr.doc.resolve(tr.doc.content.size - 1);
+                    tr.setSelection(TextSelection.near($pos));
 
-                function onlyEmptyParagraphs(doc) {
-                    if (doc.childCount < 2) return false;
-                    let ok = true;
-                    doc.forEach(n => {
-                        if (n.type.name !== 'paragraph' || n.content.size > 0) ok = false;
-                    });
-                    return ok;
-                }
+                    return tr;
+                },
+            }),
+        ];
+    },
+});
 
-                const BlockBoundaryParagraph = Extension.create({
-                    name: 'blockBoundaryParagraph',
-                    addProseMirrorPlugins() {
-                        return [
-                            new Plugin({
-                                key: new PluginKey('blockBoundaryParagraph'),
-                                appendTransaction(transactions, oldState, newState) {
-                                    const isInit = transactions.some(tr => tr.getMeta('blockBoundaryInit'));
-                                    if (!isInit && !transactions.some(tr => tr.docChanged)) return null;
-
-                                    const doc = newState.doc;
-                                    const paragraphType = newState.schema.nodes.paragraph;
-                                    if (!doc.firstChild || !paragraphType) return null;
-
-                                    if (!isInit && onlyEmptyParagraphs(doc) && !docIsBlank(oldState.doc)) {
-                                        const tr = newState.tr.replaceWith(0, doc.content.size, paragraphType.create());
-                                        tr.setSelection(TextSelection.atStart(tr.doc));
-                                        return tr;
-                                    }
-
-                                    const positions = new Set();
-                                    collectBoundaryFixes(doc, 0, positions);
-                                    if (positions.size === 0) return null;
-
-                                    const sorted = Array.from(positions).sort((a, b) => b - a);
-                                    const tr = newState.tr;
-                                    for (let i = 0; i < sorted.length; i++) {
-                                        tr.insert(sorted[i], paragraphType.create());
-                                    }
-                                    if (isInit) tr.setMeta('addToHistory', false);
-
-                                    const sel = tr.selection;
-                                    if (sel && sel.empty && sel.$from && !sel.$from.parent.isTextblock) {
-                                        try {
-                                            const target = Math.min(sel.from, tr.doc.content.size);
-                                            tr.setSelection(TextSelection.near(tr.doc.resolve(target)));
-                                        } catch (e) {}
-                                    }
-
-                                    return tr;
-                                },
-                            }),
-                        ];
+// ------------------------------------------------------------------
+// Range-selection highlight for lite embeds.
+// A click directly on the embed produces a NodeSelection, which
+// ProseMirror marks with .ProseMirror-selectednode. A drag-select
+// that spans the embed produces a TextSelection, which does not get
+// a class — and the browser's native selection can't paint over the
+// custom element. This plugin adds .lite-embed-in-selection to any
+// embed that participates in a non-empty range selection.
+// ------------------------------------------------------------------
+const LiteEmbedSelection = Extension.create({
+    name: 'liteEmbedSelection',
+    addProseMirrorPlugins() {
+        return [
+            new Plugin({
+                key: new PluginKey('liteEmbedSelection'),
+                props: {
+                    decorations(state) {
+                        const { from, to, empty } = state.selection;
+                        if (empty) return null;
+                        const decorations = [];
+                        state.doc.nodesBetween(from, to, (node, pos) => {
+                            if (node.type.name === 'liteYouTube' || node.type.name === 'liteVimeo') {
+                                decorations.push(
+                                    Decoration.node(pos, pos + node.nodeSize, {
+                                        class: 'lite-embed-in-selection',
+                                    })
+                                );
+                            }
+                        });
+                        return DecorationSet.create(state.doc, decorations);
                     },
-                });
-
-                const AtomSelection = Extension.create({
-                    name: 'atomSelection',
-                    addProseMirrorPlugins() {
-                        return [
-                            new Plugin({
-                                key: new PluginKey('atomSelection'),
-                                props: {
-                                    decorations(state) {
-                                        const { from, to, empty } = state.selection;
-                                        if (empty) return null;
-                                        const decorations = [];
-                                        state.doc.nodesBetween(from, to, (node, pos) => {
-                                            if (node.type.name === 'image' ||
-                                                node.type.name === 'liteYouTube' ||
-                                                node.type.name === 'liteVimeo') {
-                                                decorations.push(
-                                                    Decoration.node(pos, pos + node.nodeSize, {
-                                                        class: 'atom-in-selection',
-                                                    })
-                                                );
-                                            }
-                                        });
-                                        return DecorationSet.create(state.doc, decorations);
-                                    },
-                                },
-                            }),
-                        ];
-                    },
-                });
+                },
+            }),
+        ];
+    },
+});
 
                 var textareaRaw = originalTextarea ? (originalTextarea.value || '') : '';
                 var initialHtml = textareaRaw ? legacyToHtml(textareaRaw) : '';
@@ -4745,16 +4445,12 @@ var MessengerModule = (function(Utils, EventBus) {
                 editor = new Editor({
                     element: editorElement,
                     extensions: [
-                        StarterKit.configure({
-                            codeBlock: false,
-                            dropcursor: { color: '#10b981', width: 2 }
-                        }),
+                        StarterKit.configure({ codeBlock: false }),
                         CustomCodeBlock,
                         Placeholder.configure({ placeholder: 'Write your message…' }),
                         Underline,
                         CustomImage,
                         Emoji,
-                        UploadPlaceholder,
                         CustomLink,
                         LiteYouTube,
                         LiteVimeo,
@@ -4764,15 +4460,13 @@ var MessengerModule = (function(Utils, EventBus) {
                         SemanticColor,
                         CustomMention,
                         EmoticonRule,
-                        BlockBoundaryParagraph,
-                        AtomSelection,
+                        TrailingEmbedParagraph,
+                        LiteEmbedSelection,
                     ],
                     content: initialHtml,
                     editorProps: {
                         attributes: {
                             class: 'modern-wysiwyg-content',
-                            role: 'textbox',
-                            'aria-multiline': 'true',
                             'aria-label': 'Message body',
                         },
                         plugins: [linkPreviewPlugin],
@@ -4788,181 +4482,144 @@ var MessengerModule = (function(Utils, EventBus) {
                                 .replace(/\u00a0/g, ' ')
                                 .replace(/ {2,}/g, ' ');
                         },
-                        handleDrop: function(view, event, slice, moved) {
-                            if (moved) return false;
-                            var files = event.dataTransfer ? event.dataTransfer.files : null;
-                            if (!files || !files.length) return false;
-                            var imgs = Array.prototype.slice.call(files).filter(function(f) {
-                                return f.type && f.type.indexOf('image/') === 0;
-                            });
-                            if (!imgs.length) return false;
-                            event.preventDefault();
-                            var coords = view.posAtCoords({ left: event.clientX, top: event.clientY });
-                            if (coords) {
-                                try {
-                                    view.dispatch(view.state.tr.setSelection(
-                                        TextSelection.near(view.state.doc.resolve(coords.pos))
-                                    ));
-                                } catch (e) {}
-                            }
-                            imgs.forEach(function(f) { uploadImageToWorker(f); });
-                            return true;
-                        },
-                        handlePaste: function(view, event) {
-                            var clipboard = event.clipboardData;
+handlePaste: function(view, event) {
+    // ----- 1. File paste (images) -----
+    // Runs first because a pasted file is orthogonal to cursor
+    // position — if the clipboard carries an image, we always
+    // want to upload it, regardless of where the cursor is.
+    var files = event.clipboardData ? event.clipboardData.files : null;
+    if (files && files.length) {
+        var imgs = Array.prototype.slice.call(files).filter(function(f) {
+            return f.type && f.type.indexOf('image/') === 0;
+        });
+        if (imgs.length) {
+            event.preventDefault();
+            imgs.forEach(function(f) { uploadImageToWorker(f, editor); });
+            return true;
+        }
+    }
 
-                            var files = clipboard ? clipboard.files : null;
-                            if (files && files.length) {
-                                var imgs = Array.prototype.slice.call(files).filter(function(f) {
-                                    return f.type && f.type.indexOf('image/') === 0;
-                                });
-                                if (imgs.length) {
-                                    event.preventDefault();
-                                    imgs.forEach(function(f) { uploadImageToWorker(f); });
-                                    return true;
-                                }
-                            }
+    // ----- 2. Inline-code paste -----
+    // When the cursor is inside a code mark and the clipboard
+    // carries plain text, insert it as a single text node with the
+    // mark explicitly applied. Without this, the default paste path
+    // treats the insertion as a batch and the mark's boundary rules
+    // (inclusive: false, same as bold) can leave the pasted run
+    // unmarked — the pill splits into two around the pasted word.
+    // Newlines and whitespace runs collapse to single spaces so a
+    // multi-line snippet becomes a one-line pill; a multi-line
+    // paste isn't what inline code is for, and forcing the collapse
+    // nudges users toward the code-block button for real snippets.
+    if (view.state.selection.empty) {
+        var $from = view.state.selection.$from;
+        var codeMarkType = view.state.schema.marks.code;
+        var hasCode = codeMarkType && codeMarkType.isInSet($from.marks());
+        if (hasCode) {
+            var pasteText = event.clipboardData
+                ? event.clipboardData.getData('text/plain')
+                : '';
+            if (pasteText && pasteText.length > 0) {
+                event.preventDefault();
+                var collapsed = pasteText.replace(/\s+/g, ' ').trim();
+                if (collapsed) {
+                    view.dispatch(view.state.tr.insertText(collapsed));
+                }
+                return true;
+            }
+        }
+    }
 
-                            if (plainPasteArmed) {
-                                plainPasteArmed = false;
-                                var plain = clipboard ? clipboard.getData('text/plain') : '';
-                                if (plain) {
-                                    event.preventDefault();
-                                    view.dispatch(view.state.tr.insertText(plain).scrollIntoView());
-                                    return true;
-                                }
-                            }
+    // ----- 3. Shift + paste override -----
+    // Shift+paste is the browser-level "paste as plain text" gesture.
+    // If the user is not inside a code mark and held Shift, we insert
+    // the plain-text version directly so the source's rich formatting
+    // is dropped.
+    if (event.shiftKey) {
+        var text = event.clipboardData.getData('text/plain');
+        if (text) {
+            event.preventDefault();
+            view.dispatch(view.state.tr.insertText(text));
+            return true;
+        }
+    }
 
-                            if (view.state.selection.empty) {
-                                var $from = view.state.selection.$from;
-                                var codeMarkType = view.state.schema.marks.code;
-                                var hasCode = codeMarkType && codeMarkType.isInSet($from.marks());
-                                if (hasCode) {
-                                    var pasteText = clipboard ? clipboard.getData('text/plain') : '';
-                                    if (pasteText && pasteText.length > 0) {
-                                        event.preventDefault();
-                                        var collapsed = pasteText.replace(/\s+/g, ' ').trim();
-                                        if (collapsed) {
-                                            view.dispatch(view.state.tr.insertText(collapsed));
-                                        }
-                                        return true;
-                                    }
-                                }
-                            }
+    // ----- 4. Lite embeds (YouTube, Vimeo) -----
+    // Two entry points: pasted iframe HTML from an embed code, or a
+    // bare video URL. Both resolve to the same atom nodes so the reader
+    // side can render the lite facade. Start / end timestamps, when
+    // present in the source, are captured and forwarded to the node.
+    var clipboard = event.clipboardData;
+    if (clipboard) {
+        // 4a. iframe HTML — extract the src and hand it to the URL
+        // parser so start/end params ride along.
+        var htmlData = clipboard.getData('text/html');
+        if (htmlData && htmlData.indexOf('<iframe') !== -1) {
+            var srcMatch = htmlData.match(/<iframe[^>]+src=["']([^"']+)["']/i);
+            var iframeSrc = srcMatch ? srcMatch[1].replace(/&amp;/g, '&') : '';
+            if (iframeSrc) {
+                var ytFromIframe = parseYouTubeUrl(iframeSrc);
+                if (ytFromIframe) {
+                    event.preventDefault();
+                    insertLiteEmbed('liteYouTube', ytFromIframe.videoid, {
+                        start: ytFromIframe.start,
+                        end: ytFromIframe.end
+                    });
+                    return true;
+                }
+                var vmFromIframe = parseVimeoUrl(iframeSrc);
+                if (vmFromIframe) {
+                    event.preventDefault();
+                    insertLiteEmbed('liteVimeo', vmFromIframe.videoid, {
+                        start: vmFromIframe.start
+                    });
+                    return true;
+                }
+            }
+        }
 
-                            if (clipboard) {
-                                var htmlData = clipboard.getData('text/html');
-                                if (htmlData && htmlData.indexOf('<iframe') !== -1) {
-                                    var srcMatch = htmlData.match(/<iframe[^>]+src=["']([^"']+)["']/i);
-                                    var iframeSrc = srcMatch ? srcMatch[1].replace(/&amp;/g, '&') : '';
-                                    if (iframeSrc) {
-                                        var ytFromIframe = parseYouTubeUrl(iframeSrc);
-                                        if (ytFromIframe) {
-                                            event.preventDefault();
-                                            insertLiteEmbed('liteYouTube', ytFromIframe.videoid, {
-                                                start: ytFromIframe.start,
-                                                end: ytFromIframe.end
-                                            });
-                                            return true;
-                                        }
-                                        var vmFromIframe = parseVimeoUrl(iframeSrc);
-                                        if (vmFromIframe) {
-                                            event.preventDefault();
-                                            insertLiteEmbed('liteVimeo', vmFromIframe.videoid, {
-                                                start: vmFromIframe.start
-                                            });
-                                            return true;
-                                        }
-                                    }
-                                }
+        // 4b. Bare URL
+        var textData = clipboard.getData('text/plain');
+        if (textData) {
+            var candidate = textData.trim();
+            if (/^https?:\/\/\S+$/.test(candidate)) {
+                var yt = parseYouTubeUrl(candidate);
+                if (yt) {
+                    event.preventDefault();
+                    insertLiteEmbed('liteYouTube', yt.videoid, {
+                        start: yt.start,
+                        end: yt.end
+                    });
+                    return true;
+                }
+                var vm = parseVimeoUrl(candidate);
+                if (vm) {
+                    event.preventDefault();
+                    insertLiteEmbed('liteVimeo', vm.videoid, {
+                        start: vm.start
+                    });
+                    return true;
+                }
+            }
+        }
+    }
 
-                                var textData = clipboard.getData('text/plain');
-                                if (textData) {
-                                    var candidate = textData.trim();
-                                    if (/^https?:\/\/\S+$/.test(candidate) && view.state.selection.empty) {
-                                        var yt = parseYouTubeUrl(candidate);
-                                        if (yt) {
-                                            event.preventDefault();
-                                            insertLiteEmbed('liteYouTube', yt.videoid, {
-                                                start: yt.start,
-                                                end: yt.end
-                                            });
-                                            return true;
-                                        }
-                                        var vm = parseVimeoUrl(candidate);
-                                        if (vm) {
-                                            event.preventDefault();
-                                            insertLiteEmbed('liteVimeo', vm.videoid, {
-                                                start: vm.start
-                                            });
-                                            return true;
-                                        }
-                                    }
-                                }
-                            }
-
-                            return false;
-                        },
-                        handleDOMEvents: {
-                            keydown: function(view, event) {
-                                var mod = event.ctrlKey || event.metaKey;
-
-                                if (mod && event.shiftKey && (event.key === 'v' || event.key === 'V')) {
-                                    plainPasteArmed = true;
-                                    if (plainPasteTimer) clearTimeout(plainPasteTimer);
-                                    plainPasteTimer = setTimeout(function() { plainPasteArmed = false; }, 1500);
-                                    return false;
-                                }
-
-                                if (mod && event.key === 'Enter') {
-                                    event.preventDefault();
-                                    var sendBtn = container.querySelector('#modern-submit');
-                                    if (sendBtn && !sendBtn.disabled) sendBtn.click();
-                                    return true;
-                                }
-                                if (mod && !event.shiftKey && (event.key === 'k' || event.key === 'K')) {
-                                    event.preventDefault();
-                                    linkBtn.click();
-                                    return true;
-                                }
-                                if (mod && !event.shiftKey && (event.key === 'e' || event.key === 'E')) {
-                                    event.preventDefault();
-                                    if (editor) editor.chain().focus().toggleCode().run();
-                                    return true;
-                                }
-                                if (event.ctrlKey && event.shiftKey && (event.key === 's' || event.key === 'S')) {
-                                    event.preventDefault();
-                                    spoilerBtn.click();
-                                    return true;
-                                }
-                                if (event.ctrlKey && event.shiftKey && (event.key === 'n' || event.key === 'N')) {
-                                    event.preventDefault();
-                                    nsfwBtn.click();
-                                    return true;
-                                }
-                                if (event.key === 'Escape') {
-                                    var sel = view.state.selection;
-                                    if (sel && sel.node) {
-                                        event.preventDefault();
-                                        try {
-                                            var near = TextSelection.near(view.state.doc.resolve(sel.to), 1);
-                                            view.dispatch(view.state.tr.setSelection(near).scrollIntoView());
-                                        } catch (e) {}
-                                        return true;
-                                    }
-                                }
-                                return false;
-                            }
-                        }
+    // ----- 5. Fall through -----
+    // Let the default ProseMirror paste handler run. This covers
+    // ordinary rich-text pastes (from web pages, Word, other editors)
+    // that go through the transformPastedHTML preprocessing.
+    return false;
+},
                     },
-                    onCreate: function({ editor: ed }) {
+                    onCreate: function({ editor }) {
                         if (!window.matchMedia('(hover: hover) and (pointer: fine)').matches) return;
                         var active = document.activeElement;
                         if (active && active !== document.body && active !== document.documentElement) return;
-                        ed.commands.focus('end');
+                        editor.commands.focus('end');
                     },
-                    onUpdate: function() {
-                        syncTextareaDebounced();
+                    onUpdate: function({ editor }) {
+                        if (originalTextarea) {
+                            originalTextarea.value = htmlToLegacy(editor.getHTML());
+                        }
                         persistCurrentDraftDebounced();
                         updateSendState();
                         updateCharCounter();
@@ -4970,19 +4627,8 @@ var MessengerModule = (function(Utils, EventBus) {
                     }
                 });
 
-                cleanupFns.push(function() {
-                    try { if (editor) editor.destroy(); } catch (e) {}
-                    editor = null;
-                });
-
-                try {
-                    editor.view.dispatch(
-                        editor.state.tr.setMeta('blockBoundaryInit', true).setMeta('addToHistory', false)
-                    );
-                } catch (e) {}
-
                 modernSubmitBtnRef = container.querySelector('#modern-submit');
-                modernPreviewBtnRef = container.querySelector('#modern-preview');
+modernPreviewBtnRef = container.querySelector('#modern-preview');
 
                 undoBtn.onclick = function() { exec(function() { editor.chain().focus().undo().run(); }); };
                 redoBtn.onclick = function() { exec(function() { editor.chain().focus().redo().run(); }); };
@@ -4995,12 +4641,18 @@ var MessengerModule = (function(Utils, EventBus) {
                 underlineBtn.onclick = function() { exec(function() { editor.chain().focus().toggleUnderline().run(); }); };
                 strikeBtn.onclick    = function() { exec(function() { editor.chain().focus().toggleStrike().run(); }); };
 
-                [1, 2, 3].forEach(function(level) {
-                    headingButtons['h' + level].onclick = function() {
-                        exec(function() { editor.chain().focus().toggleHeading({ level: level }).run(); });
-                        closeDropdown(headingDropdownBtn, headingDropdownMenu);
-                    };
-                });
+                headingButtons.h1.onclick = function() {
+                    exec(function() { editor.chain().focus().toggleHeading({ level: 1 }).run(); });
+                    closeDropdown(headingDropdownBtn, headingDropdownMenu);
+                };
+                headingButtons.h2.onclick = function() {
+                    exec(function() { editor.chain().focus().toggleHeading({ level: 2 }).run(); });
+                    closeDropdown(headingDropdownBtn, headingDropdownMenu);
+                };
+                headingButtons.h3.onclick = function() {
+                    exec(function() { editor.chain().focus().toggleHeading({ level: 3 }).run(); });
+                    closeDropdown(headingDropdownBtn, headingDropdownMenu);
+                };
 
                 listDropdownMenu.querySelector('#bullet-list-option').onclick = function() {
                     exec(function() { editor.chain().focus().toggleBulletList().run(); });
@@ -5013,6 +4665,7 @@ var MessengerModule = (function(Utils, EventBus) {
 
                 blockquoteBtn.onclick = function() { exec(function() { editor.chain().focus().toggleBlockquote().run(); }); };
 
+                // Edit-in-place when inside a spoiler; insert-new otherwise.
                 spoilerBtn.onclick = function() {
                     if (!editor) return;
 
@@ -5040,39 +4693,60 @@ var MessengerModule = (function(Utils, EventBus) {
                     exec(function() { editor.chain().focus().toggleNSFW().run(); });
                 };
 
+                // Edit-in-place when cursor is inside an existing link.
                 linkBtn.onclick = function() {
                     if (!editor) return;
 
                     if (editor.isActive('link')) {
                         var currentHref = editor.getAttributes('link').href || '';
                         showLinkModal(currentHref, function(url) {
-                            editor.chain().focus().extendMarkRange('link').setLink({ href: url }).run();
-                        }, function() {
-                            editor.chain().focus().extendMarkRange('link').unsetLink().run();
+                            if (url) {
+                                editor.chain().focus().extendMarkRange('link').setLink({ href: url }).run();
+                            }
                         });
                         return;
                     }
 
-                    var sel = editor.state.selection;
-                    var hasSelection = !sel.empty && editor.state.doc.textBetween(sel.from, sel.to, '').length > 0;
+                    var from = editor.state.selection.from;
+                    var to = editor.state.selection.to;
+                    var selectedText = editor.state.doc.textBetween(from, to, '');
                     showLinkModal(null, function(url, customText) {
-                        if (hasSelection) {
+                        if (selectedText) {
                             editor.chain().focus().setLink({ href: url }).run();
                         } else {
-                            editor.chain().focus().insertContent({
-                                type: 'text',
-                                text: customText || url,
-                                marks: [{ type: 'link', attrs: { href: url } }]
-                            }).run();
+                            var displayText = customText || url;
+                            editor.chain().focus().insertContent(displayText).run();
+                            var newPos = editor.state.selection.from;
+                            var textLength = displayText.length;
+                            editor.chain().focus()
+                                .setTextSelection({ from: newPos - textLength, to: newPos })
+                                .setLink({ href: url })
+                                .setTextSelection(newPos)
+                                .run();
                         }
                     });
                 };
 
                 imageDropdownMenu.querySelector('#image-url-option').onclick = function() {
                     closeDropdown(imageDropdownBtn, imageDropdownMenu);
-                    showInputModal('Insert image URL', 'https://example.com/image.jpg',
-                        function(raw) { return normalizeUrl(raw, ['http:', 'https:']); },
-                        function(url) { insertImageFromUrl(url); });
+                    showInputModal('Insert image URL', 'https://example.com/image.jpg', function(url) {
+                        var img = new Image();
+                        img.onload = function() {
+                            editor.chain().focus().insertContent({
+                                type: 'image',
+                                attrs: {
+                                    src: url, alt: 'image', loading: 'lazy', decoding: 'async',
+                                    width: this.width, height: this.height
+                                }
+                            }).run();
+                        };
+                        img.onerror = function() {
+                            editor.chain().focus().insertContent({
+                                type: 'image', attrs: { src: url, alt: 'image', loading: 'lazy', decoding: 'async' }
+                            }).run();
+                        };
+                        img.src = url;
+                    });
                 };
 
                 imageDropdownMenu.querySelector('#image-upload-option').onclick = function() {
@@ -5080,10 +4754,8 @@ var MessengerModule = (function(Utils, EventBus) {
                     var input = document.createElement('input');
                     input.type = 'file';
                     input.accept = 'image/*';
-                    input.multiple = true;
                     input.onchange = function() {
-                        if (!input.files) return;
-                        Array.prototype.slice.call(input.files).forEach(function(f) { uploadImageToWorker(f); });
+                        if (input.files && input.files[0]) uploadImageToWorker(input.files[0], editor);
                     };
                     input.click();
                 };
@@ -5112,7 +4784,8 @@ var MessengerModule = (function(Utils, EventBus) {
                     underlineBtn.classList.toggle('active', isActive.underline);
                     strikeBtn.classList.toggle('active', isActive.strike);
                     blockquoteBtn.classList.toggle('active', isActive.blockquote);
-                    codeDropdownBtn.classList.toggle('active', isActive.code || isActive.codeBlock);
+// The unified Code trigger lights up when either variant is active.
+codeDropdownBtn.classList.toggle('active', isActive.code || isActive.codeBlock);
                     spoilerBtn.classList.toggle('active', isActive.spoiler);
                     nsfwBtn.classList.toggle('active', isActive.nsfw);
                     linkBtn.classList.toggle('active', isActive.link);
@@ -5163,12 +4836,59 @@ var MessengerModule = (function(Utils, EventBus) {
                 editor.on('transaction', updateActiveStates);
                 updateActiveStates();
 
-                var editorRoot = editor.view.dom;
+                var editorRoot = editorElement.querySelector('.ProseMirror');
                 if (editorRoot) {
-                    setupImageToolbar(editorRoot, editor);
-                    setupLiteEmbedToolbar(editorRoot, editor);
+                    editorRoot.setAttribute('dropzone', 'copy');
+                    editorRoot.addEventListener('dragover', function(e) { e.preventDefault(); });
+                    editorRoot.addEventListener('drop', function(e) {
+                        e.preventDefault();
+                        var file = e.dataTransfer.files[0];
+                        if (file && file.type.startsWith('image/')) uploadImageToWorker(file, editor);
+                    });
+
+                    setupImageNsfwOverlay(editorRoot, editor);
                     setupEmoticonAutocomplete(editor, editorRoot);
                 }
+
+                editor.setOptions({
+                    editorProps: {
+                        handleDOMEvents: {
+                            keydown: function(view, event) {
+                                var mod = event.ctrlKey || event.metaKey;
+
+                                if (mod && event.key === 'Enter') {
+                                    event.preventDefault();
+                                    var sendBtn = container.querySelector('#modern-submit');
+                                    if (sendBtn && !sendBtn.disabled) sendBtn.click();
+                                    return true;
+                                }
+                                if (mod && !event.shiftKey && (event.key === 'k' || event.key === 'K')) {
+                                    event.preventDefault();
+                                    linkBtn.click();
+                                    return true;
+                                }
+                                if (mod && !event.shiftKey && (event.key === 'e' || event.key === 'E')) {
+    event.preventDefault();
+    if (editor) {
+        editor.chain().focus().toggleCode().run();
+    }
+    return true;
+}
+                                if (event.ctrlKey && event.shiftKey && (event.key === 's' || event.key === 'S')) {
+                                    event.preventDefault();
+                                    spoilerBtn.click();
+                                    return true;
+                                }
+                                if (event.ctrlKey && event.shiftKey && (event.key === 'n' || event.key === 'N')) {
+                                    event.preventDefault();
+                                    nsfwBtn.click();
+                                    return true;
+                                }
+                                return false;
+                            }
+                        }
+                    }
+                });
 
                 _originalEmoticon = window.emoticon;
                 window.emoticon = function(x) {
@@ -5201,23 +4921,18 @@ var MessengerModule = (function(Utils, EventBus) {
         var actions = document.createElement('div');
         actions.className = 'modern-actions';
         actions.innerHTML = ''
-            + '<button type="button" id="modern-preview" class="modern-btn modern-btn-secondary" aria-pressed="false"><i class="fa-regular fa-eye"></i> Preview</button>'
+            + '<button type="button" id="modern-preview" class="modern-btn modern-btn-secondary"><i class="fa-regular fa-eye"></i> Preview</button>'
             + '<button type="button" id="modern-submit" class="modern-btn modern-btn-primary" aria-keyshortcuts="Control+Enter"><i class="fa-regular fa-paper-plane"></i> Send message</button>';
         container.appendChild(actions);
 
         var modernPreviewBtn = container.querySelector('#modern-preview');
         if (modernPreviewBtn) {
-            modernPreviewBtn.onclick = function() {
-                if (editorBlank()) return;
-                var isOpen = previewArea.style.display !== 'none';
-                if (isOpen) {
-                    setPreviewOpen(false);
-                    return;
-                }
-                setPreviewOpen(true);
-                updateLivePreview();
-                previewArea.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-            };
+    modernPreviewBtn.onclick = function() {
+    if (!editor || editor.isEmpty) return;
+    previewArea.style.display = 'block';
+    updateLivePreview();
+    previewArea.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+};
         }
 
         var modernSubmitBtn = container.querySelector('#modern-submit');
@@ -5228,11 +4943,7 @@ var MessengerModule = (function(Utils, EventBus) {
                 if (!currentRecipient || !currentRecipient.name) return;
                 var subjectValue = modernTitle ? modernTitle.value.trim() : '';
                 if (!subjectValue) return;
-                if (editorBlank()) return;
-                if (pendingUploads > 0) {
-                    showToast('Wait for the image upload to finish', { type: 'warning' });
-                    return;
-                }
+                if (!editor || editor.isEmpty) return;
 
                 if (MAX_MESSAGE_LENGTH && editor.getText().length > MAX_MESSAGE_LENGTH) {
                     showToast('Message exceeds the maximum length', { type: 'error' });
@@ -5241,7 +4952,7 @@ var MessengerModule = (function(Utils, EventBus) {
 
                 if (addSentCheckbox) addSentCheckbox.checked = true;
                 if (addTrackingCheckbox) addTrackingCheckbox.checked = true;
-                syncTextareaNow();
+                if (originalTextarea && editor) originalTextarea.value = htmlToLegacy(editor.getHTML());
                 syncToOriginal();
 
                 var originalLabel = modernSubmitBtn.innerHTML;
@@ -5257,14 +4968,13 @@ var MessengerModule = (function(Utils, EventBus) {
 
                     if (submitButton) submitButton.disabled = false;
 
-                    persistCurrentDraft();
+                    clearDraft(getCurrentDraftKey());
 
                     stashLastSentMessage({
                         id: currentRecipient ? currentRecipient.id : null,
                         name: currentRecipient ? currentRecipient.name : '',
                         avatar: currentRecipient ? currentRecipient.avatar : null,
-                        subject: subjectValue,
-                        draftKey: getCurrentDraftKey()
+                        subject: subjectValue
                     });
 
                     if (originalForm && originalForm instanceof HTMLFormElement) {
@@ -5278,7 +4988,6 @@ var MessengerModule = (function(Utils, EventBus) {
                     }
                 } catch (err) {
                     console.error('[MessengerModule] Submit failed:', err);
-                    clearLastSentMessage();
                     modernSubmitBtn.disabled = false;
                     modernSubmitBtn.innerHTML = originalLabel;
                     showToast('Could not send message', { type: 'error' });
@@ -5301,7 +5010,6 @@ var MessengerModule = (function(Utils, EventBus) {
             var lastSend = loadLastSentMessage();
             if (lastSend) {
                 container.appendChild(buildSentBanner(lastSend));
-                if (lastSend.draftKey) clearDraft(lastSend.draftKey);
                 clearLastSentMessage();
             }
         } catch (e) {}
@@ -5374,7 +5082,7 @@ var MessengerModule = (function(Utils, EventBus) {
             if (modernFolder && folderSelect && folderForm) {
                 modernFolder.addEventListener('change', function() {
                     folderSelect.value = this.value;
-                    HTMLFormElement.prototype.submit.call(folderForm);
+                    folderForm.submit();
                 });
             }
             var selectAll = container.querySelector('#select-all-msgs');
@@ -5398,7 +5106,7 @@ var MessengerModule = (function(Utils, EventBus) {
                     if (!confirm('Delete selected messages?')) return;
                     syncCheckboxesToForm();
                     var delBtn = inboxForm.querySelector('input[name="delete"]');
-                    if (delBtn) delBtn.click(); else HTMLFormElement.prototype.submit.call(inboxForm);
+                    if (delBtn) delBtn.click(); else inboxForm.submit();
                 });
             }
             var moveBtn = container.querySelector('#move-messages');
@@ -5409,7 +5117,7 @@ var MessengerModule = (function(Utils, EventBus) {
                     var vidSelect = inboxForm.querySelector('select[name="VID"]');
                     if (dest && vidSelect) vidSelect.value = dest.value;
                     var moveInput = inboxForm.querySelector('input[name="move"]');
-                    if (moveInput) moveInput.click(); else HTMLFormElement.prototype.submit.call(inboxForm);
+                    if (moveInput) moveInput.click(); else inboxForm.submit();
                 });
             }
         } catch (err) {
