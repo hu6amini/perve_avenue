@@ -1635,6 +1635,62 @@
 .editor-image-nsfw-btn i,
 .editor-image-edit-btn i,
 .editor-image-delete-btn i { pointer-events: none; }
+.editor-image-delete-btn {
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    border: 1px solid rgba(255, 255, 255, 0.18);
+    background: rgba(20, 20, 20, 0.85);
+    color: #fff;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 14px;
+    padding: 0;
+    transition: background 0.15s, transform 0.15s;
+}
+.editor-image-delete-btn:hover {
+    background: var(--danger-color);
+    border-color: var(--danger-color);
+    transform: scale(1.05);
+}
+.editor-image-delete-btn i { pointer-events: none; }
+
+.editor-embed-toolbar {
+    position: absolute;
+    z-index: 99999;
+    display: none;
+    gap: 6px;
+    align-items: center;
+}
+.editor-embed-copy-btn,
+.editor-embed-delete-btn {
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    border: 1px solid rgba(255, 255, 255, 0.18);
+    background: rgba(20, 20, 20, 0.85);
+    color: #fff;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 14px;
+    padding: 0;
+    transition: background 0.15s, transform 0.15s;
+}
+.editor-embed-copy-btn:hover {
+    background: rgba(40, 40, 40, 0.95);
+    transform: scale(1.05);
+}
+.editor-embed-delete-btn:hover {
+    background: var(--danger-color);
+    border-color: var(--danger-color);
+    transform: scale(1.05);
+}
+.editor-embed-copy-btn i,
+.editor-embed-delete-btn i { pointer-events: none; }
 
 /* ------------------------------------------------------------
    10b. SEMANTIC TEXT COLORS
@@ -3998,9 +4054,23 @@ lite-vimeo.lite-activated > .lite-embed-playbtn {
         0 0 0 4px var(--focus-ring);
 }
 
-.modern-wysiwyg .ProseMirror .lite-embed-wrapper.lite-embed-in-selection > lite-youtube,
-.modern-wysiwyg .ProseMirror .lite-embed-wrapper.lite-embed-in-selection > lite-vimeo {
+/* Drag-select across block atoms — a TextSelection that spans an
+   image or a lite embed gets this class so the browser paints a
+   ring on what it can't natively highlight. */
+.modern-wysiwyg .ProseMirror img.atom-in-selection {
     box-shadow: 0 0 0 2px var(--focus-ring);
+}
+
+.modern-wysiwyg .ProseMirror .lite-embed-wrapper.atom-in-selection > lite-youtube,
+.modern-wysiwyg .ProseMirror .lite-embed-wrapper.atom-in-selection > lite-vimeo {
+    box-shadow: 0 0 0 2px var(--focus-ring);
+}
+
+/* Node-selected image — click to select produces this class. */
+.modern-wysiwyg .ProseMirror img.ProseMirror-selectednode {
+    box-shadow:
+        0 0 0 2px var(--primary-color),
+        0 0 0 4px var(--focus-ring);
 }
 
 /* --- Caption --- */
