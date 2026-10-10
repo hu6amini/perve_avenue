@@ -25,6 +25,13 @@
 //      custom element and data-start / data-end on the wrapper. The
 //      custom element translates them into the provider's native
 //      iframe URL syntax at activation time.
+// v13: schema split — CustomImage is block-level, new Emoji node is
+//      inline. Three insertion paths (picker, autocomplete, ASCII
+//      input rule) route to Emoji so twemoji render inline. The
+//      TrailingEmbedParagraph plugin now also fires for a trailing
+//      image and moves the selection into the trailing paragraph so
+//      typing works immediately after an insert. TextSelection
+//      imported from prosemirror-state.
 var MessengerModule = (function(Utils, EventBus) {
     'use strict';
 
@@ -1831,11 +1838,14 @@ var charCounter         = null;
 var draftSaveTimer      = null;
 var livePreviewTimer    = null;
 
-        // After inserting a lite embed, if the doc now ends with an empty
-// paragraph directly following the embed, move the cursor into it.
-// The trailing-paragraph plugin guarantees that paragraph exists
-// when the embed is the last node, but ProseMirror leaves the
-// selection in a gap position — no text cursor, no typing.
+        // After inserting a lite embed or a block image, if the doc now
+// ends with an empty paragraph directly following the atom, move
+// the cursor into it. The trailing-paragraph plugin guarantees
+// that paragraph exists, but ProseMirror leaves the selection in
+// a gap position — no text cursor, no typing. This helper covers
+// the explicit call sites (paste handler, lite embed inserts)
+// where we want the cursor placed immediately; the plugin itself
+// also sets the selection for the general case.
 function focusTrailingEmbedParagraph() {
     if (!editor) return;
     const doc = editor.state.doc;
@@ -1843,7 +1853,8 @@ function focusTrailingEmbedParagraph() {
     const last = doc.child(doc.childCount - 1);
     const secondLast = doc.child(doc.childCount - 2);
     if (last.type.name !== 'paragraph' || last.content.size !== 0) return;
-    if (secondLast.type.name !== 'liteYouTube' && secondLast.type.name !== 'liteVimeo') return;
+    const atomName = secondLast.type.name;
+    if (atomName !== 'liteYouTube' && atomName !== 'liteVimeo' && atomName !== 'image') return;
     // doc.content.size - 1 is the single cursor position inside the
     // empty trailing paragraph. setTextSelection on that puts a real
     // text cursor there and chain().focus() gives it focus.
@@ -2712,8 +2723,11 @@ addSeparator();
                         e.stopPropagation();
                         if (editor) {
                             var emojiChar = this.getAttribute('data-emoji');
+                            // FIX: emoji must use the inline `emoji` node, not
+                            // `image` (which is now block-level). Using `image`
+                            // would place every picked emoji on its own line.
                             editor.chain().focus().insertContent({
-                                type: 'image',
+                                type: 'emoji',
                                 attrs: {
                                     src: TWEMOJI_BASE + emojiToCodePoint(emojiChar) + '.svg',
                                     alt: emojiChar,
@@ -3347,10 +3361,11 @@ addSeparator();
                 var triggerStart = from - queryLen - 1;
 
                 var cp = emojiToCodePoint(item.emoji);
+                // FIX: emoji must use the inline `emoji` node, not `image`.
                 editorInstance.chain().focus()
                     .deleteRange({ from: triggerStart, to: from })
                     .insertContent({
-                        type: 'image',
+                        type: 'emoji',
                         attrs: {
                             src: TWEMOJI_BASE + cp + '.svg',
                             alt: item.emoji,
@@ -3433,7 +3448,9 @@ addSeparator();
                     throw new Error('Editor, Node, Mark, Extension, or InputRule not found in @tiptap/core');
                 }
 
-                const { Plugin, PluginKey } = await import('https://esm.sh/prosemirror-state@1.4.3');
+                // FIX: TextSelection is required by the trailing-paragraph
+                // plugin to move the caret into the paragraph it inserts.
+                const { Plugin, PluginKey, TextSelection } = await import('https://esm.sh/prosemirror-state@1.4.3');
                 const { Decoration, DecorationSet } = await import('https://esm.sh/prosemirror-view@1.33.0');
 
                 const starterKitModule = await import('https://esm.sh/@tiptap/starter-kit@2.5.2');
@@ -3462,6 +3479,7 @@ addSeparator();
                     HTMLAttributes: { target: '_blank', rel: 'noopener noreferrer' },
                 });
 
+                // Block-level image. Each post image occupies its own block.
                 const CustomImage = BaseImage.extend({
                     inline: false,
                     group: 'block',
@@ -3502,31 +3520,40 @@ addSeparator();
                     },
                 });
 
+                // Inline emoji node. Used by the picker, the emoticon
+                // autocomplete, and the ASCII input rule so twemoji render
+                // inline within text rather than as block elements.
                 const Emoji = Node.create({
-    name: 'emoji',
-    inline: true,
-    group: 'inline',
-    atom: true,
-    addAttributes() {
-        return {
-            src: { default: null },
-            alt: { default: '' },
-            loading: { default: 'lazy' },
-            decoding: { default: 'async' },
-            width: { default: 24 },
-            height: { default: 24 },
-        };
-    },
-    parseHTML() {
-        return [{ tag: 'img[src*="twemoji"]' }];
-    },
-    renderHTML({ node, HTMLAttributes }) {
-        return ['img', { ...HTMLAttributes, src: node.attrs.src, alt: node.attrs.alt,
-                         loading: node.attrs.loading, decoding: node.attrs.decoding,
-                         width: node.attrs.width, height: node.attrs.height,
-                         class: 'twemoji' }];
-    },
-});
+                    name: 'emoji',
+                    inline: true,
+                    group: 'inline',
+                    atom: true,
+                    addAttributes() {
+                        return {
+                            src: { default: null },
+                            alt: { default: '' },
+                            loading: { default: 'lazy' },
+                            decoding: { default: 'async' },
+                            width: { default: 24 },
+                            height: { default: 24 },
+                        };
+                    },
+                    parseHTML() {
+                        return [{ tag: 'img[src*="twemoji"]' }];
+                    },
+                    renderHTML({ node, HTMLAttributes }) {
+                        return ['img', {
+                            ...HTMLAttributes,
+                            src: node.attrs.src,
+                            alt: node.attrs.alt,
+                            loading: node.attrs.loading,
+                            decoding: node.attrs.decoding,
+                            width: node.attrs.width,
+                            height: node.attrs.height,
+                            class: 'twemoji'
+                        }];
+                    },
+                });
 
                 const CustomCodeBlock = BaseCodeBlock.extend({
                     addAttributes() {
@@ -3562,7 +3589,8 @@ addSeparator();
                                     const emojiUrl = TWEMOJI_BASE + codepoint + '.svg';
                                     const emoticonStart = range.to - emoticon.length;
 
-                                    const imageNode = state.schema.nodes.image.create({
+                                    // FIX: use the inline emoji node, not image.
+                                    const emojiNode = state.schema.nodes.emoji.create({
                                         src: emojiUrl,
                                         alt: unicodeEmoji,
                                         loading: 'lazy',
@@ -3570,7 +3598,7 @@ addSeparator();
                                         width: 24,
                                         height: 24
                                     });
-                                    state.tr.replaceWith(emoticonStart, range.to, imageNode);
+                                    state.tr.replaceWith(emoticonStart, range.to, emojiNode);
                                 }
                             })
                         ];
@@ -4318,12 +4346,13 @@ description ? ['span', { class: 'link-preview-description' }, description] : '',
                 });
 
 // ------------------------------------------------------------------
-// Trailing paragraph after a lite embed.
-// A liteYouTube / liteVimeo node is a block-level leaf, so it has no
-// internal text positions. When it's the last node in the doc there
-// is no position after it for a cursor to land on. This plugin
-// appends an empty paragraph whenever the doc would otherwise end on
-// a lite embed.
+// Trailing paragraph after a block atom (lite embed or image).
+// A block-level leaf has no internal text positions, so when it's
+// the last node in the doc there is no position after it for a
+// cursor to land on. This plugin inserts an empty paragraph and
+// moves the selection into it — without the selection move, the
+// caret sits in a gap position that ProseMirror won't render,
+// and the user has to click before typing.
 //
 // Wrapped as a TipTap Extension so ProseMirror receives it through
 // the state pipeline — appendTransaction is a state-level hook and
@@ -4344,7 +4373,15 @@ const TrailingEmbedParagraph = Extension.create({
                         return null;
                     }
                     const paragraph = newState.schema.nodes.paragraph.create();
-                    return newState.tr.insert(newState.doc.content.size, paragraph);
+                    const tr = newState.tr.insert(newState.doc.content.size, paragraph);
+
+                    // Move the cursor into the new paragraph so typing
+                    // works immediately. Without this the selection sits
+                    // in the gap between the atom and the paragraph.
+                    const $pos = tr.doc.resolve(tr.doc.content.size - 1);
+                    tr.setSelection(TextSelection.near($pos));
+
+                    return tr;
                 },
             }),
         ];
@@ -4413,6 +4450,7 @@ const LiteEmbedSelection = Extension.create({
                         Placeholder.configure({ placeholder: 'Write your message…' }),
                         Underline,
                         CustomImage,
+                        Emoji,
                         CustomLink,
                         LiteYouTube,
                         LiteVimeo,
