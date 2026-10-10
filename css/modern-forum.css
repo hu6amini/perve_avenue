@@ -1138,6 +1138,37 @@
 .code-property { color: var(--primary-light); }
 .code-color    { color: var(--secondary-color); }
 .code-literal  { color: var(--warning-color); }
+/* ------------------------------------------------------------
+   Lowlight token colors — editor-side only.
+   The reader side still uses .code-* from the custom highlighter
+   (transformPreviewHtml reads textContent, so hljs spans never
+   reach the preview or the forum's stored [CODE] payload).
+   ------------------------------------------------------------ */
+.modern-wysiwyg .ProseMirror .hljs-keyword,
+.modern-wysiwyg .ProseMirror .hljs-selector-tag,
+.modern-wysiwyg .ProseMirror .hljs-built_in { color: var(--primary-color); font-weight: 600; }
+
+.modern-wysiwyg .ProseMirror .hljs-string,
+.modern-wysiwyg .ProseMirror .hljs-attr,
+.modern-wysiwyg .ProseMirror .hljs-regexp { color: var(--success-color); }
+
+.modern-wysiwyg .ProseMirror .hljs-comment,
+.modern-wysiwyg .ProseMirror .hljs-quote { color: var(--text-tertiary); font-style: italic; }
+
+.modern-wysiwyg .ProseMirror .hljs-number,
+.modern-wysiwyg .ProseMirror .hljs-literal { color: var(--warning-color); }
+
+.modern-wysiwyg .ProseMirror .hljs-tag,
+.modern-wysiwyg .ProseMirror .hljs-name,
+.modern-wysiwyg .ProseMirror .hljs-section { color: var(--secondary-color); }
+
+.modern-wysiwyg .ProseMirror .hljs-attribute { color: var(--accent-color); }
+
+.modern-wysiwyg .ProseMirror .hljs-property,
+.modern-wysiwyg .ProseMirror .hljs-title,
+.modern-wysiwyg .ProseMirror .hljs-function { color: var(--primary-light); }
+
+.modern-wysiwyg .ProseMirror .hljs-type { color: var(--secondary-color); }
 .line-number {
   color: var(--text-tertiary);
   display: inline-block;
