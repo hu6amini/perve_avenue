@@ -32,6 +32,23 @@
 //      image and moves the selection into the trailing paragraph so
 //      typing works immediately after an insert. TextSelection
 //      imported from prosemirror-state.
+// v14: swap four custom behaviours for ecosystem extensions:
+//      - CharacterCount replaces the hand-rolled updateCharCounter
+//        counter; editor.storage.characterCount is now the source of
+//        truth for the live count and the send-path length check.
+//      - CodeBlockLowlight (highlight.js) replaces the in-editor use
+//        of highlightCode(). The reader-side preview and the legacy
+//        serialization path still use the custom highlighter because
+//        the forum stores only the plain [CODE] payload — inner tags
+//        are stripped by htmlToLegacy before serialization.
+//      - Typography supplies the standard em-dash / ellipsis / smart
+//        quote InputRules.
+//      - Placeholder now takes the function form so headings and code
+//        blocks can carry their own hint text.
+//      NormalizeEmptyDoc and DeleteAdjacentAtom are unchanged. The
+//      reader-side highlighter and the trailing-paragraph, lite-embed
+//      selection, and link-preview plugins remain custom because no
+//      v2-compatible equivalent exists.
 var MessengerModule = (function(Utils, EventBus) {
     'use strict';
 
@@ -200,11 +217,19 @@ var MessengerModule = (function(Utils, EventBus) {
     }
 
     // ------------------------------------------------------------------------
-    // SYNTAX HIGHLIGHTING
+    // SYNTAX HIGHLIGHTING (READER / PREVIEW SIDE ONLY)
     // A deliberately small generic tokenizer. Handles the shapes common to
     // every language in CODE_LANGUAGE_SUGGESTIONS — line/block comments,
     // strings, numbers, and a curated keyword union. Not a real parser;
     // it produces a visual hint, not a correctness guarantee.
+    //
+    // v14: the editor itself now uses CodeBlockLowlight for its own
+    // rendering. This helper still runs on the reader-side preview and on
+    // the copied-out HTML the forum stores, because htmlToLegacy strips
+    // inner tags before writing the [CODE] payload — so the forum never
+    // sees hljs-* spans, only the plain code. The transformPreviewHtml
+    // path also reads textContent, which strips lowlight spans before
+    // re-highlighting here, so nothing double-wraps.
     // ------------------------------------------------------------------------
     var CODE_HIGHLIGHT_KEYWORDS = [
         'abstract','as','assert','async','await','bool','break','case','catch','class','const','continue',
@@ -1153,15 +1178,15 @@ var MessengerModule = (function(Utils, EventBus) {
         });
 
         // Inline code marker → <code>. ForumFree re-escapes the & in &lt;
-// when it round-trips, so one decode pass undoes that and the
-// subsequent escape restores well-formed HTML for TipTap to parse.
-html = html.replace(
-    /<span[^>]*\bff-inline-code\b[^>]*>([\s\S]*?)<\/span>/gis,
-    function(_, content) {
-        var decoded = decodeHtmlEntities(content);
-        return '<code>' + escapeHtml(decoded) + '</code>';
-    }
-);
+        // when it round-trips, so one decode pass undoes that and the
+        // subsequent escape restores well-formed HTML for TipTap to parse.
+        html = html.replace(
+            /<span[^>]*\bff-inline-code\b[^>]*>([\s\S]*?)<\/span>/gis,
+            function(_, content) {
+                var decoded = decodeHtmlEntities(content);
+                return '<code>' + escapeHtml(decoded) + '</code>';
+            }
+        );
 
         html = html.replace(/\[EMAIL\](.*?)\[\/EMAIL\]/gi, '<a href="mailto:$1">$1</a>');
         return html;
@@ -1226,8 +1251,11 @@ html = html.replace(
             });
 
             result = result.replace(/<pre([^>]*)>\s*<code[^>]*>([\s\S]*?)<\/code>\s*<\/pre>/gi, function(match, preAttrs, inner) {
-                // Inner may contain syntax-highlight spans from the editor
-                // itself; strip them before emitting the legacy payload.
+                // Inner may contain syntax-highlight spans — from the
+                // reader-side highlighter in a rare preview-then-send path,
+                // or from CodeBlockLowlight in the editor. Either way, strip
+                // all tags to recover the plain source text the forum
+                // stores. hljs-* spans and code-* spans both vanish here.
                 var plain = inner.replace(/<[^>]*>/g, '');
                 var decoded = plain
                     .replace(/&lt;/g, '<')
@@ -1246,11 +1274,11 @@ html = html.replace(
             });
 
             // Inline code → ff-inline-code marker. Runs after the pre pass, so
-// any <code> still present is guaranteed to be inline (the block
-// form was already consumed by the <pre><code> pair above).
-result = result.replace(/<code\b[^>]*>([\s\S]*?)<\/code>/gi, function(match, inner) {
-    return '<span class="ff-inline-code">' + inner + '</span>';
-});
+            // any <code> still present is guaranteed to be inline (the block
+            // form was already consumed by the <pre><code> pair above).
+            result = result.replace(/<code\b[^>]*>([\s\S]*?)<\/code>/gi, function(match, inner) {
+                return '<span class="ff-inline-code">' + inner + '</span>';
+            });
 
             if (result === before) break;
         }
@@ -1313,6 +1341,9 @@ result = result.replace(/<code\b[^>]*>([\s\S]*?)<\/code>/gi, function(match, inn
         Array.from(temp.querySelectorAll('pre')).forEach(function(pre) {
             if (pre.closest('.modern-code')) return;
             var code = pre.querySelector('code');
+            // textContent strips any hljs-* spans that CodeBlockLowlight
+            // emitted in the editor, so this re-runs the reader-side
+            // highlighter on the raw source and there's no double wrapping.
             var rawText = code ? (code.textContent || '') : (pre.textContent || '');
             var codeContent = highlightCode(rawText);
             var lang = (pre.getAttribute('data-language') || '').trim() || 'Code';
@@ -1831,93 +1862,93 @@ result = result.replace(/<code\b[^>]*>([\s\S]*?)<\/code>/gi, function(match, inn
         container.appendChild(composeHeader);
 
         var currentRecipient    = null;
-var editor              = null;
-var modernSubmitBtnRef  = null;
-var modernPreviewBtnRef = null;
-var charCounter         = null;
-var draftSaveTimer      = null;
-var livePreviewTimer    = null;
+        var editor              = null;
+        var modernSubmitBtnRef  = null;
+        var modernPreviewBtnRef = null;
+        var charCounter         = null;
+        var draftSaveTimer      = null;
+        var livePreviewTimer    = null;
 
         // After inserting a lite embed or a block image, if the doc now
-// ends with an empty paragraph directly following the atom, move
-// the cursor into it. The trailing-paragraph plugin guarantees
-// that paragraph exists, but ProseMirror leaves the selection in
-// a gap position — no text cursor, no typing. This helper covers
-// the explicit call sites (paste handler, lite embed inserts)
-// where we want the cursor placed immediately; the plugin itself
-// also sets the selection for the general case.
-function focusTrailingEmbedParagraph() {
-    if (!editor) return;
-    const doc = editor.state.doc;
-    if (doc.childCount < 2) return;
-    const last = doc.child(doc.childCount - 1);
-    const secondLast = doc.child(doc.childCount - 2);
-    if (last.type.name !== 'paragraph' || last.content.size !== 0) return;
-    const atomName = secondLast.type.name;
-    if (atomName !== 'liteYouTube' && atomName !== 'liteVimeo' && atomName !== 'image') return;
-    // doc.content.size - 1 is the single cursor position inside the
-    // empty trailing paragraph. setTextSelection on that puts a real
-    // text cursor there and chain().focus() gives it focus.
-    editor.chain().focus().setTextSelection(doc.content.size - 1).run();
-}
-
-// Fetch title + author for a fresh embed and patch the node once the
-// worker responds. The worker's provider map (OEMBED_PROVIDERS) hits
-// YouTube's and Vimeo's oEmbed endpoints directly, so both fields
-// usually come back in a single round-trip.
-function fetchEmbedMetadata(kind, videoid) {
-    if (!editor || !videoid) return;
-    var canonicalUrl = kind === 'liteYouTube'
-        ? 'https://www.youtube.com/watch?v=' + encodeURIComponent(videoid)
-        : 'https://vimeo.com/' + encodeURIComponent(videoid);
-
-    fetch(OG_WORKER_URL + encodeURIComponent(canonicalUrl))
-        .then(function(r) { return r.ok ? r.json() : null; })
-        .then(function(data) {
-            if (!data || data.error || !data.title) return;
+        // ends with an empty paragraph directly following the atom, move
+        // the cursor into it. The trailing-paragraph plugin guarantees
+        // that paragraph exists, but ProseMirror leaves the selection in
+        // a gap position — no text cursor, no typing. This helper covers
+        // the explicit call sites (paste handler, lite embed inserts)
+        // where we want the cursor placed immediately; the plugin itself
+        // also sets the selection for the general case.
+        function focusTrailingEmbedParagraph() {
             if (!editor) return;
-            var positions = [];
-            editor.state.doc.descendants(function(node, pos) {
-                if (node.type.name === kind &&
-                    node.attrs.videoid === videoid &&
-                    !node.attrs.title) {
-                    positions.push(pos);
-                }
-                return true;
-            });
-            if (positions.length === 0) return;
-            var tr = editor.state.tr;
-            for (var i = 0; i < positions.length; i++) {
-                var pos = positions[i];
-                var node = tr.doc.nodeAt(pos);
-                if (!node) continue;
-                tr.setNodeMarkup(pos, undefined, Object.assign({}, node.attrs, {
-                    title: data.title || '',
-                    author: data.author || '',
-                }));
-            }
-            editor.view.dispatch(tr);
-        })
-        .catch(function() { /* caption is optional — silent fail */ });
-}
+            const doc = editor.state.doc;
+            if (doc.childCount < 2) return;
+            const last = doc.child(doc.childCount - 1);
+            const secondLast = doc.child(doc.childCount - 2);
+            if (last.type.name !== 'paragraph' || last.content.size !== 0) return;
+            const atomName = secondLast.type.name;
+            if (atomName !== 'liteYouTube' && atomName !== 'liteVimeo' && atomName !== 'image') return;
+            // doc.content.size - 1 is the single cursor position inside the
+            // empty trailing paragraph. setTextSelection on that puts a real
+            // text cursor there and chain().focus() gives it focus.
+            editor.chain().focus().setTextSelection(doc.content.size - 1).run();
+        }
 
-// One entry point for all four paste-handler branches. Inserts the
-// node, moves the cursor into the trailing paragraph, and kicks off
-// the metadata fetch. opts.start / opts.end (integer seconds) are
-// forwarded to the node attrs when present.
-function insertLiteEmbed(kind, videoid, opts) {
-    if (!editor) return;
-    opts = opts || {};
-    var attrs = { videoid: videoid };
-    if (opts.start != null) attrs.start = String(opts.start);
-    if (opts.end   != null) attrs.end   = String(opts.end);
-    editor.chain().focus().insertContent({
-        type: kind,
-        attrs: attrs
-    }).run();
-    focusTrailingEmbedParagraph();
-    fetchEmbedMetadata(kind, videoid);
-}
+        // Fetch title + author for a fresh embed and patch the node once the
+        // worker responds. The worker's provider map (OEMBED_PROVIDERS) hits
+        // YouTube's and Vimeo's oEmbed endpoints directly, so both fields
+        // usually come back in a single round-trip.
+        function fetchEmbedMetadata(kind, videoid) {
+            if (!editor || !videoid) return;
+            var canonicalUrl = kind === 'liteYouTube'
+                ? 'https://www.youtube.com/watch?v=' + encodeURIComponent(videoid)
+                : 'https://vimeo.com/' + encodeURIComponent(videoid);
+
+            fetch(OG_WORKER_URL + encodeURIComponent(canonicalUrl))
+                .then(function(r) { return r.ok ? r.json() : null; })
+                .then(function(data) {
+                    if (!data || data.error || !data.title) return;
+                    if (!editor) return;
+                    var positions = [];
+                    editor.state.doc.descendants(function(node, pos) {
+                        if (node.type.name === kind &&
+                            node.attrs.videoid === videoid &&
+                            !node.attrs.title) {
+                            positions.push(pos);
+                        }
+                        return true;
+                    });
+                    if (positions.length === 0) return;
+                    var tr = editor.state.tr;
+                    for (var i = 0; i < positions.length; i++) {
+                        var pos = positions[i];
+                        var node = tr.doc.nodeAt(pos);
+                        if (!node) continue;
+                        tr.setNodeMarkup(pos, undefined, Object.assign({}, node.attrs, {
+                            title: data.title || '',
+                            author: data.author || '',
+                        }));
+                    }
+                    editor.view.dispatch(tr);
+                })
+                .catch(function() { /* caption is optional — silent fail */ });
+        }
+
+        // One entry point for all four paste-handler branches. Inserts the
+        // node, moves the cursor into the trailing paragraph, and kicks off
+        // the metadata fetch. opts.start / opts.end (integer seconds) are
+        // forwarded to the node attrs when present.
+        function insertLiteEmbed(kind, videoid, opts) {
+            if (!editor) return;
+            opts = opts || {};
+            var attrs = { videoid: videoid };
+            if (opts.start != null) attrs.start = String(opts.start);
+            if (opts.end   != null) attrs.end   = String(opts.end);
+            editor.chain().focus().insertContent({
+                type: kind,
+                attrs: attrs
+            }).run();
+            focusTrailingEmbedParagraph();
+            fetchEmbedMetadata(kind, videoid);
+        }
 
         var modernRecipient     = container.querySelector('#modern-recipient');
         var modernTitle         = container.querySelector('#modern-title');
@@ -1936,16 +1967,16 @@ function insertLiteEmbed(kind, videoid, opts) {
         }
 
         function captureCurrentDraft() {
-    if (!editor) return null;
-    var subject = modernTitle ? modernTitle.value.trim() : '';
-    var bodyHtml = editor.getHTML();
-    var bodyHasContent = !editorContentIsEmpty(bodyHtml);
-    if (!subject && !bodyHasContent) return null;
-    return {
-        subject: subject,
-        bodyHtml: bodyHasContent ? bodyHtml : ''
-    };
-}
+            if (!editor) return null;
+            var subject = modernTitle ? modernTitle.value.trim() : '';
+            var bodyHtml = editor.getHTML();
+            var bodyHasContent = !editorContentIsEmpty(bodyHtml);
+            if (!subject && !bodyHasContent) return null;
+            return {
+                subject: subject,
+                bodyHtml: bodyHasContent ? bodyHtml : ''
+            };
+        }
 
         function persistCurrentDraft() {
             saveDraft(getCurrentDraftKey(), captureCurrentDraft());
@@ -1968,23 +1999,23 @@ function insertLiteEmbed(kind, videoid, opts) {
         }
 
         function isComposerEmpty() {
-            if (editor && !editor.isEmpty) return false;
+            if (editor && !editorContentIsEmpty(editor.getHTML())) return false;
             if (modernTitle && modernTitle.value.trim()) return false;
             return true;
         }
 
         function applyDraftToComposer(draft) {
-    if (!draft) return;
-    if (modernTitle) {
-        modernTitle.value = draft.subject || '';
-    }
-    if (editor && draft.bodyHtml && !editorContentIsEmpty(draft.bodyHtml)) {
-        editor.commands.setContent(draft.bodyHtml, true);
-    }
-    syncToOriginal();
-    updateSendState();
-    updateCharCounter();
-}
+            if (!draft) return;
+            if (modernTitle) {
+                modernTitle.value = draft.subject || '';
+            }
+            if (editor && draft.bodyHtml && !editorContentIsEmpty(draft.bodyHtml)) {
+                editor.commands.setContent(draft.bodyHtml, true);
+            }
+            syncToOriginal();
+            updateSendState();
+            updateCharCounter();
+        }
 
         window.addEventListener('beforeunload', flushPendingDraft);
         document.addEventListener('visibilitychange', function() {
@@ -2001,10 +2032,6 @@ function insertLiteEmbed(kind, videoid, opts) {
             var previewArea = container.querySelector('#modern-preview-area');
             if (!previewArea || previewArea.style.display === 'none') return;
 
-            // Preserve expanded state of quotes and spoilers across re-render.
-            var expandedQuotes = Array.from(previewArea.querySelectorAll('.modern-quote.expanded')).length;
-            var expandedSpoilers = Array.from(previewArea.querySelectorAll('.modern-spoiler.expanded')).length;
-
             var previewHtml = transformPreviewHtml(editor.getHTML());
             var previewContent = previewArea.querySelector('.preview-content');
             if (previewContent) {
@@ -2012,11 +2039,6 @@ function insertLiteEmbed(kind, videoid, opts) {
                 if (window.twemoji) {
                     window.twemoji.parse(previewContent, { base: TWEMOJI_BASE, ext: '.svg' });
                 }
-                // Note: expansion state is intentionally not restored because
-                // the DOM is regenerated from scratch. If a user is reading a
-                // preview and typing simultaneously, they're probably looking
-                // at the top of the doc. Long-form reading scenarios don't
-                // involve concurrent typing.
             }
             initPreviewQuotesAndSpoilers(previewArea);
         }
@@ -2031,50 +2053,54 @@ function insertLiteEmbed(kind, videoid, opts) {
             }, 800);
         }
 
-function updateSendState() {
-    var hasRecipient = !!currentRecipient;
-    var hasSubject   = !!(modernTitle && modernTitle.value.trim().length > 0);
-    var hasBody      = !!(editor && !editorContentIsEmpty(editor.getHTML()));
+        function updateSendState() {
+            var hasRecipient = !!currentRecipient;
+            var hasSubject   = !!(modernTitle && modernTitle.value.trim().length > 0);
+            var hasBody      = !!(editor && !editorContentIsEmpty(editor.getHTML()));
 
-    if (modernSubmitBtnRef) {
-        var sendReady = hasRecipient && hasSubject && hasBody;
-        modernSubmitBtnRef.disabled = !sendReady;
-        modernSubmitBtnRef.setAttribute('aria-disabled', String(!sendReady));
+            if (modernSubmitBtnRef) {
+                var sendReady = hasRecipient && hasSubject && hasBody;
+                modernSubmitBtnRef.disabled = !sendReady;
+                modernSubmitBtnRef.setAttribute('aria-disabled', String(!sendReady));
 
-        if (sendReady) {
-            modernSubmitBtnRef.removeAttribute('title');
-        } else {
-            var missing = [];
-            if (!hasRecipient) missing.push('a recipient');
-            if (!hasSubject)   missing.push('a subject');
-            if (!hasBody)      missing.push('a message body');
-            modernSubmitBtnRef.setAttribute('title', 'Add ' + missing.join(', ') + ' to send');
+                if (sendReady) {
+                    modernSubmitBtnRef.removeAttribute('title');
+                } else {
+                    var missing = [];
+                    if (!hasRecipient) missing.push('a recipient');
+                    if (!hasSubject)   missing.push('a subject');
+                    if (!hasBody)      missing.push('a message body');
+                    modernSubmitBtnRef.setAttribute('title', 'Add ' + missing.join(', ') + ' to send');
+                }
+            }
+
+            if (modernPreviewBtnRef) {
+                var previewReady = hasBody;
+                modernPreviewBtnRef.disabled = !previewReady;
+                modernPreviewBtnRef.setAttribute('aria-disabled', String(!previewReady));
+
+                if (previewReady) {
+                    modernPreviewBtnRef.removeAttribute('title');
+                } else {
+                    modernPreviewBtnRef.setAttribute('title', 'Write a message to preview it');
+                }
+            }
+
+            if (!hasBody) {
+                var previewArea = container.querySelector('#modern-preview-area');
+                if (previewArea && previewArea.style.display !== 'none') {
+                    previewArea.style.display = 'none';
+                }
+            }
         }
-    }
 
-    if (modernPreviewBtnRef) {
-        var previewReady = hasBody;
-        modernPreviewBtnRef.disabled = !previewReady;
-        modernPreviewBtnRef.setAttribute('aria-disabled', String(!previewReady));
-
-        if (previewReady) {
-            modernPreviewBtnRef.removeAttribute('title');
-        } else {
-            modernPreviewBtnRef.setAttribute('title', 'Write a message to preview it');
-        }
-    }
-
-    if (!hasBody) {
-        var previewArea = container.querySelector('#modern-preview-area');
-        if (previewArea && previewArea.style.display !== 'none') {
-            previewArea.style.display = 'none';
-        }
-    }
-}
-
+        // v14: the count comes from editor.storage.characterCount now
+        // (populated by the CharacterCount extension), not editor.getText().
+        // This keeps the counter consistent with the extension's own
+        // internal count and its optional limit enforcement.
         function updateCharCounter() {
-            if (!MAX_MESSAGE_LENGTH) return;
-            var len = editor ? editor.getText().length : 0;
+            if (!MAX_MESSAGE_LENGTH || !editor) return;
+            var len = editor.storage.characterCount.characters();
             if (!charCounter) {
                 charCounter = document.createElement('span');
                 charCounter.className = 'messenger-char-counter';
@@ -2553,72 +2579,72 @@ function updateSendState() {
 
         var blockquoteBtn = makeToolbarButton('fa-regular fa-quote-left', 'Blockquote');
 
-// Unified Code dropdown — replaces the two separate code buttons.
-// Trigger highlights when either inline code or code block is active.
-// Keyboard shortcuts (Ctrl+E for inline) bypass the dropdown and
-// apply directly, since keyboard users don't want extra clicks.
-var codeDropdownContainer = document.createElement('div');
-codeDropdownContainer.className = 'modern-dropdown';
-codeDropdownContainer.style.cssText = 'position:relative;display:inline-block';
-var codeDropdownBtn = document.createElement('button');
-codeDropdownBtn.type = 'button';
-codeDropdownBtn.className = 'modern-editor-btn';
-codeDropdownBtn.innerHTML = '<i class="fa-regular fa-code"></i>';
-codeDropdownBtn.title = 'Code';
-codeDropdownBtn.setAttribute('aria-label', 'Code');
-codeDropdownBtn.setAttribute('aria-haspopup', 'menu');
-codeDropdownBtn.setAttribute('aria-expanded', 'false');
-var codeDropdownMenu = document.createElement('div');
-codeDropdownMenu.className = 'modern-dropdown-menu';
-codeDropdownMenu.setAttribute('role', 'menu');
-codeDropdownMenu.style.cssText = 'position:absolute;top:100%;left:0;background:var(--surface-color);border:1px solid var(--border-color);border-radius:var(--radius-sm);z-index:1000;min-width:180px;display:none;';
-codeDropdownMenu.innerHTML = ''
-    + '<button class="modern-dropdown-item" role="menuitem" id="inline-code-option"><i class="fa-regular fa-code" aria-hidden="true"></i> Inline code</button>'
-    + '<button class="modern-dropdown-item" role="menuitem" id="block-code-option"><i class="fa-regular fa-file-code" aria-hidden="true"></i> Code block</button>';
-codeDropdownContainer.appendChild(codeDropdownBtn);
-codeDropdownContainer.appendChild(codeDropdownMenu);
-toolbar.appendChild(codeDropdownContainer);
+        // Unified Code dropdown — replaces the two separate code buttons.
+        // Trigger highlights when either inline code or code block is active.
+        // Keyboard shortcuts (Ctrl+E for inline) bypass the dropdown and
+        // apply directly, since keyboard users don't want extra clicks.
+        var codeDropdownContainer = document.createElement('div');
+        codeDropdownContainer.className = 'modern-dropdown';
+        codeDropdownContainer.style.cssText = 'position:relative;display:inline-block';
+        var codeDropdownBtn = document.createElement('button');
+        codeDropdownBtn.type = 'button';
+        codeDropdownBtn.className = 'modern-editor-btn';
+        codeDropdownBtn.innerHTML = '<i class="fa-regular fa-code"></i>';
+        codeDropdownBtn.title = 'Code';
+        codeDropdownBtn.setAttribute('aria-label', 'Code');
+        codeDropdownBtn.setAttribute('aria-haspopup', 'menu');
+        codeDropdownBtn.setAttribute('aria-expanded', 'false');
+        var codeDropdownMenu = document.createElement('div');
+        codeDropdownMenu.className = 'modern-dropdown-menu';
+        codeDropdownMenu.setAttribute('role', 'menu');
+        codeDropdownMenu.style.cssText = 'position:absolute;top:100%;left:0;background:var(--surface-color);border:1px solid var(--border-color);border-radius:var(--radius-sm);z-index:1000;min-width:180px;display:none;';
+        codeDropdownMenu.innerHTML = ''
+            + '<button class="modern-dropdown-item" role="menuitem" id="inline-code-option"><i class="fa-regular fa-code" aria-hidden="true"></i> Inline code</button>'
+            + '<button class="modern-dropdown-item" role="menuitem" id="block-code-option"><i class="fa-regular fa-file-code" aria-hidden="true"></i> Code block</button>';
+        codeDropdownContainer.appendChild(codeDropdownBtn);
+        codeDropdownContainer.appendChild(codeDropdownMenu);
+        toolbar.appendChild(codeDropdownContainer);
 
-codeDropdownBtn.onclick = function(e) {
-    e.stopPropagation();
-    var isOpen = codeDropdownMenu.style.display === 'block';
-    document.querySelectorAll('.modern-dropdown-menu').forEach(function(m) { m.style.display = 'none'; });
-    document.querySelectorAll('.modern-editor-btn[aria-haspopup="menu"]').forEach(function(b) { b.setAttribute('aria-expanded', 'false'); });
-    if (!isOpen) openDropdown(codeDropdownBtn, codeDropdownMenu);
-};
-codeDropdownMenu.addEventListener('click', function(e) { e.stopPropagation(); });
+        codeDropdownBtn.onclick = function(e) {
+            e.stopPropagation();
+            var isOpen = codeDropdownMenu.style.display === 'block';
+            document.querySelectorAll('.modern-dropdown-menu').forEach(function(m) { m.style.display = 'none'; });
+            document.querySelectorAll('.modern-editor-btn[aria-haspopup="menu"]').forEach(function(b) { b.setAttribute('aria-expanded', 'false'); });
+            if (!isOpen) openDropdown(codeDropdownBtn, codeDropdownMenu);
+        };
+        codeDropdownMenu.addEventListener('click', function(e) { e.stopPropagation(); });
 
-codeDropdownMenu.querySelector('#inline-code-option').onclick = function() {
-    if (!editor) return;
-    exec(function() { editor.chain().focus().toggleCode().run(); });
-    closeDropdown(codeDropdownBtn, codeDropdownMenu);
-};
+        codeDropdownMenu.querySelector('#inline-code-option').onclick = function() {
+            if (!editor) return;
+            exec(function() { editor.chain().focus().toggleCode().run(); });
+            closeDropdown(codeDropdownBtn, codeDropdownMenu);
+        };
 
-codeDropdownMenu.querySelector('#block-code-option').onclick = function() {
-    if (!editor) return;
-    closeDropdown(codeDropdownBtn, codeDropdownMenu);
+        codeDropdownMenu.querySelector('#block-code-option').onclick = function() {
+            if (!editor) return;
+            closeDropdown(codeDropdownBtn, codeDropdownMenu);
 
-    if (editor.isActive('codeBlock')) {
-        var currentLang = editor.getAttributes('codeBlock').language || '';
-        showCodeLangModal(currentLang, function(lang) {
-            editor.chain().focus().updateAttributes('codeBlock', {
-                language: lang || null
-            }).run();
-        });
-        return;
-    }
+            if (editor.isActive('codeBlock')) {
+                var currentLang = editor.getAttributes('codeBlock').language || '';
+                showCodeLangModal(currentLang, function(lang) {
+                    editor.chain().focus().updateAttributes('codeBlock', {
+                        language: lang || null
+                    }).run();
+                });
+                return;
+            }
 
-    showCodeLangModal('', function(lang) {
-        var chain = editor.chain().focus();
-        if (lang) {
-            chain.setCodeBlock({ language: lang }).run();
-        } else {
-            chain.setCodeBlock().run();
-        }
-    });
-};
+            showCodeLangModal('', function(lang) {
+                var chain = editor.chain().focus();
+                if (lang) {
+                    chain.setCodeBlock({ language: lang }).run();
+                } else {
+                    chain.setCodeBlock().run();
+                }
+            });
+        };
 
-addSeparator();
+        addSeparator();
 
         var linkBtn = makeToolbarButton('fa-regular fa-link', 'Insert link', { shortcut: 'Control+K' });
 
@@ -2723,8 +2749,8 @@ addSeparator();
                         e.stopPropagation();
                         if (editor) {
                             var emojiChar = this.getAttribute('data-emoji');
-                            // FIX: emoji must use the inline `emoji` node, not
-                            // `image` (which is now block-level). Using `image`
+                            // Emoji must use the inline `emoji` node, not
+                            // `image` (which is block-level). Using `image`
                             // would place every picked emoji on its own line.
                             editor.chain().focus().insertContent({
                                 type: 'emoji',
@@ -3361,7 +3387,7 @@ addSeparator();
                 var triggerStart = from - queryLen - 1;
 
                 var cp = emojiToCodePoint(item.emoji);
-                // FIX: emoji must use the inline `emoji` node, not `image`.
+                // Emoji must use the inline `emoji` node, not `image`.
                 editorInstance.chain().focus()
                     .deleteRange({ from: triggerStart, to: from })
                     .insertContent({
@@ -3448,18 +3474,27 @@ addSeparator();
                     throw new Error('Editor, Node, Mark, Extension, or InputRule not found in @tiptap/core');
                 }
 
-                // FIX: TextSelection is required by the trailing-paragraph
+                // TextSelection is required by the trailing-paragraph
                 // plugin to move the caret into the paragraph it inserts.
                 const { Plugin, PluginKey, TextSelection } = await import('https://esm.sh/prosemirror-state@1.4.3');
                 const { Decoration, DecorationSet } = await import('https://esm.sh/prosemirror-view@1.33.0');
 
+                // v14: imports for the ecosystem extensions.
+                //  - codeBlockModule was dropped; CodeBlockLowlight
+                //    replaces it outright.
+                //  - lowlight supplies highlight.js's tokenizer under a
+                //    flat createLowlight(common) API.
+                //  - CharacterCount and Typography are new additions.
                 const starterKitModule = await import('https://esm.sh/@tiptap/starter-kit@2.5.2');
                 const placeholderModule = await import('https://esm.sh/@tiptap/extension-placeholder@2.5.2');
                 const underlineModule = await import('https://esm.sh/@tiptap/extension-underline@2.5.2');
                 const imageModule = await import('https://esm.sh/@tiptap/extension-image@2.5.2');
                 const linkModule = await import('https://esm.sh/@tiptap/extension-link@2.5.2');
                 const mentionModule = await import('https://esm.sh/@tiptap/extension-mention@2.5.2');
-                const codeBlockModule = await import('https://esm.sh/@tiptap/extension-code-block@2.5.2');
+                const codeBlockLowlightModule = await import('https://esm.sh/@tiptap/extension-code-block-lowlight@2.5.2');
+                const lowlightModule = await import('https://esm.sh/lowlight@3');
+                const characterCountModule = await import('https://esm.sh/@tiptap/extension-character-count@2.5.2');
+                const typographyModule = await import('https://esm.sh/@tiptap/extension-typography@2.5.2');
 
                 const StarterKit = starterKitModule.StarterKit || (starterKitModule.default && starterKitModule.default.StarterKit);
                 const Placeholder = placeholderModule.Placeholder || (placeholderModule.default && placeholderModule.default.Placeholder);
@@ -3467,10 +3502,29 @@ addSeparator();
                 const BaseImage = imageModule.Image || (imageModule.default && imageModule.default.Image);
                 const Link = linkModule.Link || (linkModule.default && linkModule.default.Link);
                 const Mention = mentionModule.Mention || (mentionModule.default && mentionModule.default.Mention);
-                const BaseCodeBlock = codeBlockModule.CodeBlock || (codeBlockModule.default && codeBlockModule.default.CodeBlock);
+
+                const CodeBlockLowlight =
+                    codeBlockLowlightModule.CodeBlockLowlight ||
+                    (codeBlockLowlightModule.default && codeBlockLowlightModule.default.CodeBlockLowlight);
+                const createLowlight = lowlightModule.createLowlight;
+                const common = lowlightModule.common;
+                const CharacterCount =
+                    characterCountModule.CharacterCount ||
+                    (characterCountModule.default && characterCountModule.default.CharacterCount);
+                const Typography =
+                    typographyModule.Typography ||
+                    (typographyModule.default && typographyModule.default.Typography);
 
                 if (!Mention) throw new Error('Mention extension not found');
-                if (!BaseCodeBlock) throw new Error('CodeBlock extension not found');
+                if (!CodeBlockLowlight) throw new Error('CodeBlockLowlight extension not found');
+                if (!createLowlight || !common) throw new Error('lowlight createLowlight or common not found');
+                if (!CharacterCount) throw new Error('CharacterCount extension not found');
+                if (!Typography) throw new Error('Typography extension not found');
+
+                // One lowlight instance for the whole editor. `common` bundles
+                // the ~35 languages highlight.js considers the common set,
+                // which comfortably covers CODE_LANGUAGE_SUGGESTIONS.
+                const lowlight = createLowlight(common);
 
                 const CustomLink = Link.configure({
                     openOnClick: false,
@@ -3555,7 +3609,17 @@ addSeparator();
                     },
                 });
 
-                const CustomCodeBlock = BaseCodeBlock.extend({
+                // v14: CodeBlockLowlight extended rather than BaseCodeBlock.
+                // The language attribute plumbing is unchanged; what changes
+                // is that the editor's own rendering goes through
+                // highlight.js, so the code you see while typing is
+                // correctly tokenized per language.
+                //
+                // htmlToLegacy strips every inner tag before writing the
+                // [CODE] payload, so the hljs-* spans never reach the
+                // forum. transformPreviewHtml reads textContent, so the
+                // reader-side highlighter still runs on plain source.
+                const CustomCodeBlock = CodeBlockLowlight.extend({
                     addAttributes() {
                         return {
                             ...this.parent?.(),
@@ -3566,7 +3630,7 @@ addSeparator();
                             },
                         };
                     },
-                });
+                }).configure({ lowlight });
 
                 const emoticonPattern = Object.keys(ASCII_EMOTICON_MAP)
                     .sort(function(a, b) { return b.length - a.length; })
@@ -3589,7 +3653,7 @@ addSeparator();
                                     const emojiUrl = TWEMOJI_BASE + codepoint + '.svg';
                                     const emoticonStart = range.to - emoticon.length;
 
-                                    // FIX: use the inline emoji node, not image.
+                                    // Use the inline emoji node, not image.
                                     const emojiNode = state.schema.nodes.emoji.create({
                                         src: emojiUrl,
                                         alt: unicodeEmoji,
@@ -3785,10 +3849,10 @@ addSeparator();
                                         'span',
                                         { class: 'link-preview-text' },
                                         ['span', { class: 'link-preview-title' }, title || href],
-node.attrs.author
-    ? ['span', { class: 'link-preview-author' }, node.attrs.author]
-    : '',
-description ? ['span', { class: 'link-preview-description' }, description] : '',
+                                        node.attrs.author
+                                            ? ['span', { class: 'link-preview-author' }, node.attrs.author]
+                                            : '',
+                                        description ? ['span', { class: 'link-preview-description' }, description] : '',
                                         [
                                             'span',
                                             { class: 'link-preview-url-wrapper' },
@@ -4346,147 +4410,210 @@ description ? ['span', { class: 'link-preview-description' }, description] : '',
                 });
 
                 // ------------------------------------------------------------------
-// Collapse the document back to a single empty paragraph whenever
-// every top-level node is an empty paragraph. This is what actually
-// restores the TipTap placeholder after a full delete: without it,
-// deleting the last text / image can leave a stack of empty
-// paragraphs that editor.isEmpty (and the Placeholder decoration)
-// treat as non-empty, so the hint never re-renders and a stale
-// draft survives a reload.
-//
-// The check is deliberately narrow — only empty paragraphs trigger
-// the collapse. An empty code block, an empty spoiler, an image,
-// a lite embed, or anything else structural is left alone so the
-// user can still insert a block and then type into it.
-// ------------------------------------------------------------------
-const NormalizeEmptyDoc = Extension.create({
-    name: 'normalizeEmptyDoc',
-    addProseMirrorPlugins() {
-        return [
-            new Plugin({
-                key: new PluginKey('normalizeEmptyDoc'),
-                appendTransaction(transactions, oldState, newState) {
-                    if (!transactions.some(tr => tr.docChanged)) return null;
+                // Collapse the document back to a single empty paragraph whenever
+                // every top-level node is an empty paragraph. This is what actually
+                // restores the TipTap placeholder after a full delete: without it,
+                // deleting the last text / image can leave a stack of empty
+                // paragraphs that editor.isEmpty (and the Placeholder decoration)
+                // treat as non-empty, so the hint never re-renders and a stale
+                // draft survives a reload.
+                //
+                // The check is deliberately narrow — only empty paragraphs trigger
+                // the collapse. An empty code block, an empty spoiler, an image,
+                // a lite embed, or anything else structural is left alone so the
+                // user can still insert a block and then type into it.
+                // ------------------------------------------------------------------
+                const NormalizeEmptyDoc = Extension.create({
+                    name: 'normalizeEmptyDoc',
+                    addProseMirrorPlugins() {
+                        return [
+                            new Plugin({
+                                key: new PluginKey('normalizeEmptyDoc'),
+                                appendTransaction(transactions, oldState, newState) {
+                                    if (!transactions.some(tr => tr.docChanged)) return null;
 
-                    const doc = newState.doc;
-                    if (doc.childCount === 0) return null;
+                                    const doc = newState.doc;
+                                    if (doc.childCount === 0) return null;
 
-                    const allEmptyParagraphs = doc.content.content.every(
-                        child => child.type.name === 'paragraph' && child.content.size === 0
-                    );
-                    if (!allEmptyParagraphs) return null;
+                                    const allEmptyParagraphs = doc.content.content.every(
+                                        child => child.type.name === 'paragraph' && child.content.size === 0
+                                    );
+                                    if (!allEmptyParagraphs) return null;
 
-                    // Already just one empty paragraph? Nothing to do.
-                    if (doc.childCount === 1) return null;
+                                    // Already just one empty paragraph? Nothing to do.
+                                    if (doc.childCount === 1) return null;
 
-                    const paragraph = newState.schema.nodes.paragraph.create();
-                    const tr = newState.tr;
-                    tr.replaceWith(0, doc.content.size, paragraph);
+                                    const paragraph = newState.schema.nodes.paragraph.create();
+                                    const tr = newState.tr;
+                                    tr.replaceWith(0, doc.content.size, paragraph);
 
-                    const $pos = tr.doc.resolve(1);
-                    tr.setSelection(TextSelection.near($pos));
+                                    const $pos = tr.doc.resolve(1);
+                                    tr.setSelection(TextSelection.near($pos));
 
-                    return tr;
-                },
-            }),
-        ];
-    },
-});
-
-// ------------------------------------------------------------------
-// Trailing paragraph after a block atom (lite embed or image).
-// A block-level leaf has no internal text positions, so when it's
-// the last node in the doc there is no position after it for a
-// cursor to land on. This plugin inserts an empty paragraph and
-// moves the selection into it — without the selection move, the
-// caret sits in a gap position that ProseMirror won't render,
-// and the user has to click before typing.
-//
-// Wrapped as a TipTap Extension so ProseMirror receives it through
-// the state pipeline — appendTransaction is a state-level hook and
-// cannot be passed via editorProps.plugins.
-// ------------------------------------------------------------------
-const TrailingEmbedParagraph = Extension.create({
-    name: 'trailingEmbedParagraph',
-    addProseMirrorPlugins() {
-        return [
-            new Plugin({
-                key: new PluginKey('trailingEmbedParagraph'),
-                appendTransaction(transactions, oldState, newState) {
-                    if (!transactions.some(tr => tr.docChanged)) return null;
-                    const lastNode = newState.doc.lastChild;
-                    if (!lastNode) return null;
-                    const name = lastNode.type.name;
-                    if (name !== 'liteYouTube' && name !== 'liteVimeo' && name !== 'image') {
-                        return null;
-                    }
-                    const paragraph = newState.schema.nodes.paragraph.create();
-                    const tr = newState.tr.insert(newState.doc.content.size, paragraph);
-
-                    // Move the cursor into the new paragraph so typing
-                    // works immediately. Without this the selection sits
-                    // in the gap between the atom and the paragraph.
-                    const $pos = tr.doc.resolve(tr.doc.content.size - 1);
-                    tr.setSelection(TextSelection.near($pos));
-
-                    return tr;
-                },
-            }),
-        ];
-    },
-});
-
-// ------------------------------------------------------------------
-// Range-selection highlight for lite embeds.
-// A click directly on the embed produces a NodeSelection, which
-// ProseMirror marks with .ProseMirror-selectednode. A drag-select
-// that spans the embed produces a TextSelection, which does not get
-// a class — and the browser's native selection can't paint over the
-// custom element. This plugin adds .lite-embed-in-selection to any
-// embed that participates in a non-empty range selection.
-// ------------------------------------------------------------------
-const LiteEmbedSelection = Extension.create({
-    name: 'liteEmbedSelection',
-    addProseMirrorPlugins() {
-        return [
-            new Plugin({
-                key: new PluginKey('liteEmbedSelection'),
-                props: {
-                    decorations(state) {
-                        const { from, to, empty } = state.selection;
-                        if (empty) return null;
-                        const decorations = [];
-                        state.doc.nodesBetween(from, to, (node, pos) => {
-                            if (node.type.name === 'liteYouTube' || node.type.name === 'liteVimeo') {
-                                decorations.push(
-                                    Decoration.node(pos, pos + node.nodeSize, {
-                                        class: 'lite-embed-in-selection',
-                                    })
-                                );
-                            }
-                        });
-                        return DecorationSet.create(state.doc, decorations);
+                                    return tr;
+                                },
+                            }),
+                        ];
                     },
-                },
-            }),
-        ];
-    },
-});
+                });
+
+                // ------------------------------------------------------------------
+                // Backspace / Delete adjacent to a block atom.
+                //
+                // ProseMirror's default Backspace at the start of a paragraph runs
+                // joinBackwards, which can only merge textblocks. Block atoms
+                // (image, liteYouTube, liteVimeo) have no content to merge, so the
+                // command silently fails and the user sees nothing happen. Same for
+                // Delete at the end of the previous paragraph.
+                //
+                // This handler detects an empty selection at a textblock boundary
+                // whose neighbour is an atom, and deletes that atom explicitly.
+                // ------------------------------------------------------------------
+                const DeleteAdjacentAtom = Extension.create({
+                    name: 'deleteAdjacentAtom',
+                    addKeyboardShortcuts() {
+                        const deleteAtomBefore = () => {
+                            const { state, view } = this.editor;
+                            const { selection } = state;
+                            if (!selection.empty) return false;
+
+                            const $from = selection.$from;
+                            // Only at the very start of a textblock.
+                            if ($from.parentOffset !== 0) return false;
+                            // The block itself must sit inside a textblock, not at
+                            // the doc root — otherwise before() throws.
+                            if ($from.depth === 0) return false;
+
+                            const blockStart = $from.before($from.depth);
+                            const nodeBefore = state.doc.resolve(blockStart).nodeBefore;
+                            if (!nodeBefore || !nodeBefore.type.spec.atom) return false;
+
+                            view.dispatch(
+                                state.tr.delete(blockStart - nodeBefore.nodeSize, blockStart)
+                            );
+                            return true;
+                        };
+
+                        const deleteAtomAfter = () => {
+                            const { state, view } = this.editor;
+                            const { selection } = state;
+                            if (!selection.empty) return false;
+
+                            const $from = selection.$from;
+                            // Only at the very end of a textblock.
+                            if ($from.parentOffset !== $from.parent.content.size) return false;
+
+                            const blockEnd = $from.after($from.depth);
+                            const nodeAfter = state.doc.resolve(blockEnd).nodeAfter;
+                            if (!nodeAfter || !nodeAfter.type.spec.atom) return false;
+
+                            view.dispatch(
+                                state.tr.delete(blockEnd, blockEnd + nodeAfter.nodeSize)
+                            );
+                            return true;
+                        };
+
+                        return {
+                            Backspace: deleteAtomBefore,
+                            Delete: deleteAtomAfter,
+                        };
+                    },
+                });
+
+                // ------------------------------------------------------------------
+                // Trailing paragraph after a block atom (lite embed or image).
+                // A block-level leaf has no internal text positions, so when it's
+                // the last node in the doc there is no position after it for a
+                // cursor to land on. This plugin inserts an empty paragraph and
+                // moves the selection into it — without the selection move, the
+                // caret sits in a gap position that ProseMirror won't render,
+                // and the user has to click before typing.
+                //
+                // Wrapped as a TipTap Extension so ProseMirror receives it through
+                // the state pipeline — appendTransaction is a state-level hook and
+                // cannot be passed via editorProps.plugins.
+                // ------------------------------------------------------------------
+                const TrailingEmbedParagraph = Extension.create({
+                    name: 'trailingEmbedParagraph',
+                    addProseMirrorPlugins() {
+                        return [
+                            new Plugin({
+                                key: new PluginKey('trailingEmbedParagraph'),
+                                appendTransaction(transactions, oldState, newState) {
+                                    if (!transactions.some(tr => tr.docChanged)) return null;
+                                    const lastNode = newState.doc.lastChild;
+                                    if (!lastNode) return null;
+                                    const name = lastNode.type.name;
+                                    if (name !== 'liteYouTube' && name !== 'liteVimeo' && name !== 'image') {
+                                        return null;
+                                    }
+                                    const paragraph = newState.schema.nodes.paragraph.create();
+                                    const tr = newState.tr.insert(newState.doc.content.size, paragraph);
+
+                                    // Move the cursor into the new paragraph so typing
+                                    // works immediately. Without this the selection sits
+                                    // in the gap between the atom and the paragraph.
+                                    const $pos = tr.doc.resolve(tr.doc.content.size - 1);
+                                    tr.setSelection(TextSelection.near($pos));
+
+                                    return tr;
+                                },
+                            }),
+                        ];
+                    },
+                });
+
+                // ------------------------------------------------------------------
+                // Range-selection highlight for lite embeds.
+                // A click directly on the embed produces a NodeSelection, which
+                // ProseMirror marks with .ProseMirror-selectednode. A drag-select
+                // that spans the embed produces a TextSelection, which does not get
+                // a class — and the browser's native selection can't paint over the
+                // custom element. This plugin adds .lite-embed-in-selection to any
+                // embed that participates in a non-empty range selection.
+                // ------------------------------------------------------------------
+                const LiteEmbedSelection = Extension.create({
+                    name: 'liteEmbedSelection',
+                    addProseMirrorPlugins() {
+                        return [
+                            new Plugin({
+                                key: new PluginKey('liteEmbedSelection'),
+                                props: {
+                                    decorations(state) {
+                                        const { from, to, empty } = state.selection;
+                                        if (empty) return null;
+                                        const decorations = [];
+                                        state.doc.nodesBetween(from, to, (node, pos) => {
+                                            if (node.type.name === 'liteYouTube' || node.type.name === 'liteVimeo') {
+                                                decorations.push(
+                                                    Decoration.node(pos, pos + node.nodeSize, {
+                                                        class: 'lite-embed-in-selection',
+                                                    })
+                                                );
+                                            }
+                                        });
+                                        return DecorationSet.create(state.doc, decorations);
+                                    },
+                                },
+                            }),
+                        ];
+                    },
+                });
 
                 var textareaRaw = originalTextarea ? (originalTextarea.value || '') : '';
                 var initialHtml = textareaRaw ? legacyToHtml(textareaRaw) : '';
 
                 if (!textareaRaw.trim()) {
-    var initDraft = getDraft(getCurrentDraftKey());
-    if (initDraft) {
-        if (initDraft.bodyHtml && !editorContentIsEmpty(initDraft.bodyHtml)) {
-            initialHtml = initDraft.bodyHtml;
-        }
-        if (initDraft.subject && modernTitle) {
-            modernTitle.value = initDraft.subject;
-        }
-    }
-}
+                    var initDraft = getDraft(getCurrentDraftKey());
+                    if (initDraft) {
+                        if (initDraft.bodyHtml && !editorContentIsEmpty(initDraft.bodyHtml)) {
+                            initialHtml = initDraft.bodyHtml;
+                        }
+                        if (initDraft.subject && modernTitle) {
+                            modernTitle.value = initDraft.subject;
+                        }
+                    }
+                }
 
                 initialHtml = ensureTrailingParagraphInHtml(initialHtml);
 
@@ -4495,7 +4622,17 @@ const LiteEmbedSelection = Extension.create({
                     extensions: [
                         StarterKit.configure({ codeBlock: false }),
                         CustomCodeBlock,
-                        Placeholder.configure({ placeholder: 'Write your message…' }),
+
+                        // v14: function-form placeholder so headings and
+                        // code blocks can carry their own hint text.
+                        Placeholder.configure({
+                            placeholder: ({ node }) => {
+                                if (node.type.name === 'heading') return 'Heading…';
+                                if (node.type.name === 'codeBlock') return '';
+                                return 'Write your message…';
+                            },
+                        }),
+
                         Underline,
                         CustomImage,
                         Emoji,
@@ -4510,7 +4647,22 @@ const LiteEmbedSelection = Extension.create({
                         EmoticonRule,
                         TrailingEmbedParagraph,
                         NormalizeEmptyDoc,
+                        DeleteAdjacentAtom,
                         LiteEmbedSelection,
+
+                        // v14: CharacterCount powers updateCharCounter and
+                        // the send-path length check. The limit matches
+                        // MAX_MESSAGE_LENGTH when one is configured;
+                        // otherwise the extension counts without blocking.
+                        CharacterCount.configure({
+                            limit: MAX_MESSAGE_LENGTH > 0 ? MAX_MESSAGE_LENGTH : null,
+                        }),
+
+                        // v14: Typography supplies the standard em-dash,
+                        // ellipsis, and smart-quote InputRules. Runs on the
+                        // same keymap as EmoticonRule; their patterns are
+                        // disjoint so there's no conflict.
+                        Typography,
                     ],
                     content: initialHtml,
                     editorProps: {
@@ -4531,133 +4683,143 @@ const LiteEmbedSelection = Extension.create({
                                 .replace(/\u00a0/g, ' ')
                                 .replace(/ {2,}/g, ' ');
                         },
-handlePaste: function(view, event) {
-    // ----- 1. File paste (images) -----
-    // Runs first because a pasted file is orthogonal to cursor
-    // position — if the clipboard carries an image, we always
-    // want to upload it, regardless of where the cursor is.
-    var files = event.clipboardData ? event.clipboardData.files : null;
-    if (files && files.length) {
-        var imgs = Array.prototype.slice.call(files).filter(function(f) {
-            return f.type && f.type.indexOf('image/') === 0;
-        });
-        if (imgs.length) {
-            event.preventDefault();
-            imgs.forEach(function(f) { uploadImageToWorker(f, editor); });
-            return true;
-        }
-    }
+                        handlePaste: function(view, event) {
+                            // ----- 1. File paste (images) -----
+                            // Runs first because a pasted file is orthogonal to
+                            // cursor position — if the clipboard carries an
+                            // image, we always want to upload it, regardless of
+                            // where the cursor is.
+                            var files = event.clipboardData ? event.clipboardData.files : null;
+                            if (files && files.length) {
+                                var imgs = Array.prototype.slice.call(files).filter(function(f) {
+                                    return f.type && f.type.indexOf('image/') === 0;
+                                });
+                                if (imgs.length) {
+                                    event.preventDefault();
+                                    imgs.forEach(function(f) { uploadImageToWorker(f, editor); });
+                                    return true;
+                                }
+                            }
 
-    // ----- 2. Inline-code paste -----
-    // When the cursor is inside a code mark and the clipboard
-    // carries plain text, insert it as a single text node with the
-    // mark explicitly applied. Without this, the default paste path
-    // treats the insertion as a batch and the mark's boundary rules
-    // (inclusive: false, same as bold) can leave the pasted run
-    // unmarked — the pill splits into two around the pasted word.
-    // Newlines and whitespace runs collapse to single spaces so a
-    // multi-line snippet becomes a one-line pill; a multi-line
-    // paste isn't what inline code is for, and forcing the collapse
-    // nudges users toward the code-block button for real snippets.
-    if (view.state.selection.empty) {
-        var $from = view.state.selection.$from;
-        var codeMarkType = view.state.schema.marks.code;
-        var hasCode = codeMarkType && codeMarkType.isInSet($from.marks());
-        if (hasCode) {
-            var pasteText = event.clipboardData
-                ? event.clipboardData.getData('text/plain')
-                : '';
-            if (pasteText && pasteText.length > 0) {
-                event.preventDefault();
-                var collapsed = pasteText.replace(/\s+/g, ' ').trim();
-                if (collapsed) {
-                    view.dispatch(view.state.tr.insertText(collapsed));
-                }
-                return true;
-            }
-        }
-    }
+                            // ----- 2. Inline-code paste -----
+                            // When the cursor is inside a code mark and the
+                            // clipboard carries plain text, insert it as a
+                            // single text node with the mark explicitly
+                            // applied. Without this, the default paste path
+                            // treats the insertion as a batch and the mark's
+                            // boundary rules (inclusive: false, same as bold)
+                            // can leave the pasted run unmarked — the pill
+                            // splits into two around the pasted word.
+                            // Newlines and whitespace runs collapse to single
+                            // spaces so a multi-line snippet becomes a
+                            // one-line pill; a multi-line paste isn't what
+                            // inline code is for, and forcing the collapse
+                            // nudges users toward the code-block button for
+                            // real snippets.
+                            if (view.state.selection.empty) {
+                                var $from = view.state.selection.$from;
+                                var codeMarkType = view.state.schema.marks.code;
+                                var hasCode = codeMarkType && codeMarkType.isInSet($from.marks());
+                                if (hasCode) {
+                                    var pasteText = event.clipboardData
+                                        ? event.clipboardData.getData('text/plain')
+                                        : '';
+                                    if (pasteText && pasteText.length > 0) {
+                                        event.preventDefault();
+                                        var collapsed = pasteText.replace(/\s+/g, ' ').trim();
+                                        if (collapsed) {
+                                            view.dispatch(view.state.tr.insertText(collapsed));
+                                        }
+                                        return true;
+                                    }
+                                }
+                            }
 
-    // ----- 3. Shift + paste override -----
-    // Shift+paste is the browser-level "paste as plain text" gesture.
-    // If the user is not inside a code mark and held Shift, we insert
-    // the plain-text version directly so the source's rich formatting
-    // is dropped.
-    if (event.shiftKey) {
-        var text = event.clipboardData.getData('text/plain');
-        if (text) {
-            event.preventDefault();
-            view.dispatch(view.state.tr.insertText(text));
-            return true;
-        }
-    }
+                            // ----- 3. Shift + paste override -----
+                            // Shift+paste is the browser-level "paste as plain
+                            // text" gesture. If the user is not inside a code
+                            // mark and held Shift, we insert the plain-text
+                            // version directly so the source's rich formatting
+                            // is dropped.
+                            if (event.shiftKey) {
+                                var text = event.clipboardData.getData('text/plain');
+                                if (text) {
+                                    event.preventDefault();
+                                    view.dispatch(view.state.tr.insertText(text));
+                                    return true;
+                                }
+                            }
 
-    // ----- 4. Lite embeds (YouTube, Vimeo) -----
-    // Two entry points: pasted iframe HTML from an embed code, or a
-    // bare video URL. Both resolve to the same atom nodes so the reader
-    // side can render the lite facade. Start / end timestamps, when
-    // present in the source, are captured and forwarded to the node.
-    var clipboard = event.clipboardData;
-    if (clipboard) {
-        // 4a. iframe HTML — extract the src and hand it to the URL
-        // parser so start/end params ride along.
-        var htmlData = clipboard.getData('text/html');
-        if (htmlData && htmlData.indexOf('<iframe') !== -1) {
-            var srcMatch = htmlData.match(/<iframe[^>]+src=["']([^"']+)["']/i);
-            var iframeSrc = srcMatch ? srcMatch[1].replace(/&amp;/g, '&') : '';
-            if (iframeSrc) {
-                var ytFromIframe = parseYouTubeUrl(iframeSrc);
-                if (ytFromIframe) {
-                    event.preventDefault();
-                    insertLiteEmbed('liteYouTube', ytFromIframe.videoid, {
-                        start: ytFromIframe.start,
-                        end: ytFromIframe.end
-                    });
-                    return true;
-                }
-                var vmFromIframe = parseVimeoUrl(iframeSrc);
-                if (vmFromIframe) {
-                    event.preventDefault();
-                    insertLiteEmbed('liteVimeo', vmFromIframe.videoid, {
-                        start: vmFromIframe.start
-                    });
-                    return true;
-                }
-            }
-        }
+                            // ----- 4. Lite embeds (YouTube, Vimeo) -----
+                            // Two entry points: pasted iframe HTML from an embed
+                            // code, or a bare video URL. Both resolve to the
+                            // same atom nodes so the reader side can render the
+                            // lite facade. Start / end timestamps, when present
+                            // in the source, are captured and forwarded to the
+                            // node.
+                            var clipboard = event.clipboardData;
+                            if (clipboard) {
+                                // 4a. iframe HTML — extract the src and hand it
+                                // to the URL parser so start/end params ride
+                                // along.
+                                var htmlData = clipboard.getData('text/html');
+                                if (htmlData && htmlData.indexOf('<iframe') !== -1) {
+                                    var srcMatch = htmlData.match(/<iframe[^>]+src=["']([^"']+)["']/i);
+                                    var iframeSrc = srcMatch ? srcMatch[1].replace(/&amp;/g, '&') : '';
+                                    if (iframeSrc) {
+                                        var ytFromIframe = parseYouTubeUrl(iframeSrc);
+                                        if (ytFromIframe) {
+                                            event.preventDefault();
+                                            insertLiteEmbed('liteYouTube', ytFromIframe.videoid, {
+                                                start: ytFromIframe.start,
+                                                end: ytFromIframe.end
+                                            });
+                                            return true;
+                                        }
+                                        var vmFromIframe = parseVimeoUrl(iframeSrc);
+                                        if (vmFromIframe) {
+                                            event.preventDefault();
+                                            insertLiteEmbed('liteVimeo', vmFromIframe.videoid, {
+                                                start: vmFromIframe.start
+                                            });
+                                            return true;
+                                        }
+                                    }
+                                }
 
-        // 4b. Bare URL
-        var textData = clipboard.getData('text/plain');
-        if (textData) {
-            var candidate = textData.trim();
-            if (/^https?:\/\/\S+$/.test(candidate)) {
-                var yt = parseYouTubeUrl(candidate);
-                if (yt) {
-                    event.preventDefault();
-                    insertLiteEmbed('liteYouTube', yt.videoid, {
-                        start: yt.start,
-                        end: yt.end
-                    });
-                    return true;
-                }
-                var vm = parseVimeoUrl(candidate);
-                if (vm) {
-                    event.preventDefault();
-                    insertLiteEmbed('liteVimeo', vm.videoid, {
-                        start: vm.start
-                    });
-                    return true;
-                }
-            }
-        }
-    }
+                                // 4b. Bare URL
+                                var textData = clipboard.getData('text/plain');
+                                if (textData) {
+                                    var candidate = textData.trim();
+                                    if (/^https?:\/\/\S+$/.test(candidate)) {
+                                        var yt = parseYouTubeUrl(candidate);
+                                        if (yt) {
+                                            event.preventDefault();
+                                            insertLiteEmbed('liteYouTube', yt.videoid, {
+                                                start: yt.start,
+                                                end: yt.end
+                                            });
+                                            return true;
+                                        }
+                                        var vm = parseVimeoUrl(candidate);
+                                        if (vm) {
+                                            event.preventDefault();
+                                            insertLiteEmbed('liteVimeo', vm.videoid, {
+                                                start: vm.start
+                                            });
+                                            return true;
+                                        }
+                                    }
+                                }
+                            }
 
-    // ----- 5. Fall through -----
-    // Let the default ProseMirror paste handler run. This covers
-    // ordinary rich-text pastes (from web pages, Word, other editors)
-    // that go through the transformPastedHTML preprocessing.
-    return false;
-},
+                            // ----- 5. Fall through -----
+                            // Let the default ProseMirror paste handler run.
+                            // This covers ordinary rich-text pastes (from web
+                            // pages, Word, other editors) that go through the
+                            // transformPastedHTML preprocessing.
+                            return false;
+                        },
                     },
                     onCreate: function({ editor }) {
                         if (!window.matchMedia('(hover: hover) and (pointer: fine)').matches) return;
@@ -4666,32 +4828,33 @@ handlePaste: function(view, event) {
                         editor.commands.focus('end');
                     },
                     onUpdate: function({ editor }) {
-    var html = editor.getHTML();
+                        var html = editor.getHTML();
 
-    if (originalTextarea) {
-        originalTextarea.value = htmlToLegacy(html);
-    }
+                        if (originalTextarea) {
+                            originalTextarea.value = htmlToLegacy(html);
+                        }
 
-    if (editorContentIsEmpty(html)) {
-        // Effectively empty — kill any pending save and wipe the stored
-        // draft so a reload can't resurrect deleted content.
-        if (draftSaveTimer) {
-            clearTimeout(draftSaveTimer);
-            draftSaveTimer = null;
-        }
-        clearDraft(getCurrentDraftKey());
-    } else {
-        persistCurrentDraftDebounced();
-    }
+                        if (editorContentIsEmpty(html)) {
+                            // Effectively empty — kill any pending save and
+                            // wipe the stored draft so a reload can't
+                            // resurrect deleted content.
+                            if (draftSaveTimer) {
+                                clearTimeout(draftSaveTimer);
+                                draftSaveTimer = null;
+                            }
+                            clearDraft(getCurrentDraftKey());
+                        } else {
+                            persistCurrentDraftDebounced();
+                        }
 
-    updateSendState();
-    updateCharCounter();
-    scheduleLivePreviewRefresh();
-}
+                        updateSendState();
+                        updateCharCounter();
+                        scheduleLivePreviewRefresh();
+                    }
                 });
 
                 modernSubmitBtnRef = container.querySelector('#modern-submit');
-modernPreviewBtnRef = container.querySelector('#modern-preview');
+                modernPreviewBtnRef = container.querySelector('#modern-preview');
 
                 undoBtn.onclick = function() { exec(function() { editor.chain().focus().undo().run(); }); };
                 redoBtn.onclick = function() { exec(function() { editor.chain().focus().redo().run(); }); };
@@ -4847,8 +5010,8 @@ modernPreviewBtnRef = container.querySelector('#modern-preview');
                     underlineBtn.classList.toggle('active', isActive.underline);
                     strikeBtn.classList.toggle('active', isActive.strike);
                     blockquoteBtn.classList.toggle('active', isActive.blockquote);
-// The unified Code trigger lights up when either variant is active.
-codeDropdownBtn.classList.toggle('active', isActive.code || isActive.codeBlock);
+                    // The unified Code trigger lights up when either variant is active.
+                    codeDropdownBtn.classList.toggle('active', isActive.code || isActive.codeBlock);
                     spoilerBtn.classList.toggle('active', isActive.spoiler);
                     nsfwBtn.classList.toggle('active', isActive.nsfw);
                     linkBtn.classList.toggle('active', isActive.link);
@@ -4931,12 +5094,12 @@ codeDropdownBtn.classList.toggle('active', isActive.code || isActive.codeBlock);
                                     return true;
                                 }
                                 if (mod && !event.shiftKey && (event.key === 'e' || event.key === 'E')) {
-    event.preventDefault();
-    if (editor) {
-        editor.chain().focus().toggleCode().run();
-    }
-    return true;
-}
+                                    event.preventDefault();
+                                    if (editor) {
+                                        editor.chain().focus().toggleCode().run();
+                                    }
+                                    return true;
+                                }
                                 if (event.ctrlKey && event.shiftKey && (event.key === 's' || event.key === 'S')) {
                                     event.preventDefault();
                                     spoilerBtn.click();
@@ -4990,12 +5153,12 @@ codeDropdownBtn.classList.toggle('active', isActive.code || isActive.codeBlock);
 
         var modernPreviewBtn = container.querySelector('#modern-preview');
         if (modernPreviewBtn) {
-    modernPreviewBtn.onclick = function() {
-    if (!editor || editorContentIsEmpty(editor.getHTML())) return;
-    previewArea.style.display = 'block';
-    updateLivePreview();
-    previewArea.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-};
+            modernPreviewBtn.onclick = function() {
+                if (!editor || editorContentIsEmpty(editor.getHTML())) return;
+                previewArea.style.display = 'block';
+                updateLivePreview();
+                previewArea.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+            };
         }
 
         var modernSubmitBtn = container.querySelector('#modern-submit');
@@ -5008,7 +5171,9 @@ codeDropdownBtn.classList.toggle('active', isActive.code || isActive.codeBlock);
                 if (!subjectValue) return;
                 if (!editor || editorContentIsEmpty(editor.getHTML())) return;
 
-                if (MAX_MESSAGE_LENGTH && editor.getText().length > MAX_MESSAGE_LENGTH) {
+                // v14: the length check reads from CharacterCount's storage,
+                // which is the same number the live counter shows.
+                if (MAX_MESSAGE_LENGTH && editor.storage.characterCount.characters() > MAX_MESSAGE_LENGTH) {
                     showToast('Message exceeds the maximum length', { type: 'error' });
                     return;
                 }
