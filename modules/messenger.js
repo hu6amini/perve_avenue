@@ -1936,16 +1936,16 @@ function insertLiteEmbed(kind, videoid, opts) {
         }
 
         function captureCurrentDraft() {
-            if (!editor) return null;
-            var subject = modernTitle ? modernTitle.value.trim() : '';
-            var bodyHtml = editor.getHTML();
-            var bodyHasContent = !editor.isEmpty;
-            if (!subject && !bodyHasContent) return null;
-            return {
-                subject: subject,
-                bodyHtml: bodyHasContent ? bodyHtml : ''
-            };
-        }
+    if (!editor) return null;
+    var subject = modernTitle ? modernTitle.value.trim() : '';
+    var bodyHtml = editor.getHTML();
+    var bodyHasContent = !editorContentIsEmpty(bodyHtml);
+    if (!subject && !bodyHasContent) return null;
+    return {
+        subject: subject,
+        bodyHtml: bodyHasContent ? bodyHtml : ''
+    };
+}
 
         function persistCurrentDraft() {
             saveDraft(getCurrentDraftKey(), captureCurrentDraft());
@@ -1974,17 +1974,17 @@ function insertLiteEmbed(kind, videoid, opts) {
         }
 
         function applyDraftToComposer(draft) {
-            if (!draft) return;
-            if (modernTitle) {
-                modernTitle.value = draft.subject || '';
-            }
-            if (editor && draft.bodyHtml) {
-                editor.commands.setContent(draft.bodyHtml, true);
-            }
-            syncToOriginal();
-            updateSendState();
-            updateCharCounter();
-        }
+    if (!draft) return;
+    if (modernTitle) {
+        modernTitle.value = draft.subject || '';
+    }
+    if (editor && draft.bodyHtml && !editorContentIsEmpty(draft.bodyHtml)) {
+        editor.commands.setContent(draft.bodyHtml, true);
+    }
+    syncToOriginal();
+    updateSendState();
+    updateCharCounter();
+}
 
         window.addEventListener('beforeunload', flushPendingDraft);
         document.addEventListener('visibilitychange', function() {
@@ -1997,7 +1997,7 @@ function insertLiteEmbed(kind, videoid, opts) {
         // resets expansion state inside expanded quotes / spoilers.
         // ------------------------------------------------------------------
         function updateLivePreview() {
-            if (!editor || editor.isEmpty) return;
+            if (!editor || editorContentIsEmpty(editor.getHTML())) return;
             var previewArea = container.querySelector('#modern-preview-area');
             if (!previewArea || previewArea.style.display === 'none') return;
 
@@ -2034,7 +2034,7 @@ function insertLiteEmbed(kind, videoid, opts) {
 function updateSendState() {
     var hasRecipient = !!currentRecipient;
     var hasSubject   = !!(modernTitle && modernTitle.value.trim().length > 0);
-    var hasBody      = !!(editor && !editor.isEmpty);
+    var hasBody      = !!(editor && !editorContentIsEmpty(editor.getHTML()));
 
     if (modernSubmitBtnRef) {
         var sendReady = hasRecipient && hasSubject && hasBody;
@@ -4345,6 +4345,54 @@ description ? ['span', { class: 'link-preview-description' }, description] : '',
                     },
                 });
 
+                // ------------------------------------------------------------------
+// Collapse the document back to a single empty paragraph whenever
+// every top-level node is an empty paragraph. This is what actually
+// restores the TipTap placeholder after a full delete: without it,
+// deleting the last text / image can leave a stack of empty
+// paragraphs that editor.isEmpty (and the Placeholder decoration)
+// treat as non-empty, so the hint never re-renders and a stale
+// draft survives a reload.
+//
+// The check is deliberately narrow — only empty paragraphs trigger
+// the collapse. An empty code block, an empty spoiler, an image,
+// a lite embed, or anything else structural is left alone so the
+// user can still insert a block and then type into it.
+// ------------------------------------------------------------------
+const NormalizeEmptyDoc = Extension.create({
+    name: 'normalizeEmptyDoc',
+    addProseMirrorPlugins() {
+        return [
+            new Plugin({
+                key: new PluginKey('normalizeEmptyDoc'),
+                appendTransaction(transactions, oldState, newState) {
+                    if (!transactions.some(tr => tr.docChanged)) return null;
+
+                    const doc = newState.doc;
+                    if (doc.childCount === 0) return null;
+
+                    const allEmptyParagraphs = doc.content.content.every(
+                        child => child.type.name === 'paragraph' && child.content.size === 0
+                    );
+                    if (!allEmptyParagraphs) return null;
+
+                    // Already just one empty paragraph? Nothing to do.
+                    if (doc.childCount === 1) return null;
+
+                    const paragraph = newState.schema.nodes.paragraph.create();
+                    const tr = newState.tr;
+                    tr.replaceWith(0, doc.content.size, paragraph);
+
+                    const $pos = tr.doc.resolve(1);
+                    tr.setSelection(TextSelection.near($pos));
+
+                    return tr;
+                },
+            }),
+        ];
+    },
+});
+
 // ------------------------------------------------------------------
 // Trailing paragraph after a block atom (lite embed or image).
 // A block-level leaf has no internal text positions, so when it's
@@ -4429,16 +4477,16 @@ const LiteEmbedSelection = Extension.create({
                 var initialHtml = textareaRaw ? legacyToHtml(textareaRaw) : '';
 
                 if (!textareaRaw.trim()) {
-                    var initDraft = getDraft(getCurrentDraftKey());
-                    if (initDraft) {
-                        if (initDraft.bodyHtml) {
-                            initialHtml = initDraft.bodyHtml;
-                        }
-                        if (initDraft.subject && modernTitle) {
-                            modernTitle.value = initDraft.subject;
-                        }
-                    }
-                }
+    var initDraft = getDraft(getCurrentDraftKey());
+    if (initDraft) {
+        if (initDraft.bodyHtml && !editorContentIsEmpty(initDraft.bodyHtml)) {
+            initialHtml = initDraft.bodyHtml;
+        }
+        if (initDraft.subject && modernTitle) {
+            modernTitle.value = initDraft.subject;
+        }
+    }
+}
 
                 initialHtml = ensureTrailingParagraphInHtml(initialHtml);
 
@@ -4461,6 +4509,7 @@ const LiteEmbedSelection = Extension.create({
                         CustomMention,
                         EmoticonRule,
                         TrailingEmbedParagraph,
+                        NormalizeEmptyDoc,
                         LiteEmbedSelection,
                     ],
                     content: initialHtml,
@@ -4617,14 +4666,28 @@ handlePaste: function(view, event) {
                         editor.commands.focus('end');
                     },
                     onUpdate: function({ editor }) {
-                        if (originalTextarea) {
-                            originalTextarea.value = htmlToLegacy(editor.getHTML());
-                        }
-                        persistCurrentDraftDebounced();
-                        updateSendState();
-                        updateCharCounter();
-                        scheduleLivePreviewRefresh();
-                    }
+    var html = editor.getHTML();
+
+    if (originalTextarea) {
+        originalTextarea.value = htmlToLegacy(html);
+    }
+
+    if (editorContentIsEmpty(html)) {
+        // Effectively empty — kill any pending save and wipe the stored
+        // draft so a reload can't resurrect deleted content.
+        if (draftSaveTimer) {
+            clearTimeout(draftSaveTimer);
+            draftSaveTimer = null;
+        }
+        clearDraft(getCurrentDraftKey());
+    } else {
+        persistCurrentDraftDebounced();
+    }
+
+    updateSendState();
+    updateCharCounter();
+    scheduleLivePreviewRefresh();
+}
                 });
 
                 modernSubmitBtnRef = container.querySelector('#modern-submit');
@@ -4928,7 +4991,7 @@ codeDropdownBtn.classList.toggle('active', isActive.code || isActive.codeBlock);
         var modernPreviewBtn = container.querySelector('#modern-preview');
         if (modernPreviewBtn) {
     modernPreviewBtn.onclick = function() {
-    if (!editor || editor.isEmpty) return;
+    if (!editor || editorContentIsEmpty(editor.getHTML())) return;
     previewArea.style.display = 'block';
     updateLivePreview();
     previewArea.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
@@ -4943,7 +5006,7 @@ codeDropdownBtn.classList.toggle('active', isActive.code || isActive.codeBlock);
                 if (!currentRecipient || !currentRecipient.name) return;
                 var subjectValue = modernTitle ? modernTitle.value.trim() : '';
                 if (!subjectValue) return;
-                if (!editor || editor.isEmpty) return;
+                if (!editor || editorContentIsEmpty(editor.getHTML())) return;
 
                 if (MAX_MESSAGE_LENGTH && editor.getText().length > MAX_MESSAGE_LENGTH) {
                     showToast('Message exceeds the maximum length', { type: 'error' });
