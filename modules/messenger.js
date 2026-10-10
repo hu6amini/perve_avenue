@@ -3463,8 +3463,8 @@ addSeparator();
                 });
 
                 const CustomImage = BaseImage.extend({
-                    inline: true,
-                    group: 'inline',
+                    inline: false,
+                    group: 'block',
                     addAttributes() {
                         return {
                             ...this.parent?.(),
@@ -3501,6 +3501,32 @@ addSeparator();
                         ];
                     },
                 });
+
+                const Emoji = Node.create({
+    name: 'emoji',
+    inline: true,
+    group: 'inline',
+    atom: true,
+    addAttributes() {
+        return {
+            src: { default: null },
+            alt: { default: '' },
+            loading: { default: 'lazy' },
+            decoding: { default: 'async' },
+            width: { default: 24 },
+            height: { default: 24 },
+        };
+    },
+    parseHTML() {
+        return [{ tag: 'img[src*="twemoji"]' }];
+    },
+    renderHTML({ node, HTMLAttributes }) {
+        return ['img', { ...HTMLAttributes, src: node.attrs.src, alt: node.attrs.alt,
+                         loading: node.attrs.loading, decoding: node.attrs.decoding,
+                         width: node.attrs.width, height: node.attrs.height,
+                         class: 'twemoji' }];
+    },
+});
 
                 const CustomCodeBlock = BaseCodeBlock.extend({
                     addAttributes() {
@@ -4313,7 +4339,8 @@ const TrailingEmbedParagraph = Extension.create({
                     if (!transactions.some(tr => tr.docChanged)) return null;
                     const lastNode = newState.doc.lastChild;
                     if (!lastNode) return null;
-                    if (lastNode.type.name !== 'liteYouTube' && lastNode.type.name !== 'liteVimeo') {
+                    const name = lastNode.type.name;
+                    if (name !== 'liteYouTube' && name !== 'liteVimeo' && name !== 'image') {
                         return null;
                     }
                     const paragraph = newState.schema.nodes.paragraph.create();
