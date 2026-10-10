@@ -3714,6 +3714,19 @@ section.modern-stats { flex-direction: column; width: 100%; }
   margin-bottom: 0;
 }
 
+/* Scaffolding paragraphs emitted by BlockBoundaryParagraph around
+   block atoms (images, lite embeds, spoilers, code blocks,
+   blockquotes). ProseMirror renders empty textblocks as
+   <p><br></p>, so :empty alone misses them — the :has() variant
+   tightens them so the empty rows don't add visual noise between
+   stacked atoms. Editor-only: these paragraphs are stripped before
+   serialization, so the reader side never sees them. */
+.modern-wysiwyg .ProseMirror > p:has(> br:only-child),
+.modern-wysiwyg .ProseMirror > p:empty {
+  min-height: 1.618em;
+  margin: 0;
+}
+
 /* Code blocks */
 .modern-wysiwyg .ProseMirror pre {
     position: relative;
