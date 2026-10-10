@@ -3071,8 +3071,16 @@ addSeparator();
             editBtn.title = 'Edit image (alt text, size)';
             editBtn.setAttribute('aria-label', 'Edit image');
 
+            var deleteBtn = document.createElement('button');
+deleteBtn.type = 'button';
+deleteBtn.className = 'editor-image-delete-btn';
+deleteBtn.innerHTML = '<i class="fa-regular fa-trash-can" aria-hidden="true"></i>';
+deleteBtn.title = 'Delete image';
+deleteBtn.setAttribute('aria-label', 'Delete image');
+
             toolbarEl.appendChild(nsfwBtn);
             toolbarEl.appendChild(editBtn);
+            toolbarEl.appendChild(deleteBtn);
             document.body.appendChild(toolbarEl);
 
             var hoveredImg = null;
@@ -3092,7 +3100,7 @@ addSeparator();
             function positionToolbar(img) {
                 var rect = img.getBoundingClientRect();
                 toolbarEl.style.top = (rect.top + window.pageYOffset + 6) + 'px';
-                toolbarEl.style.left = (rect.right + window.pageXOffset - 76) + 'px';
+                toolbarEl.style.left = (rect.right + window.pageXOffset - 110) + 'px';
             }
 
             function showToolbar(img) {
@@ -3212,6 +3220,21 @@ addSeparator();
                 toolbarEl.style.display = 'none';
                 hoveredImg = null;
             });
+
+            deleteBtn.addEventListener('click', function(e) {
+    e.preventDefault();
+    e.stopPropagation();
+    if (!hoveredImg) return;
+    var resolved = resolveImageNode(hoveredImg);
+    if (!resolved) return;
+
+    var view = editorInstance.view;
+    var tr = view.state.tr.delete(resolved.pos, resolved.pos + resolved.node.nodeSize);
+    view.dispatch(tr);
+
+    toolbarEl.style.display = 'none';
+    hoveredImg = null;
+});
 
             window.addEventListener('scroll', function() {
                 if (hoveredImg && toolbarEl.style.display === 'flex') positionToolbar(hoveredImg);
