@@ -3098,10 +3098,36 @@ deleteBtn.setAttribute('aria-label', 'Delete image');
             }
 
             function positionToolbar(img) {
-                var rect = img.getBoundingClientRect();
-                toolbarEl.style.top = (rect.top + window.pageYOffset + 6) + 'px';
-                toolbarEl.style.left = (rect.right + window.pageXOffset - 110) + 'px';
-            }
+    if (!img) return;
+    var rect = img.getBoundingClientRect();
+    var cs = window.getComputedStyle(img);
+
+    // getBoundingClientRect returns the border box, which includes
+    // padding and any borders. The visible image content is inset
+    // from that box on every side, so we measure the inset and
+    // subtract it to align the toolbar with what the user sees.
+    var padTop    = parseFloat(cs.paddingTop)    || 0;
+    var padRight  = parseFloat(cs.paddingRight)  || 0;
+    var padLeft   = parseFloat(cs.paddingLeft)   || 0;
+    var padBottom = parseFloat(cs.paddingBottom) || 0;
+    var bTop      = parseFloat(cs.borderTopWidth)    || 0;
+    var bRight    = parseFloat(cs.borderRightWidth)  || 0;
+    var bBottom   = parseFloat(cs.borderBottomWidth) || 0;
+
+    // Visible content box in viewport coordinates
+    var visTop   = rect.top   + padTop + bTop;
+    var visRight = rect.right - padRight - bRight;
+
+    // Toolbar width — read from the DOM once it's laid out, with a
+    // fallback for the very first positioning pass before the
+    // element has been rendered.
+    var toolbarWidth = toolbarEl.offsetWidth || 110;
+
+    // Position: right edge of the toolbar flush with the right edge
+    // of the visible image, 6px above the top of the image.
+    toolbarEl.style.top  = (visTop + window.pageYOffset + 6) + 'px';
+    toolbarEl.style.left = (visRight + window.pageXOffset - toolbarWidth - 6) + 'px';
+}
 
             function showToolbar(img) {
                 if (hideTimer) { clearTimeout(hideTimer); hideTimer = null; }
