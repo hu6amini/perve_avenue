@@ -4558,17 +4558,37 @@ description ? ['span', { class: 'link-preview-description' }, description] : '',
 // Runs on every doc-changing transaction. Idempotent: if the
 // document already has paragraphs on both sides, nothing happens.
 // ------------------------------------------------------------------
+// ------------------------------------------------------------------
+// Block-boundary paragraphs.
+//
+// Block-level atoms (images, lite embeds) and containers (spoilers,
+// code blocks, blockquotes) have no internal text positions at their
+// edges. Without a neighbouring paragraph a cursor can't sit next to
+// them — ProseMirror falls back to a gap cursor, which most users
+// find unintuitive.
+//
+// This plugin keeps an empty paragraph adjacent to every such block
+// whenever the natural neighbour is missing or is itself another
+// block atom. Paragraphs, headings, lists, and other text-friendly
+// blocks are left alone — they already provide a cursor position.
+//
+// Runs on every doc-changing transaction. Idempotent: once a
+// paragraph is in place the neighbour check no longer fires for
+// that side. The scaffolding paragraphs are stripped before
+// serialization (see htmlToLegacy), so they never leak into saved
+// posts or drafts.
+// ------------------------------------------------------------------
 const BlockBoundaryParagraph = Extension.create({
     name: 'blockBoundaryParagraph',
     addProseMirrorPlugins() {
-        const BLOCK_TYPES = [
+        const BOUNDARY_TYPES = new Set([
+            'image',
             'liteYouTube',
             'liteVimeo',
-            'image',
             'spoiler',
             'codeBlock',
-            'blockquote'
-        ];
+            'blockquote',
+        ]);
 
         return [
             new Plugin({
@@ -4579,43 +4599,57 @@ const BlockBoundaryParagraph = Extension.create({
                     const doc = newState.doc;
                     if (!doc.firstChild) return null;
 
-                    const firstIsBlock = BLOCK_TYPES.indexOf(doc.firstChild.type.name) !== -1;
-                    const lastIsBlock  = BLOCK_TYPES.indexOf(doc.lastChild.type.name)  !== -1;
-                    if (!firstIsBlock && !lastIsBlock) return null;
-
-                    // Remember where the cursor was. A gap position (a cursor
-                    // in a place with no textblock) is the only case we need
-                    // to relocate explicitly — anything else will be mapped
-                    // forward by ProseMirror.
-                    const savedFrom = newState.selection.from;
-                    const wasInGap  = savedFrom === doc.content.size &&
-                                      lastIsBlock &&
-                                      !newState.selection.node;
-
-                    const tr = newState.tr;
                     const paragraphType = newState.schema.nodes.paragraph;
+                    if (!paragraphType) return null;
 
-                    if (firstIsBlock) {
-                        tr.insert(0, paragraphType.create());
-                    }
-                    if (lastIsBlock) {
-                        tr.insert(tr.doc.content.size, paragraphType.create());
+                    // Snapshot the top-level layout once so the
+                    // neighbour checks don't re-walk the doc for
+                    // every atom.
+                    const children = [];
+                    doc.forEach((node, offset) => {
+                        children.push({ node, offset });
+                    });
+
+                    // Positions where an empty paragraph should land.
+                    // Deduped because two stacked atoms both want a
+                    // paragraph at the position they share.
+                    const insertPositions = new Set();
+
+                    for (let i = 0; i < children.length; i++) {
+                        const { node, offset } = children[i];
+                        if (!BOUNDARY_TYPES.has(node.type.name)) continue;
+
+                        const prev = i > 0 ? children[i - 1].node : null;
+                        const next = i < children.length - 1 ? children[i + 1].node : null;
+
+                        const needsBefore = !prev || BOUNDARY_TYPES.has(prev.type.name);
+                        const needsAfter  = !next || BOUNDARY_TYPES.has(next.type.name);
+
+                        if (needsBefore) insertPositions.add(offset);
+                        if (needsAfter)  insertPositions.add(offset + node.nodeSize);
                     }
 
-                    if (wasInGap) {
-                        // The original cursor position was in the gap after
-                        // the trailing block. Move it into the newly inserted
-                        // paragraph so the user can type.
-                        const $pos = tr.doc.resolve(tr.doc.content.size - 1);
-                        tr.setSelection(TextSelection.near($pos));
-                    } else {
-                        // Otherwise just map the existing selection through
-                        // the insertions so it stays where the user left it.
-                        const mappedFrom = tr.mapping.map(savedFrom);
-                        const mappedTo   = tr.mapping.map(newState.selection.to);
-                        tr.setSelection(
-                            TextSelection.create(tr.doc, mappedFrom, mappedTo)
-                        );
+                    if (insertPositions.size === 0) return null;
+
+                    // Insert from the highest position down so earlier
+                    // positions stay valid as we work.
+                    const sorted = Array.from(insertPositions).sort((a, b) => b - a);
+                    const tr = newState.tr;
+                    for (let i = 0; i < sorted.length; i++) {
+                        tr.insert(sorted[i], paragraphType.create());
+                    }
+
+                    // If the selection ended up outside a textblock —
+                    // e.g. a gap cursor at the very end of the document
+                    // past a trailing atom — snap it into the nearest
+                    // text position, which will usually be one of the
+                    // paragraphs we just added.
+                    const sel = tr.selection;
+                    if (sel && sel.empty && sel.$from && !sel.$from.parent.isTextblock) {
+                        try {
+                            const target = Math.min(sel.from, tr.doc.content.size);
+                            tr.setSelection(TextSelection.near(tr.doc.resolve(target)));
+                        } catch (e) { /* leave mapped selection in place */ }
                     }
 
                     return tr;
