@@ -26,12 +26,18 @@
 //      custom element translates them into the provider's native
 //      iframe URL syntax at activation time.
 // v13: schema split — CustomImage is block-level, new Emoji node is
-//      inline. Three insertion paths (picker, autocomplete, ASCII
-//      input rule) route to Emoji so twemoji render inline. The
-//      TrailingEmbedParagraph plugin now also fires for a trailing
-//      image and moves the selection into the trailing paragraph so
-//      typing works immediately after an insert. TextSelection
-//      imported from prosemirror-state.
+//      inline. Emoji picker, autocomplete and ASCII input rule all
+//      route to Emoji. TrailingEmbedParagraph now fires for trailing
+//      images too and moves the selection into the trailing
+//      paragraph. TextSelection imported from prosemirror-state.
+// v14: gap cursor (Gapcursor extension) so atom gaps are placeable.
+//      Unified AtomSelection extension — drag-select across a range
+//      containing an image or lite embed rings the atom. Image
+//      toolbar gains a delete button. Lite embed toolbar added with
+//      copy-URL and delete. Escape deselects a selected atom.
+//      CustomImage parseHTML excludes twemoji so emoji nodes claim
+//      them. Toolbar positioning reads computed padding and border
+//      so it aligns to the visible image, not the border box.
 var MessengerModule = (function(Utils, EventBus) {
     'use strict';
 
@@ -1840,12 +1846,10 @@ var livePreviewTimer    = null;
 
         // After inserting a lite embed or a block image, if the doc now
 // ends with an empty paragraph directly following the atom, move
-// the cursor into it. The trailing-paragraph plugin guarantees
-// that paragraph exists, but ProseMirror leaves the selection in
-// a gap position — no text cursor, no typing. This helper covers
-// the explicit call sites (paste handler, lite embed inserts)
-// where we want the cursor placed immediately; the plugin itself
-// also sets the selection for the general case.
+// the cursor into it. The trailing-paragraph plugin handles the
+// general case (it runs on every transaction). This helper covers
+// the explicit call sites where we want the cursor placed before
+// the user can see the transaction complete.
 function focusTrailingEmbedParagraph() {
     if (!editor) return;
     const doc = editor.state.doc;
@@ -1855,9 +1859,6 @@ function focusTrailingEmbedParagraph() {
     if (last.type.name !== 'paragraph' || last.content.size !== 0) return;
     const atomName = secondLast.type.name;
     if (atomName !== 'liteYouTube' && atomName !== 'liteVimeo' && atomName !== 'image') return;
-    // doc.content.size - 1 is the single cursor position inside the
-    // empty trailing paragraph. setTextSelection on that puts a real
-    // text cursor there and chain().focus() gives it focus.
     editor.chain().focus().setTextSelection(doc.content.size - 1).run();
 }
 
@@ -2012,11 +2013,6 @@ function insertLiteEmbed(kind, videoid, opts) {
                 if (window.twemoji) {
                     window.twemoji.parse(previewContent, { base: TWEMOJI_BASE, ext: '.svg' });
                 }
-                // Note: expansion state is intentionally not restored because
-                // the DOM is regenerated from scratch. If a user is reading a
-                // preview and typing simultaneously, they're probably looking
-                // at the top of the doc. Long-form reading scenarios don't
-                // involve concurrent typing.
             }
             initPreviewQuotesAndSpoilers(previewArea);
         }
@@ -2723,9 +2719,6 @@ addSeparator();
                         e.stopPropagation();
                         if (editor) {
                             var emojiChar = this.getAttribute('data-emoji');
-                            // FIX: emoji must use the inline `emoji` node, not
-                            // `image` (which is now block-level). Using `image`
-                            // would place every picked emoji on its own line.
                             editor.chain().focus().insertContent({
                                 type: 'emoji',
                                 attrs: {
@@ -3046,11 +3039,55 @@ addSeparator();
             };
         }
 
-        // Image hover toolbar. Two buttons positioned near the hovered or
-        // clicked image: NSFW toggle and Edit (alt text + size). Shows on
-        // hover (desktop) and on click (touch). Stays put briefly after
-        // click so touch users have time to hit the buttons.
-        function setupImageNsfwOverlay(editorRoot, editorInstance) {
+        // Resolve the ProseMirror position for an atom node rendered at
+        // or adjacent to the given DOM element. Returns { node, pos } or
+        // null. Handles the two cases ProseMirror gives us: the atom
+        // immediately after the resolved position, or immediately before.
+        function resolveAtomNode(el, editorInstance, atomTypeNames) {
+            if (!el || !editorInstance) return null;
+            var view = editorInstance.view;
+            var pos;
+            try { pos = view.posAtDOM(el, 0); } catch (e) { return null; }
+            var $pos = view.state.doc.resolve(pos);
+            if ($pos.nodeAfter && atomTypeNames.indexOf($pos.nodeAfter.type.name) !== -1) {
+                return { node: $pos.nodeAfter, pos: pos };
+            }
+            if ($pos.nodeBefore && atomTypeNames.indexOf($pos.nodeBefore.type.name) !== -1) {
+                return { node: $pos.nodeBefore, pos: pos - $pos.nodeBefore.nodeSize };
+            }
+            return null;
+        }
+
+        // Compute the visible content box of an image, accounting for
+        // padding and borders applied by the editor stylesheet. Without
+        // this correction the toolbar aligns to the border box, which
+        // sits several pixels outside the visible image on every side.
+        function getVisibleImageBox(img) {
+            var rect = img.getBoundingClientRect();
+            var cs = window.getComputedStyle(img);
+            var padTop    = parseFloat(cs.paddingTop)    || 0;
+            var padRight  = parseFloat(cs.paddingRight)  || 0;
+            var padLeft   = parseFloat(cs.paddingLeft)   || 0;
+            var padBottom = parseFloat(cs.paddingBottom) || 0;
+            var bTop      = parseFloat(cs.borderTopWidth)    || 0;
+            var bRight    = parseFloat(cs.borderRightWidth)  || 0;
+            var bBottom   = parseFloat(cs.borderBottomWidth) || 0;
+            var bLeft     = parseFloat(cs.borderLeftWidth)   || 0;
+            return {
+                top:    rect.top    + padTop    + bTop,
+                right:  rect.right  - padRight  - bRight,
+                bottom: rect.bottom - padBottom - bBottom,
+                left:   rect.left   + padLeft   + bLeft,
+                width:  rect.width  - padLeft - padRight  - bLeft - bRight,
+                height: rect.height - padTop  - padBottom - bTop  - bBottom
+            };
+        }
+
+        // Image hover toolbar. Buttons: NSFW toggle, Edit (alt text +
+        // size), Delete. Shows on hover (desktop) and on click (touch).
+        // The toolbar is appended to body and positioned absolutely so
+        // it can escape the editor's clipping context.
+        function setupImageToolbar(editorRoot, editorInstance) {
             if (!editorRoot || !editorInstance) return;
 
             var toolbarEl = document.createElement('div');
@@ -3072,11 +3109,11 @@ addSeparator();
             editBtn.setAttribute('aria-label', 'Edit image');
 
             var deleteBtn = document.createElement('button');
-deleteBtn.type = 'button';
-deleteBtn.className = 'editor-image-delete-btn';
-deleteBtn.innerHTML = '<i class="fa-regular fa-trash-can" aria-hidden="true"></i>';
-deleteBtn.title = 'Delete image';
-deleteBtn.setAttribute('aria-label', 'Delete image');
+            deleteBtn.type = 'button';
+            deleteBtn.className = 'editor-image-delete-btn';
+            deleteBtn.innerHTML = '<i class="fa-regular fa-trash-can" aria-hidden="true"></i>';
+            deleteBtn.title = 'Delete image';
+            deleteBtn.setAttribute('aria-label', 'Delete image');
 
             toolbarEl.appendChild(nsfwBtn);
             toolbarEl.appendChild(editBtn);
@@ -3098,36 +3135,12 @@ deleteBtn.setAttribute('aria-label', 'Delete image');
             }
 
             function positionToolbar(img) {
-    if (!img) return;
-    var rect = img.getBoundingClientRect();
-    var cs = window.getComputedStyle(img);
-
-    // getBoundingClientRect returns the border box, which includes
-    // padding and any borders. The visible image content is inset
-    // from that box on every side, so we measure the inset and
-    // subtract it to align the toolbar with what the user sees.
-    var padTop    = parseFloat(cs.paddingTop)    || 0;
-    var padRight  = parseFloat(cs.paddingRight)  || 0;
-    var padLeft   = parseFloat(cs.paddingLeft)   || 0;
-    var padBottom = parseFloat(cs.paddingBottom) || 0;
-    var bTop      = parseFloat(cs.borderTopWidth)    || 0;
-    var bRight    = parseFloat(cs.borderRightWidth)  || 0;
-    var bBottom   = parseFloat(cs.borderBottomWidth) || 0;
-
-    // Visible content box in viewport coordinates
-    var visTop   = rect.top   + padTop + bTop;
-    var visRight = rect.right - padRight - bRight;
-
-    // Toolbar width — read from the DOM once it's laid out, with a
-    // fallback for the very first positioning pass before the
-    // element has been rendered.
-    var toolbarWidth = toolbarEl.offsetWidth || 110;
-
-    // Position: right edge of the toolbar flush with the right edge
-    // of the visible image, 6px above the top of the image.
-    toolbarEl.style.top  = (visTop + window.pageYOffset + 6) + 'px';
-    toolbarEl.style.left = (visRight + window.pageXOffset - toolbarWidth - 6) + 'px';
-}
+                if (!img) return;
+                var vis = getVisibleImageBox(img);
+                var toolbarWidth = toolbarEl.offsetWidth || 110;
+                toolbarEl.style.top  = (vis.top + window.pageYOffset + 6) + 'px';
+                toolbarEl.style.left = (vis.right + window.pageXOffset - toolbarWidth - 6) + 'px';
+            }
 
             function showToolbar(img) {
                 if (hideTimer) { clearTimeout(hideTimer); hideTimer = null; }
@@ -3145,7 +3158,7 @@ deleteBtn.setAttribute('aria-label', 'Delete image');
                 }, 120);
             }
 
-            function isNsfwEligible(img) {
+            function isEligible(img) {
                 if (!img) return false;
                 if (img.classList.contains('twemoji')) return false;
                 var alt = img.getAttribute('alt') || '';
@@ -3156,15 +3169,13 @@ deleteBtn.setAttribute('aria-label', 'Delete image');
 
             editorRoot.addEventListener('mouseover', function(e) {
                 var img = e.target.closest('img');
-                if (!isNsfwEligible(img)) return;
+                if (!isEligible(img)) return;
                 showToolbar(img);
             });
 
-            // Touch-friendly: clicking an image also shows the toolbar.
-            // On desktop this is redundant with hover but harmless.
             editorRoot.addEventListener('click', function(e) {
                 var img = e.target.closest('img');
-                if (!isNsfwEligible(img)) return;
+                if (!isEligible(img)) return;
                 showToolbar(img);
                 if (hideTimer) clearTimeout(hideTimer);
                 hideTimer = setTimeout(function() {
@@ -3192,26 +3203,11 @@ deleteBtn.setAttribute('aria-label', 'Delete image');
                 hideToolbarDelayed();
             });
 
-            function resolveImageNode(img) {
-                if (!img) return null;
-                var view = editorInstance.view;
-                var pos;
-                try { pos = view.posAtDOM(img, 0); } catch (e) { return null; }
-                var $pos = view.state.doc.resolve(pos);
-                if ($pos.nodeAfter && $pos.nodeAfter.type.name === 'image') {
-                    return { node: $pos.nodeAfter, pos: pos };
-                }
-                if ($pos.nodeBefore && $pos.nodeBefore.type.name === 'image') {
-                    return { node: $pos.nodeBefore, pos: pos - $pos.nodeBefore.nodeSize };
-                }
-                return null;
-            }
-
             nsfwBtn.addEventListener('click', function(e) {
                 e.preventDefault();
                 e.stopPropagation();
                 if (!hoveredImg) return;
-                var resolved = resolveImageNode(hoveredImg);
+                var resolved = resolveAtomNode(hoveredImg, editorInstance, ['image']);
                 if (!resolved) return;
                 var newAttrs = Object.assign({}, resolved.node.attrs, {
                     nsfw: !resolved.node.attrs.nsfw
@@ -3227,7 +3223,7 @@ deleteBtn.setAttribute('aria-label', 'Delete image');
                 e.preventDefault();
                 e.stopPropagation();
                 if (!hoveredImg) return;
-                var resolved = resolveImageNode(hoveredImg);
+                var resolved = resolveAtomNode(hoveredImg, editorInstance, ['image']);
                 if (!resolved) return;
 
                 var currentAlt = resolved.node.attrs.alt || '';
@@ -3248,19 +3244,17 @@ deleteBtn.setAttribute('aria-label', 'Delete image');
             });
 
             deleteBtn.addEventListener('click', function(e) {
-    e.preventDefault();
-    e.stopPropagation();
-    if (!hoveredImg) return;
-    var resolved = resolveImageNode(hoveredImg);
-    if (!resolved) return;
-
-    var view = editorInstance.view;
-    var tr = view.state.tr.delete(resolved.pos, resolved.pos + resolved.node.nodeSize);
-    view.dispatch(tr);
-
-    toolbarEl.style.display = 'none';
-    hoveredImg = null;
-});
+                e.preventDefault();
+                e.stopPropagation();
+                if (!hoveredImg) return;
+                var resolved = resolveAtomNode(hoveredImg, editorInstance, ['image']);
+                if (!resolved) return;
+                var view = editorInstance.view;
+                var tr = view.state.tr.delete(resolved.pos, resolved.pos + resolved.node.nodeSize);
+                view.dispatch(tr);
+                toolbarEl.style.display = 'none';
+                hoveredImg = null;
+            });
 
             window.addEventListener('scroll', function() {
                 if (hoveredImg && toolbarEl.style.display === 'flex') positionToolbar(hoveredImg);
@@ -3272,6 +3266,158 @@ deleteBtn.setAttribute('aria-label', 'Delete image');
             editorInstance.on('blur', function() {
                 toolbarEl.style.display = 'none';
                 hoveredImg = null;
+            });
+        }
+
+        // Lite embed hover toolbar. Two buttons: copy share URL and
+        // delete. Positioned at the top-right corner of the wrapper.
+        // The facade's click handler is untouched — clicking the embed
+        // itself still activates the video; clicking these buttons
+        // stops propagation so they don't trigger activation.
+        function setupLiteEmbedToolbar(editorRoot, editorInstance) {
+            if (!editorRoot || !editorInstance) return;
+
+            var toolbarEl = document.createElement('div');
+            toolbarEl.className = 'editor-embed-toolbar';
+            toolbarEl.style.display = 'none';
+
+            var copyBtn = document.createElement('button');
+            copyBtn.type = 'button';
+            copyBtn.className = 'editor-embed-copy-btn';
+            copyBtn.innerHTML = '<i class="fa-regular fa-link" aria-hidden="true"></i>';
+            copyBtn.title = 'Copy share URL';
+            copyBtn.setAttribute('aria-label', 'Copy share URL');
+
+            var deleteBtn = document.createElement('button');
+            deleteBtn.type = 'button';
+            deleteBtn.className = 'editor-embed-delete-btn';
+            deleteBtn.innerHTML = '<i class="fa-regular fa-trash-can" aria-hidden="true"></i>';
+            deleteBtn.title = 'Delete embed';
+            deleteBtn.setAttribute('aria-label', 'Delete embed');
+
+            toolbarEl.appendChild(copyBtn);
+            toolbarEl.appendChild(deleteBtn);
+            document.body.appendChild(toolbarEl);
+
+            var hoveredWrapper = null;
+            var hideTimer = null;
+
+            function positionToolbar(wrapper) {
+                if (!wrapper) return;
+                var rect = wrapper.getBoundingClientRect();
+                var toolbarWidth = toolbarEl.offsetWidth || 80;
+                toolbarEl.style.top  = (rect.top + window.pageYOffset + 8) + 'px';
+                toolbarEl.style.left = (rect.right + window.pageXOffset - toolbarWidth - 8) + 'px';
+            }
+
+            function showToolbar(wrapper) {
+                if (hideTimer) { clearTimeout(hideTimer); hideTimer = null; }
+                hoveredWrapper = wrapper;
+                positionToolbar(wrapper);
+                toolbarEl.style.display = 'flex';
+            }
+
+            function hideToolbarDelayed() {
+                if (hideTimer) clearTimeout(hideTimer);
+                hideTimer = setTimeout(function() {
+                    toolbarEl.style.display = 'none';
+                    hoveredWrapper = null;
+                }, 120);
+            }
+
+            editorRoot.addEventListener('mouseover', function(e) {
+                var lite = e.target.closest('lite-youtube, lite-vimeo');
+                if (!lite) return;
+                var wrapper = lite.closest('.lite-embed-wrapper');
+                if (!wrapper) return;
+                showToolbar(wrapper);
+            });
+
+            editorRoot.addEventListener('click', function(e) {
+                var lite = e.target.closest('lite-youtube, lite-vimeo');
+                if (!lite) return;
+                var wrapper = lite.closest('.lite-embed-wrapper');
+                if (!wrapper) return;
+                showToolbar(wrapper);
+                if (hideTimer) clearTimeout(hideTimer);
+                hideTimer = setTimeout(function() {
+                    if (!toolbarEl.matches(':hover')) {
+                        toolbarEl.style.display = 'none';
+                        hoveredWrapper = null;
+                    }
+                }, 4000);
+            });
+
+            editorRoot.addEventListener('mouseout', function(e) {
+                var lite = e.target.closest('lite-youtube, lite-vimeo');
+                if (!lite) return;
+                var wrapper = lite.closest('.lite-embed-wrapper');
+                if (!wrapper || wrapper !== hoveredWrapper) return;
+                if (toolbarEl.contains(e.relatedTarget)) return;
+                var next = e.relatedTarget && e.relatedTarget.closest && e.relatedTarget.closest('lite-youtube, lite-vimeo');
+                if (next && next.closest('.lite-embed-wrapper') === wrapper) return;
+                hideToolbarDelayed();
+            });
+
+            toolbarEl.addEventListener('mouseenter', function() {
+                if (hideTimer) { clearTimeout(hideTimer); hideTimer = null; }
+            });
+            toolbarEl.addEventListener('mouseleave', function() {
+                if (!hoveredWrapper) return;
+                hideToolbarDelayed();
+            });
+
+            copyBtn.addEventListener('click', function(e) {
+                e.preventDefault();
+                e.stopPropagation();
+                if (!hoveredWrapper) return;
+                var resolved = resolveAtomNode(hoveredWrapper, editorInstance, ['liteYouTube', 'liteVimeo']);
+                if (!resolved) return;
+                var attrs = resolved.node.attrs;
+                var isYouTube = resolved.node.type.name === 'liteYouTube';
+                var url;
+                if (isYouTube) {
+                    url = 'https://youtu.be/' + attrs.videoid;
+                    if (attrs.start != null) url += '?t=' + attrs.start;
+                } else {
+                    url = 'https://vimeo.com/' + attrs.videoid;
+                    if (attrs.start != null) url += '#t=' + attrs.start + 's';
+                }
+                var flash = function() {
+                    var icon = copyBtn.querySelector('i');
+                    if (!icon) return;
+                    var orig = icon.className;
+                    icon.className = 'fa-regular fa-check';
+                    setTimeout(function() { icon.className = orig; }, 1500);
+                };
+                if (navigator.clipboard && navigator.clipboard.writeText) {
+                    navigator.clipboard.writeText(url).then(flash).catch(function() {});
+                }
+            });
+
+            deleteBtn.addEventListener('click', function(e) {
+                e.preventDefault();
+                e.stopPropagation();
+                if (!hoveredWrapper) return;
+                var resolved = resolveAtomNode(hoveredWrapper, editorInstance, ['liteYouTube', 'liteVimeo']);
+                if (!resolved) return;
+                var view = editorInstance.view;
+                var tr = view.state.tr.delete(resolved.pos, resolved.pos + resolved.node.nodeSize);
+                view.dispatch(tr);
+                toolbarEl.style.display = 'none';
+                hoveredWrapper = null;
+            });
+
+            window.addEventListener('scroll', function() {
+                if (hoveredWrapper && toolbarEl.style.display === 'flex') positionToolbar(hoveredWrapper);
+            }, true);
+            window.addEventListener('resize', function() {
+                if (hoveredWrapper && toolbarEl.style.display === 'flex') positionToolbar(hoveredWrapper);
+            });
+
+            editorInstance.on('blur', function() {
+                toolbarEl.style.display = 'none';
+                hoveredWrapper = null;
             });
         }
 
@@ -3410,7 +3556,6 @@ deleteBtn.setAttribute('aria-label', 'Delete image');
                 var triggerStart = from - queryLen - 1;
 
                 var cp = emojiToCodePoint(item.emoji);
-                // FIX: emoji must use the inline `emoji` node, not `image`.
                 editorInstance.chain().focus()
                     .deleteRange({ from: triggerStart, to: from })
                     .insertContent({
@@ -3497,8 +3642,6 @@ deleteBtn.setAttribute('aria-label', 'Delete image');
                     throw new Error('Editor, Node, Mark, Extension, or InputRule not found in @tiptap/core');
                 }
 
-                // FIX: TextSelection is required by the trailing-paragraph
-                // plugin to move the caret into the paragraph it inserts.
                 const { Plugin, PluginKey, TextSelection } = await import('https://esm.sh/prosemirror-state@1.4.3');
                 const { Decoration, DecorationSet } = await import('https://esm.sh/prosemirror-view@1.33.0');
 
@@ -3509,6 +3652,7 @@ deleteBtn.setAttribute('aria-label', 'Delete image');
                 const linkModule = await import('https://esm.sh/@tiptap/extension-link@2.5.2');
                 const mentionModule = await import('https://esm.sh/@tiptap/extension-mention@2.5.2');
                 const codeBlockModule = await import('https://esm.sh/@tiptap/extension-code-block@2.5.2');
+                const gapcursorModule = await import('https://esm.sh/@tiptap/extension-gapcursor@2.5.2');
 
                 const StarterKit = starterKitModule.StarterKit || (starterKitModule.default && starterKitModule.default.StarterKit);
                 const Placeholder = placeholderModule.Placeholder || (placeholderModule.default && placeholderModule.default.Placeholder);
@@ -3517,6 +3661,7 @@ deleteBtn.setAttribute('aria-label', 'Delete image');
                 const Link = linkModule.Link || (linkModule.default && linkModule.default.Link);
                 const Mention = mentionModule.Mention || (mentionModule.default && mentionModule.default.Mention);
                 const BaseCodeBlock = codeBlockModule.CodeBlock || (codeBlockModule.default && codeBlockModule.default.CodeBlock);
+                const Gapcursor = gapcursorModule.Gapcursor || (gapcursorModule.default && gapcursorModule.default.Gapcursor);
 
                 if (!Mention) throw new Error('Mention extension not found');
                 if (!BaseCodeBlock) throw new Error('CodeBlock extension not found');
@@ -3528,10 +3673,24 @@ deleteBtn.setAttribute('aria-label', 'Delete image');
                     HTMLAttributes: { target: '_blank', rel: 'noopener noreferrer' },
                 });
 
-                // Block-level image. Each post image occupies its own block.
+                // Block-level image. Twemoji URLs are explicitly
+                // excluded so they fall through to the Emoji node.
                 const CustomImage = BaseImage.extend({
                     inline: false,
                     group: 'block',
+                    parseHTML() {
+                        return [
+                            {
+                                tag: 'img',
+                                getAttrs: el => {
+                                    const src = el.getAttribute('src') || '';
+                                    if (!src) return false;
+                                    if (src.indexOf('twemoji') !== -1) return false;
+                                    return {};
+                                },
+                            },
+                        ];
+                    },
                     addAttributes() {
                         return {
                             ...this.parent?.(),
@@ -3638,7 +3797,6 @@ deleteBtn.setAttribute('aria-label', 'Delete image');
                                     const emojiUrl = TWEMOJI_BASE + codepoint + '.svg';
                                     const emoticonStart = range.to - emoticon.length;
 
-                                    // FIX: use the inline emoji node, not image.
                                     const emojiNode = state.schema.nodes.emoji.create({
                                         src: emojiUrl,
                                         alt: unicodeEmoji,
@@ -4402,10 +4560,6 @@ description ? ['span', { class: 'link-preview-description' }, description] : '',
 // moves the selection into it — without the selection move, the
 // caret sits in a gap position that ProseMirror won't render,
 // and the user has to click before typing.
-//
-// Wrapped as a TipTap Extension so ProseMirror receives it through
-// the state pipeline — appendTransaction is a state-level hook and
-// cannot be passed via editorProps.plugins.
 // ------------------------------------------------------------------
 const TrailingEmbedParagraph = Extension.create({
     name: 'trailingEmbedParagraph',
@@ -4424,9 +4578,6 @@ const TrailingEmbedParagraph = Extension.create({
                     const paragraph = newState.schema.nodes.paragraph.create();
                     const tr = newState.tr.insert(newState.doc.content.size, paragraph);
 
-                    // Move the cursor into the new paragraph so typing
-                    // works immediately. Without this the selection sits
-                    // in the gap between the atom and the paragraph.
                     const $pos = tr.doc.resolve(tr.doc.content.size - 1);
                     tr.setSelection(TextSelection.near($pos));
 
@@ -4438,30 +4589,32 @@ const TrailingEmbedParagraph = Extension.create({
 });
 
 // ------------------------------------------------------------------
-// Range-selection highlight for lite embeds.
-// A click directly on the embed produces a NodeSelection, which
-// ProseMirror marks with .ProseMirror-selectednode. A drag-select
-// that spans the embed produces a TextSelection, which does not get
-// a class — and the browser's native selection can't paint over the
-// custom element. This plugin adds .lite-embed-in-selection to any
-// embed that participates in a non-empty range selection.
+// Unified atom-selection highlight.
+// When a drag-select spans a range that contains a block atom
+// (image or lite embed), the browser can't paint its native
+// ::selection on the atom because there are no text positions
+// inside it. This plugin adds .atom-in-selection to any atom in
+// the current non-empty selection so the stylesheet can draw a
+// ring around it.
 // ------------------------------------------------------------------
-const LiteEmbedSelection = Extension.create({
-    name: 'liteEmbedSelection',
+const AtomSelection = Extension.create({
+    name: 'atomSelection',
     addProseMirrorPlugins() {
         return [
             new Plugin({
-                key: new PluginKey('liteEmbedSelection'),
+                key: new PluginKey('atomSelection'),
                 props: {
                     decorations(state) {
                         const { from, to, empty } = state.selection;
                         if (empty) return null;
                         const decorations = [];
                         state.doc.nodesBetween(from, to, (node, pos) => {
-                            if (node.type.name === 'liteYouTube' || node.type.name === 'liteVimeo') {
+                            if (node.type.name === 'image' ||
+                                node.type.name === 'liteYouTube' ||
+                                node.type.name === 'liteVimeo') {
                                 decorations.push(
                                     Decoration.node(pos, pos + node.nodeSize, {
-                                        class: 'lite-embed-in-selection',
+                                        class: 'atom-in-selection',
                                     })
                                 );
                             }
@@ -4510,7 +4663,8 @@ const LiteEmbedSelection = Extension.create({
                         CustomMention,
                         EmoticonRule,
                         TrailingEmbedParagraph,
-                        LiteEmbedSelection,
+                        AtomSelection,
+                        Gapcursor,
                     ],
                     content: initialHtml,
                     editorProps: {
@@ -4895,7 +5049,8 @@ codeDropdownBtn.classList.toggle('active', isActive.code || isActive.codeBlock);
                         if (file && file.type.startsWith('image/')) uploadImageToWorker(file, editor);
                     });
 
-                    setupImageNsfwOverlay(editorRoot, editor);
+                    setupImageToolbar(editorRoot, editor);
+                    setupLiteEmbedToolbar(editorRoot, editor);
                     setupEmoticonAutocomplete(editor, editorRoot);
                 }
 
@@ -4932,6 +5087,20 @@ codeDropdownBtn.classList.toggle('active', isActive.code || isActive.codeBlock);
                                     event.preventDefault();
                                     nsfwBtn.click();
                                     return true;
+                                }
+                                // Escape deselects a node selection, mirroring
+                                // standard editor behavior. Node selections have
+                                // a .node property; text selections don't.
+                                if (event.key === 'Escape') {
+                                    var sel = editor.state.selection;
+                                    if (sel && sel.node) {
+                                        event.preventDefault();
+                                        editor.chain()
+                                            .setTextSelection(sel.to)
+                                            .focus()
+                                            .run();
+                                        return true;
+                                    }
                                 }
                                 return false;
                             }
