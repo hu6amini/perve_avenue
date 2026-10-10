@@ -1,35 +1,13 @@
 // Messenger Module – TipTap based, modern preview, relies solely on forumObserver
-// v2: preview area renders quotes / spoilers / code blocks using the same
-//     .modern-quote / .modern-spoiler / .modern-code structures the posts
-//     module uses on the reader side.
-// v3: spoiler titles.
-// v4: code block language labels.
-// v5: NSFW inline tag. Image-level NSFW added on top.
-// v6: recipient recents + per-recipient drafts.
-// v7: emoticon autocomplete on `:` prefix.
-// v8: syntax highlighting (preview + reader side), live preview refresh,
-//     touch-friendly image toolbar, inline-code button, image edit modal
-//     (alt text + size), edit-in-place for code language / spoiler title /
-//     link URL.
-// v9: lite YouTube and Vimeo embeds (lite-youtube-embed, lite-vimeo-embed).
-// v10: caption wrapper for lite embeds (title + author from the OG worker).
-// v11: lite embeds backed by the self-hosted lite-embed.js module.
-// v12: start / end time support for lite embeds.
-// v13: schema split — Emoji is an inline node.
-// v14: gap cursor, AtomSelection, image + embed toolbars.
-// v15: BlockBoundaryParagraph at both ends of the document.
 // v16: editor UX overhaul.
-//   - Images are INLINE nodes again (like every other WYSIWYG): the caret
-//     can sit left / right of an image, images can share a line with text,
-//     and Backspace / Delete / arrow keys behave natively.
-//   - Gap cursor is now visible (it was black-on-dark = invisible) for
-//     block embeds, spoilers, quotes and code blocks.
-//   - Block-boundary scaffolding also covers nested containers and runs
-//     once on load; when a deletion leaves only empty scaffolding the
-//     document collapses to ONE empty paragraph so the placeholder
-//     always comes back immediately.
-//   - Image-by-URL inserts instantly (dimensions are probed in the
-//     background instead of blocking the insert).
+//   - Images are inline nodes: the caret can sit left / right of an image,
+//     images can share a line with text, Backspace / Delete / arrow keys
+//     behave natively.
+//   - Gap cursor is visible (TipTap's default was black-on-dark).
+//   - Block-boundary scaffolding covers nested containers and runs once on
+//     load; when a deletion leaves only empty scaffolding the document
+//     collapses to ONE empty paragraph so the placeholder returns at once.
+//   - Image-by-URL inserts instantly (dimensions probed in background).
 //   - Image uploads use an id-tracked placeholder node (robust against
 //     typing / undo during upload); Send is disabled while uploading;
 //     multiple files and drop-position are supported.
@@ -37,12 +15,12 @@
 //     Ctrl+Shift+V -> plain text.
 //   - Fixed: emoticon rule ate the preceding space; syntax highlighter
 //     corrupted markup when numbers were present; searches shared one
-//     AbortController (recipient / mention / avatar lookups cancelled
-//     each other); duplicate Gapcursor extension; foreign selection
-//     handling on Escape; toolbar buttons stealing editor focus / hiding
-//     before click; nested quote / spoiler serialization; link URL
-//     validation (javascript: etc.); preview toggle + preserved expanded
-//     state; draft is only cleared once the message is confirmed sent.
+//     AbortController (recipient / mention / avatar lookups cancelled each
+//     other); duplicate Gapcursor extension; foreign selection handling on
+//     Escape; toolbar buttons stealing editor focus / hiding before click;
+//     nested quote / spoiler serialization; link URL validation
+//     (javascript: etc.); preview toggle + preserved expanded state; draft
+//     is only cleared once the message is confirmed sent.
 var MessengerModule = (function(Utils, EventBus) {
     'use strict';
 
@@ -109,8 +87,6 @@ var MessengerModule = (function(Utils, EventBus) {
         return txt.value;
     }
 
-    // Normalise a YouTube/Vimeo time value into seconds.
-    // Handles "90", "90s", "1m30s", "1h2m3s".
     function parseTimeString(t) {
         if (t == null) return null;
         var s = String(t).trim().toLowerCase();
@@ -164,11 +140,7 @@ var MessengerModule = (function(Utils, EventBus) {
         } catch(e) { return dateStr; }
     }
 
-    // Validate + normalise a user-typed URL. Returns an absolute href or
-    // null. `allowed` is a list of permitted protocols ("https:" ...).
-    // Bare domains ("example.com/x") get https:// prepended; anything
-    // with a disallowed scheme (javascript:, data:, vbscript: ...) is
-    // rejected.
+    // Validate + normalise a user-typed URL. Returns an absolute href or null.
     function normalizeUrl(raw, allowed) {
         var v = String(raw == null ? '' : raw).trim();
         if (!v || /\s/.test(v)) return null;
@@ -185,9 +157,6 @@ var MessengerModule = (function(Utils, EventBus) {
 
     var IMAGE_URL_RE = /\.(png|jpe?g|gif|webp|avif|bmp|svg)(\?[^#]*)?(#.*)?$/i;
 
-    // True when a ProseMirror doc holds no visible content: no
-    // non-whitespace text and no leaf nodes other than hard breaks.
-    // (Images, emoji, embeds, mentions, previews, rules all count as content.)
     function docIsBlank(doc) {
         var blank = true;
         doc.descendants(function(node) {
@@ -202,9 +171,6 @@ var MessengerModule = (function(Utils, EventBus) {
         return blank;
     }
 
-    // Unwrap .lite-embed-wrapper containers produced by the LiteYouTube /
-    // LiteVimeo renderHTML, emitting the legacy marker span that the
-    // forum stores.
     function unwrapLiteEmbedWrappers(html) {
         if (!html || html.indexOf('lite-embed-wrapper') === -1) return html;
         var temp = document.createElement('div');
@@ -235,8 +201,6 @@ var MessengerModule = (function(Utils, EventBus) {
 
     // ------------------------------------------------------------------------
     // SYNTAX HIGHLIGHTING
-    // A deliberately small generic tokenizer. Not a real parser; it produces
-    // a visual hint, not a correctness guarantee.
     // ------------------------------------------------------------------------
     var CODE_HIGHLIGHT_KEYWORDS = [
         'abstract','as','assert','async','await','bool','break','case','catch','class','const','continue',
@@ -291,9 +255,6 @@ var MessengerModule = (function(Utils, EventBus) {
             return keep('<span class="code-string">' + m + '</span>');
         });
 
-        // Numbers and keywords in ONE pass. Two separate passes would let the
-        // keyword pass match the word "class" inside the number span's own
-        // class="..." attribute and corrupt the markup.
         html = html.replace(HIGHLIGHT_TOKEN_RE, function(m, num, kw) {
             if (num != null) return '<span class="code-number">' + num + '</span>';
             return '<span class="code-keyword">' + kw + '</span>';
@@ -825,8 +786,6 @@ var MessengerModule = (function(Utils, EventBus) {
 
     // ------------------------------------------------------------------------
     // MENTION / USER SEARCH
-    // Each consumer uses its own channel so one lookup never cancels another.
-    // Resolves to `null` when the request was superseded (aborted).
     // ------------------------------------------------------------------------
     var _searchAborts = {};
 
@@ -1139,7 +1098,6 @@ var MessengerModule = (function(Utils, EventBus) {
             }
         );
 
-        // Lite embed markers → custom elements.
         html = html.replace(
             /<span\b[^>]*\bff-lite-youtube\b[^>]*>([\s\S]*?)<\/span>/gis,
             function(match) {
@@ -1211,9 +1169,6 @@ var MessengerModule = (function(Utils, EventBus) {
                 : content;
         });
 
-        // Inline code marker → <code>. ForumFree re-escapes the & in &lt;
-        // when it round-trips, so one decode pass undoes that and the
-        // subsequent escape restores well-formed HTML for TipTap to parse.
         html = html.replace(
             /<span[^>]*\bff-inline-code\b[^>]*>([\s\S]*?)<\/span>/gis,
             function(_, content) {
@@ -1229,10 +1184,7 @@ var MessengerModule = (function(Utils, EventBus) {
     function htmlToLegacy(html) {
         if (!html || typeof html !== 'string') return html;
 
-        // Drop in-flight upload placeholders; they must never be saved.
         html = html.replace(/<span\b[^>]*\bupload-placeholder\b[^>]*>[\s\S]*?<\/span>/gi, '');
-
-        // Unwrap the lite-embed caption wrapper first.
         html = unwrapLiteEmbedWrappers(html);
 
         var result = html;
@@ -1261,9 +1213,6 @@ var MessengerModule = (function(Utils, EventBus) {
                 }
             );
 
-            // Innermost-first matching: the tempered pattern refuses to cross
-            // another opening tag, so nested quotes / spoilers serialize
-            // correctly over successive iterations.
             result = result.replace(/<blockquote[^>]*>((?:(?!<blockquote)[\s\S])*?)<\/blockquote>/gi, function(match, inner) {
                 var cleaned = inner.replace(/<p[^>]*>/gi, '').replace(/<\/p>\s*/gi, '\n');
                 cleaned = cleaned.replace(/\n+$/, '');
@@ -1301,8 +1250,6 @@ var MessengerModule = (function(Utils, EventBus) {
                 return prefix + '[CODE]' + decoded + '[/CODE]';
             });
 
-            // Inline code → ff-inline-code marker. Runs after the pre pass, so
-            // any <code> still present is guaranteed to be inline.
             result = result.replace(/<code\b[^>]*>([\s\S]*?)<\/code>/gi, function(match, inner) {
                 return '<span class="ff-inline-code">' + inner + '</span>';
             });
@@ -1310,7 +1257,6 @@ var MessengerModule = (function(Utils, EventBus) {
             if (result === before) break;
         }
 
-        // Strip empty paragraphs left behind by the block-boundary scaffolding.
         result = result.replace(/<p>\s*<\/p>/g, '');
 
         return result;
@@ -1325,8 +1271,6 @@ var MessengerModule = (function(Utils, EventBus) {
         var temp = document.createElement('div');
         temp.innerHTML = html;
 
-        // Reverse order = innermost first, so nested quotes / spoilers are
-        // all transformed (the outer copy picks up the inner's final markup).
         Array.from(temp.querySelectorAll('blockquote')).reverse().forEach(function(bq) {
             var innerHtml = bq.innerHTML;
             var modernHtml =
@@ -1727,8 +1671,6 @@ var MessengerModule = (function(Utils, EventBus) {
         });
     }
 
-    // Remember which quotes / spoilers / code blocks the author expanded so
-    // a live refresh doesn't collapse them again while they're typing.
     function captureExpandedState(area) {
         function indices(sel) {
             var out = [];
@@ -1905,10 +1847,6 @@ var MessengerModule = (function(Utils, EventBus) {
 
     // ------------------------------------------------------------------------
     // EDITOR STYLE PATCH
-    // Small stylesheet injected by the script so this file is self-contained.
-    // Covers things the main stylesheet never had: a VISIBLE gap cursor
-    // (TipTap's default is black, invisible on the dark theme), the upload
-    // placeholder, image loading polish and a top-level-only placeholder.
     // ------------------------------------------------------------------------
     function injectEditorStyles() {
         if (document.getElementById('messenger-editor-fixes')) return;
@@ -2004,10 +1942,6 @@ var MessengerModule = (function(Utils, EventBus) {
             return !editor || docIsBlank(editor.state.doc);
         }
 
-        // --------------------------------------------------------------
-        // Sync the hidden legacy textarea. Debounced during typing and
-        // flushed synchronously on submit.
-        // --------------------------------------------------------------
         function syncTextareaNow() {
             if (syncTimer) { clearTimeout(syncTimer); syncTimer = null; }
             if (originalTextarea && editor) {
@@ -2022,8 +1956,6 @@ var MessengerModule = (function(Utils, EventBus) {
             originalForm.addEventListener('submit', syncTextareaNow);
         }
 
-        // Fetch title + author for a fresh embed and patch the node once the
-        // worker responds.
         function fetchEmbedMetadata(kind, videoid) {
             if (!editor || !videoid) return;
             var canonicalUrl = kind === 'liteYouTube'
@@ -2061,7 +1993,7 @@ var MessengerModule = (function(Utils, EventBus) {
                     tr.setMeta('addToHistory', false);
                     editor.view.dispatch(tr);
                 })
-                .catch(function() { clearTimeout(timeoutId); /* caption is optional */ });
+                .catch(function() { clearTimeout(timeoutId); });
         }
 
         function insertLiteEmbed(kind, videoid, opts) {
@@ -2077,13 +2009,6 @@ var MessengerModule = (function(Utils, EventBus) {
             fetchEmbedMetadata(kind, videoid);
         }
 
-        // --------------------------------------------------------------
-        // IMAGES
-        // --------------------------------------------------------------
-
-        // Probe natural size in the background and patch the node. The
-        // image itself is already on screen by then, so nothing waits on
-        // this. Dimensions only exist to reserve layout space.
         function probeImageSize(src) {
             var probe = new Image();
             probe.onload = function() {
@@ -2210,9 +2135,6 @@ var MessengerModule = (function(Utils, EventBus) {
         var recipientChipName   = container.querySelector('.modern-recipient-chip-name');
         var recipientChipRemove = container.querySelector('.modern-recipient-chip-remove');
 
-        // ------------------------------------------------------------------
-        // DRAFT MANAGEMENT
-        // ------------------------------------------------------------------
         function getCurrentDraftKey() {
             return (currentRecipient && currentRecipient.id)
                 ? String(currentRecipient.id)
@@ -2274,9 +2196,6 @@ var MessengerModule = (function(Utils, EventBus) {
             if (document.visibilityState === 'hidden') flushPendingDraft();
         });
 
-        // ------------------------------------------------------------------
-        // LIVE PREVIEW (toggle + debounced refresh)
-        // ------------------------------------------------------------------
         function setPreviewOpen(open) {
             var area = container.querySelector('#modern-preview-area');
             var btn = container.querySelector('#modern-preview');
@@ -2613,9 +2532,6 @@ var MessengerModule = (function(Utils, EventBus) {
         toolbar.setAttribute('aria-label', 'Formatting');
         container.appendChild(toolbar);
 
-        // Keep the caret / selection in the editor when a toolbar control is
-        // pressed — otherwise the editor blurs on mousedown and every
-        // formatting command first has to restore focus.
         toolbar.addEventListener('mousedown', function(e) {
             if (e.target.closest('.modern-editor-btn, .modern-dropdown-item, .modern-emoji-item')) {
                 e.preventDefault();
@@ -2709,7 +2625,6 @@ var MessengerModule = (function(Utils, EventBus) {
             return btn;
         }
 
-        // ---------------- dropdown plumbing ----------------
         function openDropdown(btn, menu) {
             menu.style.display = 'block';
             btn.setAttribute('aria-expanded', 'true');
@@ -2755,7 +2670,6 @@ var MessengerModule = (function(Utils, EventBus) {
             return { container: wrap, btn: btn, menu: menu };
         }
 
-        // ---------------- toolbar ----------------
         var undoBtn = makeToolbarButton('fa-regular fa-undo', 'Undo', { shortcut: 'Control+Z' });
         undoBtn.disabled = true;
         var redoBtn = makeToolbarButton('fa-regular fa-redo', 'Redo', { shortcut: 'Control+Shift+Z' });
@@ -2817,7 +2731,6 @@ var MessengerModule = (function(Utils, EventBus) {
 
         var blockquoteBtn = makeToolbarButton('fa-regular fa-quote-left', 'Blockquote');
 
-        // Unified Code dropdown (inline code / code block).
         var codeDD = makeDropdown('fa-regular fa-code', 'Code', ''
             + '<button class="modern-dropdown-item" role="menuitem" id="inline-code-option"><i class="fa-regular fa-code" aria-hidden="true"></i> Inline code</button>'
             + '<button class="modern-dropdown-item" role="menuitem" id="block-code-option"><i class="fa-regular fa-file-code" aria-hidden="true"></i> Code block</button>',
@@ -2963,7 +2876,7 @@ var MessengerModule = (function(Utils, EventBus) {
         emojiPickerPanel.addEventListener('click', function(e) { e.stopPropagation(); });
 
         // ------------------------------------------------------------------
-        // MODALS (shared shell: Esc, overlay click, focus trap, aria)
+        // MODALS
         // ------------------------------------------------------------------
         function createModal(innerHtml, width) {
             var overlay = document.createElement('div');
@@ -3015,7 +2928,6 @@ var MessengerModule = (function(Utils, EventBus) {
             setTimeout(function() { input.classList.remove('has-error'); }, 1200);
         }
 
-        // normalizer(value) -> normalized value, or null when invalid.
         function showInputModal(title, placeholder, normalizer, callback) {
             var m = createModal(''
                 + '<h3 style="margin:0 0 var(--space-md) 0;">' + escapeHtml(title) + '</h3>'
@@ -3094,8 +3006,6 @@ var MessengerModule = (function(Utils, EventBus) {
             onEnter(input, submit);
         }
 
-        // initialHref pre-fills the URL for edit-in-place usage (text field is
-        // hidden then, and a "Remove link" button appears via onRemove).
         function showLinkModal(initialHref, callback, onRemove) {
             var isEdit = initialHref != null;
             var m = createModal(''
@@ -3133,7 +3043,6 @@ var MessengerModule = (function(Utils, EventBus) {
             onEnter(urlInput, submit);
         }
 
-        // Image edit modal — alt text + display size.
         function showImageEditModal(initialAlt, initialSize, callback) {
             var sizes = [
                 { value: 'small',  label: 'Small (25%)' },
@@ -3179,8 +3088,6 @@ var MessengerModule = (function(Utils, EventBus) {
             onEnter(altInput, submit);
         }
 
-        // Resolve the ProseMirror position for an atom node rendered at
-        // or adjacent to the given DOM element.
         function resolveAtomNode(el, editorInstance, atomTypeNames) {
             if (!el || !editorInstance) return null;
             var view = editorInstance.view;
@@ -3196,7 +3103,6 @@ var MessengerModule = (function(Utils, EventBus) {
             return null;
         }
 
-        // Visible content box of an image (minus padding and border).
         function getVisibleImageBox(img) {
             var rect = img.getBoundingClientRect();
             var cs = window.getComputedStyle(img);
@@ -3218,15 +3124,12 @@ var MessengerModule = (function(Utils, EventBus) {
             };
         }
 
-        // Image hover toolbar: NSFW toggle, Edit (alt + size), Delete.
         function setupImageToolbar(editorRoot, editorInstance) {
             if (!editorRoot || !editorInstance) return;
 
             var toolbarEl = document.createElement('div');
             toolbarEl.className = 'editor-image-toolbar';
             toolbarEl.style.display = 'none';
-            // Keep editor focus (and prevent the blur handler from hiding the
-            // toolbar before the click lands).
             toolbarEl.addEventListener('mousedown', function(e) { e.preventDefault(); });
 
             var nsfwImgBtn = document.createElement('button');
@@ -3367,7 +3270,6 @@ var MessengerModule = (function(Utils, EventBus) {
                 var currentSize = resolved.node.attrs.size || null;
 
                 showImageEditModal(currentAlt, currentSize, function(newAlt, newSize) {
-                    // Re-resolve: the doc may have changed while the modal was open.
                     var again = resolveAtomNode(hoveredImg || document.createElement('i'), editorInstance, ['image']);
                     var target = (again && again.node.attrs.src === resolved.node.attrs.src) ? again : resolved;
                     var node = editorInstance.state.doc.nodeAt(target.pos);
@@ -3409,7 +3311,6 @@ var MessengerModule = (function(Utils, EventBus) {
             });
         }
 
-        // Lite embed hover toolbar: copy share URL and delete.
         function setupLiteEmbedToolbar(editorRoot, editorInstance) {
             if (!editorRoot || !editorInstance) return;
 
@@ -3556,7 +3457,6 @@ var MessengerModule = (function(Utils, EventBus) {
             });
         }
 
-        // Emoticon autocomplete (":name").
         function setupEmoticonAutocomplete(editorInstance, editorRoot) {
             if (!editorInstance || !editorRoot) return;
 
@@ -3822,10 +3722,6 @@ var MessengerModule = (function(Utils, EventBus) {
                     HTMLAttributes: { target: '_blank', rel: 'noopener noreferrer' },
                 });
 
-                // INLINE image. Being inline is what lets the caret sit to the
-                // left / right of an image, and lets images share a line with
-                // text. Twemoji URLs are excluded so they fall through to the
-                // Emoji node.
                 const CustomImage = BaseImage.extend({
                     inline: true,
                     group: 'inline',
@@ -3880,7 +3776,6 @@ var MessengerModule = (function(Utils, EventBus) {
                     },
                 });
 
-                // Inline emoji node.
                 const Emoji = Node.create({
                     name: 'emoji',
                     inline: true,
@@ -3914,8 +3809,6 @@ var MessengerModule = (function(Utils, EventBus) {
                     renderText({ node }) { return node.attrs.alt || ''; },
                 });
 
-                // In-flight upload marker. Never parsed from HTML and stripped
-                // from every serialization.
                 const UploadPlaceholder = Node.create({
                     name: 'uploadPlaceholder',
                     inline: true,
@@ -3960,16 +3853,12 @@ var MessengerModule = (function(Utils, EventBus) {
                                     const codepoint = ASCII_EMOTICON_MAP[emoticon];
                                     if (!codepoint) return null;
 
-                                    // Never convert inside inline code.
                                     const codeMark = state.schema.marks.code;
                                     if (codeMark && codeMark.isInSet(state.selection.$from.marks())) return null;
 
                                     const unicodeEmoji = String.fromCodePoint(parseInt(codepoint, 16));
                                     const emojiUrl = TWEMOJI_BASE + codepoint + '.svg';
 
-                                    // match[0] may start with the whitespace that
-                                    // precedes the emoticon. Keep that whitespace:
-                                    // only replace the emoticon text itself.
                                     const leading = match[0].length - emoticon.length;
                                     const emoticonStart = range.from + leading;
 
@@ -3988,9 +3877,6 @@ var MessengerModule = (function(Utils, EventBus) {
                     }
                 });
 
-                // ------------------------------------------------------------------
-                // Lite embed URL extractors.
-                // ------------------------------------------------------------------
                 function parseYouTubeUrl(url) {
                     if (!url || typeof url !== 'string') return null;
                     const m = url.match(/(?:youtube\.com\/(?:watch\?(?:.*&)?v=|embed\/|shorts\/)|youtu\.be\/)([A-Za-z0-9_-]{6,})/);
@@ -4016,7 +3902,7 @@ var MessengerModule = (function(Utils, EventBus) {
                                 const parsed = parseInt(e, 10);
                                 if (!isNaN(parsed) && parsed > 0) end = parsed;
                             }
-                        } catch (err) { /* malformed URL — no timestamps */ }
+                        } catch (err) {}
                     }
 
                     return { videoid, start, end };
@@ -4052,7 +3938,7 @@ var MessengerModule = (function(Utils, EventBus) {
                                 }
                             }
                         }
-                    } catch (err) { /* malformed URL */ }
+                    } catch (err) {}
 
                     return { videoid, start };
                 }
@@ -4183,11 +4069,6 @@ var MessengerModule = (function(Utils, EventBus) {
                     },
                 });
 
-                // ------------------------------------------------------------------
-                // Lite embeds — YouTube and Vimeo (block atoms with caption wrapper).
-                // title / author live on the wrapper only (renderHTML: none on the
-                // custom element), so they never show up as a native tooltip.
-                // ------------------------------------------------------------------
                 const LiteYouTube = Node.create({
                     name: 'liteYouTube',
                     group: 'block',
@@ -4446,8 +4327,6 @@ var MessengerModule = (function(Utils, EventBus) {
                             } catch (e) { return true; }
                         },
                         items: function({ query }) {
-                            // A superseded request resolves to null: keep showing
-                            // the last real result instead of flashing "No users".
                             return searchMentions(query, 'mention').then(function(res) {
                                 if (res === null) return lastMentionItems;
                                 lastMentionItems = res;
@@ -4643,12 +4522,6 @@ var MessengerModule = (function(Utils, EventBus) {
                     }
                 });
 
-                // ------------------------------------------------------------------
-                // Link preview on paste. Only fires for a bare URL pasted onto an
-                // empty caret (a URL pasted over a selection becomes a link via the
-                // Link extension; inside code it pastes as plain text; an image URL
-                // becomes an image).
-                // ------------------------------------------------------------------
                 const linkPreviewPlugin = new Plugin({
                     key: new PluginKey('linkPreview'),
                     props: {
@@ -4744,22 +4617,6 @@ var MessengerModule = (function(Utils, EventBus) {
                     },
                 });
 
-                // ------------------------------------------------------------------
-                // Block-boundary paragraphs + empty-document normalisation.
-                //
-                // 1. Block nodes that have no text position at their edges (lite
-                //    embeds, spoilers, code blocks, quotes) get an empty paragraph
-                //    on any side where the neighbour is missing or is itself such a
-                //    block — at the document root AND inside spoilers / quotes — so
-                //    a normal caret can always sit next to them. Runs once on load
-                //    and after every doc change. Scaffolding paragraphs are stripped
-                //    on serialization.
-                // 2. If a deletion leaves a document that is ONLY empty paragraphs
-                //    (e.g. [p, p] after removing an embed), collapse it to a single
-                //    empty paragraph. That guarantees the placeholder renders
-                //    immediately. Intentional blank lines are untouched: the
-                //    collapse only happens when the previous doc had real content.
-                // ------------------------------------------------------------------
                 const BOUNDARY_TYPES = new Set(['liteYouTube', 'liteVimeo', 'spoiler', 'codeBlock', 'blockquote']);
                 const CONTAINER_TYPES = new Set(['spoiler', 'blockquote']);
 
@@ -4806,14 +4663,12 @@ var MessengerModule = (function(Utils, EventBus) {
                                     const paragraphType = newState.schema.nodes.paragraph;
                                     if (!doc.firstChild || !paragraphType) return null;
 
-                                    // (2) collapse to a single empty paragraph
                                     if (!isInit && onlyEmptyParagraphs(doc) && !docIsBlank(oldState.doc)) {
                                         const tr = newState.tr.replaceWith(0, doc.content.size, paragraphType.create());
                                         tr.setSelection(TextSelection.atStart(tr.doc));
                                         return tr;
                                     }
 
-                                    // (1) scaffold around block atoms / containers
                                     const positions = new Set();
                                     collectBoundaryFixes(doc, 0, positions);
                                     if (positions.size === 0) return null;
@@ -4830,7 +4685,7 @@ var MessengerModule = (function(Utils, EventBus) {
                                         try {
                                             const target = Math.min(sel.from, tr.doc.content.size);
                                             tr.setSelection(TextSelection.near(tr.doc.resolve(target)));
-                                        } catch (e) { /* leave mapped selection in place */ }
+                                        } catch (e) {}
                                     }
 
                                     return tr;
@@ -4840,10 +4695,6 @@ var MessengerModule = (function(Utils, EventBus) {
                     },
                 });
 
-                // ------------------------------------------------------------------
-                // Unified atom-selection highlight (drag-select across images /
-                // lite embeds rings the atom).
-                // ------------------------------------------------------------------
                 const AtomSelection = Extension.create({
                     name: 'atomSelection',
                     addProseMirrorPlugins() {
@@ -4894,8 +4745,6 @@ var MessengerModule = (function(Utils, EventBus) {
                 editor = new Editor({
                     element: editorElement,
                     extensions: [
-                        // StarterKit already bundles Gapcursor + Dropcursor; adding
-                        // Gapcursor again would register it twice.
                         StarterKit.configure({
                             codeBlock: false,
                             dropcursor: { color: '#10b981', width: 2 }
@@ -4954,7 +4803,7 @@ var MessengerModule = (function(Utils, EventBus) {
                                     view.dispatch(view.state.tr.setSelection(
                                         TextSelection.near(view.state.doc.resolve(coords.pos))
                                     ));
-                                } catch (e) { /* keep current selection */ }
+                                } catch (e) {}
                             }
                             imgs.forEach(function(f) { uploadImageToWorker(f); });
                             return true;
@@ -4962,7 +4811,6 @@ var MessengerModule = (function(Utils, EventBus) {
                         handlePaste: function(view, event) {
                             var clipboard = event.clipboardData;
 
-                            // ----- 1. File paste (images) -----
                             var files = clipboard ? clipboard.files : null;
                             if (files && files.length) {
                                 var imgs = Array.prototype.slice.call(files).filter(function(f) {
@@ -4975,7 +4823,6 @@ var MessengerModule = (function(Utils, EventBus) {
                                 }
                             }
 
-                            // ----- 2. Ctrl/Cmd+Shift+V: paste as plain text -----
                             if (plainPasteArmed) {
                                 plainPasteArmed = false;
                                 var plain = clipboard ? clipboard.getData('text/plain') : '';
@@ -4986,9 +4833,6 @@ var MessengerModule = (function(Utils, EventBus) {
                                 }
                             }
 
-                            // ----- 3. Inline-code paste -----
-                            // Insert as a single marked text node so the pill does not
-                            // split around the pasted run. Whitespace collapses.
                             if (view.state.selection.empty) {
                                 var $from = view.state.selection.$from;
                                 var codeMarkType = view.state.schema.marks.code;
@@ -5006,7 +4850,6 @@ var MessengerModule = (function(Utils, EventBus) {
                                 }
                             }
 
-                            // ----- 4. Lite embeds (YouTube, Vimeo) -----
                             if (clipboard) {
                                 var htmlData = clipboard.getData('text/html');
                                 if (htmlData && htmlData.indexOf('<iframe') !== -1) {
@@ -5058,7 +4901,6 @@ var MessengerModule = (function(Utils, EventBus) {
                                 }
                             }
 
-                            // ----- 5. Fall through (link preview plugin, then default paste) -----
                             return false;
                         },
                         handleDOMEvents: {
@@ -5098,8 +4940,6 @@ var MessengerModule = (function(Utils, EventBus) {
                                     nsfwBtn.click();
                                     return true;
                                 }
-                                // Escape deselects a node selection and puts the
-                                // caret right after it.
                                 if (event.key === 'Escape') {
                                     var sel = view.state.selection;
                                     if (sel && sel.node) {
@@ -5107,7 +4947,7 @@ var MessengerModule = (function(Utils, EventBus) {
                                         try {
                                             var near = TextSelection.near(view.state.doc.resolve(sel.to), 1);
                                             view.dispatch(view.state.tr.setSelection(near).scrollIntoView());
-                                        } catch (e) { /* ignore */ }
+                                        } catch (e) {}
                                         return true;
                                     }
                                 }
@@ -5135,13 +4975,11 @@ var MessengerModule = (function(Utils, EventBus) {
                     editor = null;
                 });
 
-                // One-time scaffold pass for content that was loaded from a
-                // draft / reply (no docChanged transaction has run yet).
                 try {
                     editor.view.dispatch(
                         editor.state.tr.setMeta('blockBoundaryInit', true).setMeta('addToHistory', false)
                     );
-                } catch (e) { /* non-fatal */ }
+                } catch (e) {}
 
                 modernSubmitBtnRef = container.querySelector('#modern-submit');
                 modernPreviewBtnRef = container.querySelector('#modern-preview');
@@ -5175,7 +5013,6 @@ var MessengerModule = (function(Utils, EventBus) {
 
                 blockquoteBtn.onclick = function() { exec(function() { editor.chain().focus().toggleBlockquote().run(); }); };
 
-                // Edit-in-place when inside a spoiler; insert-new otherwise.
                 spoilerBtn.onclick = function() {
                     if (!editor) return;
 
@@ -5203,7 +5040,6 @@ var MessengerModule = (function(Utils, EventBus) {
                     exec(function() { editor.chain().focus().toggleNSFW().run(); });
                 };
 
-                // Edit-in-place (with Remove) when the caret is inside a link.
                 linkBtn.onclick = function() {
                     if (!editor) return;
 
@@ -5421,9 +5257,6 @@ var MessengerModule = (function(Utils, EventBus) {
 
                     if (submitButton) submitButton.disabled = false;
 
-                    // Make sure the latest text is stored as a draft; it is only
-                    // cleared once the Sent banner confirms delivery, so a server
-                    // error never costs the user their message.
                     persistCurrentDraft();
 
                     stashLastSentMessage({
@@ -5468,7 +5301,6 @@ var MessengerModule = (function(Utils, EventBus) {
             var lastSend = loadLastSentMessage();
             if (lastSend) {
                 container.appendChild(buildSentBanner(lastSend));
-                // Delivery confirmed: now it is safe to drop the draft.
                 if (lastSend.draftKey) clearDraft(lastSend.draftKey);
                 clearLastSentMessage();
             }
