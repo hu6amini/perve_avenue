@@ -3149,13 +3149,21 @@ var MessengerModule = (function(Utils, EventBus) {
             }
 
             function positionToolbar(img) {
-                var rect = img.getBoundingClientRect();
-                toolbarEl.style.top = (rect.top + window.pageYOffset + 6) + 'px';
-                // Three buttons now, so offset further left than the
-                // two-button version. 110px clears the widest button
-                // set (three 32px circles + two 6px gaps) with margin.
-                toolbarEl.style.left = (rect.right + window.pageXOffset - 110) + 'px';
-            }
+    var rect = img.getBoundingClientRect();
+    // Anchor the toolbar's right edge to the image's right edge minus
+    // a small inset, rather than positioning by a magic-number left
+    // offset. translateX(-100%) moves the element left by its own
+    // rendered width, whatever that is, so the placement stays
+    // correct if the button count, gap size, or border width
+    // changes later. The previous fixed -110px assumed a toolbar
+    // exactly 110px wide; with the 1px border per button and 6px
+    // gaps the real width is 114px, which pushed the toolbar 4px
+    // past the image's right edge.
+    var INSET = 8;
+    toolbarEl.style.top = (rect.top + window.pageYOffset + 6) + 'px';
+    toolbarEl.style.left = (rect.right + window.pageXOffset - INSET) + 'px';
+    toolbarEl.style.transform = 'translateX(-100%)';
+}
 
             function showToolbar(img) {
                 if (hideTimer) { clearTimeout(hideTimer); hideTimer = null; }
