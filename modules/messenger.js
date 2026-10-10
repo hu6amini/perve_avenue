@@ -38,6 +38,13 @@
 //      CustomImage parseHTML excludes twemoji so emoji nodes claim
 //      them. Toolbar positioning reads computed padding and border
 //      so it aligns to the visible image, not the border box.
+// v15: BlockBoundaryParagraph (renamed from TrailingEmbedParagraph)
+//      now inserts a paragraph at BOTH ends of the document when a
+//      block-level leaf or container sits at either boundary. This
+//      lets users type above an image that's the first block, and
+//      below a spoiler / code block / blockquote that's the last
+//      block. Empty paragraphs added by the plugin are stripped
+//      before serialization so they don't leak into saved posts.
 var MessengerModule = (function(Utils, EventBus) {
     'use strict';
 
@@ -1260,6 +1267,12 @@ result = result.replace(/<code\b[^>]*>([\s\S]*?)<\/code>/gi, function(match, inn
 
             if (result === before) break;
         }
+
+        // Strip empty paragraphs left behind by the block-boundary
+        // scaffolding. They give the cursor a place to live in the
+        // editor but carry no content and don't need to round-trip.
+        result = result.replace(/<p>\s*<\/p>/g, '');
+
         return result;
     }
 
@@ -1844,25 +1857,7 @@ var charCounter         = null;
 var draftSaveTimer      = null;
 var livePreviewTimer    = null;
 
-        // After inserting a lite embed or a block image, if the doc now
-// ends with an empty paragraph directly following the atom, move
-// the cursor into it. The trailing-paragraph plugin handles the
-// general case (it runs on every transaction). This helper covers
-// the explicit call sites where we want the cursor placed before
-// the user can see the transaction complete.
-function focusTrailingEmbedParagraph() {
-    if (!editor) return;
-    const doc = editor.state.doc;
-    if (doc.childCount < 2) return;
-    const last = doc.child(doc.childCount - 1);
-    const secondLast = doc.child(doc.childCount - 2);
-    if (last.type.name !== 'paragraph' || last.content.size !== 0) return;
-    const atomName = secondLast.type.name;
-    if (atomName !== 'liteYouTube' && atomName !== 'liteVimeo' && atomName !== 'image') return;
-    editor.chain().focus().setTextSelection(doc.content.size - 1).run();
-}
-
-// Fetch title + author for a fresh embed and patch the node once the
+        // Fetch title + author for a fresh embed and patch the node once the
 // worker responds. The worker's provider map (OEMBED_PROVIDERS) hits
 // YouTube's and Vimeo's oEmbed endpoints directly, so both fields
 // usually come back in a single round-trip.
@@ -1903,9 +1898,10 @@ function fetchEmbedMetadata(kind, videoid) {
 }
 
 // One entry point for all four paste-handler branches. Inserts the
-// node, moves the cursor into the trailing paragraph, and kicks off
-// the metadata fetch. opts.start / opts.end (integer seconds) are
-// forwarded to the node attrs when present.
+// node and kicks off the metadata fetch. opts.start / opts.end
+// (integer seconds) are forwarded to the node attrs when present.
+// Cursor placement into the trailing paragraph is handled by the
+// BlockBoundaryParagraph plugin on the resulting transaction.
 function insertLiteEmbed(kind, videoid, opts) {
     if (!editor) return;
     opts = opts || {};
@@ -1916,7 +1912,6 @@ function insertLiteEmbed(kind, videoid, opts) {
         type: kind,
         attrs: attrs
     }).run();
-    focusTrailingEmbedParagraph();
     fetchEmbedMetadata(kind, videoid);
 }
 
@@ -3085,8 +3080,6 @@ addSeparator();
 
         // Image hover toolbar. Buttons: NSFW toggle, Edit (alt text +
         // size), Delete. Shows on hover (desktop) and on click (touch).
-        // The toolbar is appended to body and positioned absolutely so
-        // it can escape the editor's clipping context.
         function setupImageToolbar(editorRoot, editorInstance) {
             if (!editorRoot || !editorInstance) return;
 
@@ -4553,33 +4546,77 @@ description ? ['span', { class: 'link-preview-description' }, description] : '',
                 });
 
 // ------------------------------------------------------------------
-// Trailing paragraph after a block atom (lite embed or image).
-// A block-level leaf has no internal text positions, so when it's
-// the last node in the doc there is no position after it for a
-// cursor to land on. This plugin inserts an empty paragraph and
-// moves the selection into it — without the selection move, the
-// caret sits in a gap position that ProseMirror won't render,
-// and the user has to click before typing.
+// Block-boundary paragraphs.
+// A block-level leaf or container (image, lite embed, spoiler,
+// code block, blockquote) has no internal text positions at its
+// edges. When such a node sits at the very start or very end of
+// the document, there is no position before or after it for a
+// cursor to land on. This plugin inserts an empty paragraph on
+// whichever side is missing and moves the selection into it so
+// the user can immediately type.
+//
+// Runs on every doc-changing transaction. Idempotent: if the
+// document already has paragraphs on both sides, nothing happens.
 // ------------------------------------------------------------------
-const TrailingEmbedParagraph = Extension.create({
-    name: 'trailingEmbedParagraph',
+const BlockBoundaryParagraph = Extension.create({
+    name: 'blockBoundaryParagraph',
     addProseMirrorPlugins() {
+        const BLOCK_TYPES = [
+            'liteYouTube',
+            'liteVimeo',
+            'image',
+            'spoiler',
+            'codeBlock',
+            'blockquote'
+        ];
+
         return [
             new Plugin({
-                key: new PluginKey('trailingEmbedParagraph'),
+                key: new PluginKey('blockBoundaryParagraph'),
                 appendTransaction(transactions, oldState, newState) {
                     if (!transactions.some(tr => tr.docChanged)) return null;
-                    const lastNode = newState.doc.lastChild;
-                    if (!lastNode) return null;
-                    const name = lastNode.type.name;
-                    if (name !== 'liteYouTube' && name !== 'liteVimeo' && name !== 'image') {
-                        return null;
-                    }
-                    const paragraph = newState.schema.nodes.paragraph.create();
-                    const tr = newState.tr.insert(newState.doc.content.size, paragraph);
 
-                    const $pos = tr.doc.resolve(tr.doc.content.size - 1);
-                    tr.setSelection(TextSelection.near($pos));
+                    const doc = newState.doc;
+                    if (!doc.firstChild) return null;
+
+                    const firstIsBlock = BLOCK_TYPES.indexOf(doc.firstChild.type.name) !== -1;
+                    const lastIsBlock  = BLOCK_TYPES.indexOf(doc.lastChild.type.name)  !== -1;
+                    if (!firstIsBlock && !lastIsBlock) return null;
+
+                    // Remember where the cursor was. A gap position (a cursor
+                    // in a place with no textblock) is the only case we need
+                    // to relocate explicitly — anything else will be mapped
+                    // forward by ProseMirror.
+                    const savedFrom = newState.selection.from;
+                    const wasInGap  = savedFrom === doc.content.size &&
+                                      lastIsBlock &&
+                                      !newState.selection.node;
+
+                    const tr = newState.tr;
+                    const paragraphType = newState.schema.nodes.paragraph;
+
+                    if (firstIsBlock) {
+                        tr.insert(0, paragraphType.create());
+                    }
+                    if (lastIsBlock) {
+                        tr.insert(tr.doc.content.size, paragraphType.create());
+                    }
+
+                    if (wasInGap) {
+                        // The original cursor position was in the gap after
+                        // the trailing block. Move it into the newly inserted
+                        // paragraph so the user can type.
+                        const $pos = tr.doc.resolve(tr.doc.content.size - 1);
+                        tr.setSelection(TextSelection.near($pos));
+                    } else {
+                        // Otherwise just map the existing selection through
+                        // the insertions so it stays where the user left it.
+                        const mappedFrom = tr.mapping.map(savedFrom);
+                        const mappedTo   = tr.mapping.map(newState.selection.to);
+                        tr.setSelection(
+                            TextSelection.create(tr.doc, mappedFrom, mappedTo)
+                        );
+                    }
 
                     return tr;
                 },
@@ -4662,7 +4699,7 @@ const AtomSelection = Extension.create({
                         SemanticColor,
                         CustomMention,
                         EmoticonRule,
-                        TrailingEmbedParagraph,
+                        BlockBoundaryParagraph,
                         AtomSelection,
                         Gapcursor,
                     ],
