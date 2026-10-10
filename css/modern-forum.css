@@ -1606,7 +1606,8 @@
   align-items: center;
 }
 .editor-image-nsfw-btn,
-.editor-image-edit-btn {
+.editor-image-edit-btn,
+.editor-image-delete-btn {
   width: 32px;
   height: 32px;
   border-radius: 50%;
@@ -1622,7 +1623,8 @@
   transition: background 0.15s, transform 0.15s;
 }
 .editor-image-nsfw-btn:hover,
-.editor-image-edit-btn:hover {
+.editor-image-edit-btn:hover,
+.editor-image-delete-btn:hover {
   background: rgba(40, 40, 40, 0.95);
   transform: scale(1.05);
 }
@@ -1631,7 +1633,8 @@
   border-color: var(--text-secondary);
 }
 .editor-image-nsfw-btn i,
-.editor-image-edit-btn i { pointer-events: none; }
+.editor-image-edit-btn i,
+.editor-image-delete-btn i { pointer-events: none; }
 
 /* ------------------------------------------------------------
    10b. SEMANTIC TEXT COLORS
