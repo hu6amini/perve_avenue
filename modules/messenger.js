@@ -49,6 +49,19 @@
 //      reader-side highlighter and the trailing-paragraph, lite-embed
 //      selection, and link-preview plugins remain custom because no
 //      v2-compatible equivalent exists.
+// v15: block-atom deletion fixes. DeleteAdjacentAtom is now a
+//      ProseMirror plugin with a node-name whitelist rather than a
+//      TipTap addKeyboardShortcuts extension that tested spec.atom.
+//      TipTap's Image extension never sets spec.atom — the image is
+//      a leaf because it has no content spec, not because it declares
+//      itself an atom — so the v14 check always failed and images
+//      were undeletable via keyboard. The plugin also handles a
+//      NodeSelection directly (clicking an image produces one, but
+//      TipTap 2.x does not install prosemirror-commands' baseKeymap
+//      by default, so nothing was bound to consume it). The image
+//      hover toolbar gains a delete button so touch users have a
+//      visible affordance instead of relying on a keyboard gesture.
+//      NodeSelection is now imported from prosemirror-state.
 var MessengerModule = (function(Utils, EventBus) {
     'use strict';
 
@@ -3072,10 +3085,19 @@ var MessengerModule = (function(Utils, EventBus) {
             };
         }
 
-        // Image hover toolbar. Two buttons positioned near the hovered or
-        // clicked image: NSFW toggle and Edit (alt text + size). Shows on
-        // hover (desktop) and on click (touch). Stays put briefly after
-        // click so touch users have time to hit the buttons.
+        // Image hover toolbar. Three buttons positioned near the hovered
+        // or clicked image: NSFW toggle, Edit (alt text + size), and
+        // Delete. Shows on hover (desktop) and on click (touch). Stays
+        // put briefly after click so touch users have time to hit the
+        // buttons.
+        //
+        // v15: the Delete button was added here because block-atom
+        // deletion is unreliable via keyboard alone — clicking an image
+        // produces a NodeSelection, but TipTap 2.x does not install
+        // prosemirror-commands' baseKeymap, so no key was bound to
+        // consume that selection. DeleteAdjacentAtom now covers the
+        // caret-at-boundary cases; this button covers the click-first
+        // case and gives touch users a visible affordance.
         function setupImageNsfwOverlay(editorRoot, editorInstance) {
             if (!editorRoot || !editorInstance) return;
 
@@ -3097,8 +3119,19 @@ var MessengerModule = (function(Utils, EventBus) {
             editBtn.title = 'Edit image (alt text, size)';
             editBtn.setAttribute('aria-label', 'Edit image');
 
+            // v15: Delete button. Discoverable affordance for removing
+            // the image outright — same dispatch as the keyboard paths,
+            // but reachable by a single click on the toolbar.
+            var deleteBtn = document.createElement('button');
+            deleteBtn.type = 'button';
+            deleteBtn.className = 'editor-image-delete-btn';
+            deleteBtn.innerHTML = '<i class="fa-regular fa-trash-can" aria-hidden="true"></i>';
+            deleteBtn.title = 'Delete image';
+            deleteBtn.setAttribute('aria-label', 'Delete image');
+
             toolbarEl.appendChild(nsfwBtn);
             toolbarEl.appendChild(editBtn);
+            toolbarEl.appendChild(deleteBtn);
             document.body.appendChild(toolbarEl);
 
             var hoveredImg = null;
@@ -3118,7 +3151,10 @@ var MessengerModule = (function(Utils, EventBus) {
             function positionToolbar(img) {
                 var rect = img.getBoundingClientRect();
                 toolbarEl.style.top = (rect.top + window.pageYOffset + 6) + 'px';
-                toolbarEl.style.left = (rect.right + window.pageXOffset - 76) + 'px';
+                // Three buttons now, so offset further left than the
+                // two-button version. 110px clears the widest button
+                // set (three 32px circles + two 6px gaps) with margin.
+                toolbarEl.style.left = (rect.right + window.pageXOffset - 110) + 'px';
             }
 
             function showToolbar(img) {
@@ -3235,6 +3271,25 @@ var MessengerModule = (function(Utils, EventBus) {
                     );
                 });
 
+                toolbarEl.style.display = 'none';
+                hoveredImg = null;
+            });
+
+            // v15: Delete handler. Same dispatch the keyboard path uses —
+            // a direct range deletion at the node's own position, so it
+            // does not depend on a NodeSelection existing first.
+            deleteBtn.addEventListener('click', function(e) {
+                e.preventDefault();
+                e.stopPropagation();
+                if (!hoveredImg) return;
+                var resolved = resolveImageNode(hoveredImg);
+                if (!resolved) return;
+                editorInstance.view.dispatch(
+                    editorInstance.view.state.tr.delete(
+                        resolved.pos,
+                        resolved.pos + resolved.node.nodeSize
+                    )
+                );
                 toolbarEl.style.display = 'none';
                 hoveredImg = null;
             });
@@ -3474,9 +3529,11 @@ var MessengerModule = (function(Utils, EventBus) {
                     throw new Error('Editor, Node, Mark, Extension, or InputRule not found in @tiptap/core');
                 }
 
-                // TextSelection is required by the trailing-paragraph
-                // plugin to move the caret into the paragraph it inserts.
-                const { Plugin, PluginKey, TextSelection } = await import('https://esm.sh/prosemirror-state@1.4.3');
+                // TextSelection is required by the trailing-paragraph and
+                // normalize-empty-doc plugins to move the caret.
+                // NodeSelection (v15) is used by DeleteAdjacentAtom to
+                // recognise when a block atom is currently selected.
+                const { Plugin, PluginKey, TextSelection, NodeSelection } = await import('https://esm.sh/prosemirror-state@1.4.3');
                 const { Decoration, DecorationSet } = await import('https://esm.sh/prosemirror-view@1.33.0');
 
                 // v14: imports for the ecosystem extensions.
@@ -4462,63 +4519,105 @@ var MessengerModule = (function(Utils, EventBus) {
                 // ------------------------------------------------------------------
                 // Backspace / Delete adjacent to a block atom.
                 //
-                // ProseMirror's default Backspace at the start of a paragraph runs
-                // joinBackwards, which can only merge textblocks. Block atoms
-                // (image, liteYouTube, liteVimeo) have no content to merge, so the
-                // command silently fails and the user sees nothing happen. Same for
-                // Delete at the end of the previous paragraph.
+                // Two failure modes this exists to fix:
+                //   1. Cursor at the very start of a paragraph whose previous
+                //      sibling is a block atom (image, lite embed, horizontal
+                //      rule). ProseMirror runs joinBackwards, which only knows
+                //      how to merge textblocks. It can't merge a paragraph with
+                //      an image, so it silently fails.
+                //   2. Clicking a block atom produces a NodeSelection, but
+                //      TipTap 2.x does not install prosemirror-commands'
+                //      baseKeymap by default, so nothing is bound to consume
+                //      the selection on Backspace/Delete.
                 //
-                // This handler detects an empty selection at a textblock boundary
-                // whose neighbour is an atom, and deletes that atom explicitly.
+                // The check for "is this a block atom" uses a name whitelist
+                // rather than spec.atom, because TipTap's Image extension does
+                // not set that flag — the image is a leaf because it has no
+                // content spec, not because it declares itself an atom.
+                //
+                // Implemented as a ProseMirror plugin (not a TipTap
+                // addKeyboardShortcuts extension) so it sits in the same
+                // keydown pipeline as ProseMirror's own keymap and runs
+                // before it.
                 // ------------------------------------------------------------------
                 const DeleteAdjacentAtom = Extension.create({
                     name: 'deleteAdjacentAtom',
-                    addKeyboardShortcuts() {
-                        const deleteAtomBefore = () => {
-                            const { state, view } = this.editor;
-                            const { selection } = state;
-                            if (!selection.empty) return false;
+                    addProseMirrorPlugins() {
+                        // Extend this set if more block-level atom nodes are
+                        // added to the schema later.
+                        const BLOCK_ATOM_NAMES = new Set([
+                            'image', 'liteYouTube', 'liteVimeo', 'horizontalRule',
+                        ]);
 
-                            const $from = selection.$from;
-                            // Only at the very start of a textblock.
-                            if ($from.parentOffset !== 0) return false;
-                            // The block itself must sit inside a textblock, not at
-                            // the doc root — otherwise before() throws.
-                            if ($from.depth === 0) return false;
-
-                            const blockStart = $from.before($from.depth);
-                            const nodeBefore = state.doc.resolve(blockStart).nodeBefore;
-                            if (!nodeBefore || !nodeBefore.type.spec.atom) return false;
-
-                            view.dispatch(
-                                state.tr.delete(blockStart - nodeBefore.nodeSize, blockStart)
-                            );
-                            return true;
+                        const isBlockAtom = (node) => {
+                            if (!node) return false;
+                            if (node.isText || node.isInline) return false;
+                            return BLOCK_ATOM_NAMES.has(node.type.name);
                         };
 
-                        const deleteAtomAfter = () => {
-                            const { state, view } = this.editor;
-                            const { selection } = state;
-                            if (!selection.empty) return false;
+                        return [
+                            new Plugin({
+                                key: new PluginKey('deleteAdjacentAtom'),
+                                props: {
+                                    handleKeyDown(view, event) {
+                                        const key = event.key;
+                                        if (key !== 'Backspace' && key !== 'Delete') return false;
 
-                            const $from = selection.$from;
-                            // Only at the very end of a textblock.
-                            if ($from.parentOffset !== $from.parent.content.size) return false;
+                                        const { state } = view;
+                                        const { selection } = state;
 
-                            const blockEnd = $from.after($from.depth);
-                            const nodeAfter = state.doc.resolve(blockEnd).nodeAfter;
-                            if (!nodeAfter || !nodeAfter.type.spec.atom) return false;
+                                        // Case 1: a block atom is currently selected.
+                                        // This is what happens after the user clicks
+                                        // the image — ProseMirror produces a
+                                        // NodeSelection. Delete it directly; there
+                                        // is no text to remove.
+                                        if (selection instanceof NodeSelection) {
+                                            view.dispatch(
+                                                state.tr.delete(selection.from, selection.to)
+                                            );
+                                            return true;
+                                        }
 
-                            view.dispatch(
-                                state.tr.delete(blockEnd, blockEnd + nodeAfter.nodeSize)
-                            );
-                            return true;
-                        };
+                                        if (!selection.empty) return false;
+                                        const $from = selection.$from;
 
-                        return {
-                            Backspace: deleteAtomBefore,
-                            Delete: deleteAtomAfter,
-                        };
+                                        // Case 2a: Backspace at the very start of a
+                                        // textblock, previous sibling is a block
+                                        // atom.
+                                        if (key === 'Backspace') {
+                                            if ($from.parentOffset !== 0) return false;
+                                            if ($from.depth === 0) return false;
+
+                                            const blockStart = $from.before($from.depth);
+                                            const nodeBefore = state.doc.resolve(blockStart).nodeBefore;
+                                            if (!isBlockAtom(nodeBefore)) return false;
+
+                                            view.dispatch(
+                                                state.tr.delete(blockStart - nodeBefore.nodeSize, blockStart)
+                                            );
+                                            return true;
+                                        }
+
+                                        // Case 2b: Delete at the very end of a
+                                        // textblock, next sibling is a block atom.
+                                        if (key === 'Delete') {
+                                            if ($from.parentOffset !== $from.parent.content.size) return false;
+
+                                            const blockEnd = $from.after($from.depth);
+                                            const nodeAfter = state.doc.resolve(blockEnd).nodeAfter;
+                                            if (!isBlockAtom(nodeAfter)) return false;
+
+                                            view.dispatch(
+                                                state.tr.delete(blockEnd, blockEnd + nodeAfter.nodeSize)
+                                            );
+                                            return true;
+                                        }
+
+                                        return false;
+                                    },
+                                },
+                            }),
+                        ];
                     },
                 });
 
