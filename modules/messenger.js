@@ -3537,6 +3537,8 @@ var MessengerModule = (function(Utils, EventBus) {
                 const CustomImage = BaseImage.extend({
                     inline: false,
                     group: 'block',
+                    draggable: true,
+                    selectable: true,
                     addAttributes() {
                         return {
                             ...this.parent?.(),
