@@ -3610,12 +3610,13 @@ var MessengerModule = (function(Utils, EventBus) {
                             const dropzoneView = document.createElement('div');
                             dropzoneView.className = 'ff-upload-dropzone';
                             dropzoneView.innerHTML = ''
-                                + '<div class="ff-upload-dropzone-icon"><i class="fa-regular fa-cloud-arrow-up" aria-hidden="true"></i></div>'
-                                + '<div class="ff-upload-dropzone-text">'
-                                +   '<div class="ff-upload-dropzone-primary"><em>Click to upload</em> or drag and drop</div>'
-                                +   '<div class="ff-upload-dropzone-secondary">or <button type="button" class="ff-upload-by-url">insert by URL</button></div>'
-                                + '</div>'
-                                + '<button type="button" class="ff-upload-btn is-danger ff-upload-dismiss-btn" aria-label="Remove"><i class="fa-regular fa-xmark" aria-hidden="true"></i></button>';
+    + '<div class="ff-upload-dropzone-icon"><i class="fa-regular fa-cloud-arrow-up" aria-hidden="true"></i></div>'
+    + '<div class="ff-upload-dropzone-text">'
+    +   '<div class="ff-upload-dropzone-primary"><em>Click to upload</em> or drag and drop</div>'
+    +   '<div class="ff-upload-dropzone-secondary">or <button type="button" class="ff-upload-by-url">insert by URL</button></div>'
+    +   '<div class="ff-upload-dropzone-hint">Max 32 MB per image</div>'
+    + '</div>'
+    + '<button type="button" class="ff-upload-btn is-danger ff-upload-dismiss-btn" aria-label="Remove"><i class="fa-regular fa-xmark" aria-hidden="true"></i></button>';
 
                             // ---------- uploading / failed ----------
                             const progressView = document.createElement('div');
