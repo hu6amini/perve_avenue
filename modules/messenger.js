@@ -3693,16 +3693,41 @@ var MessengerModule = (function(Utils, EventBus) {
                             }
 
                             function replaceWithImage(imageAttrs) {
-                                const located = findSelf();
-                                if (!located) return;
-                                if (located.node.attrs.uploadId) {
-                                    _uploadRegistry.delete(located.node.attrs.uploadId);
-                                }
-                                const imageNode = editor.schema.nodes.image.create(imageAttrs);
-                                editor.view.dispatch(
-                                    editor.state.tr.replaceWith(located.pos, located.pos + located.node.nodeSize, imageNode)
-                                );
-                            }
+    const located = findSelf();
+    if (!located) return;
+    if (located.node.attrs.uploadId) {
+        _uploadRegistry.delete(located.node.attrs.uploadId);
+    }
+    const imageNode = editor.schema.nodes.image.create(imageAttrs);
+    editor.view.dispatch(
+        editor.state.tr.replaceWith(
+            located.pos,
+            located.pos + located.node.nodeSize,
+            imageNode
+        )
+    );
+
+    // Move the caret into the paragraph after the image so typing
+    // continues naturally. TrailingEmbedParagraph should already
+    // have added that paragraph and set the selection inside it —
+    // but a focus/blur cycle around this moment (the URL modal
+    // closing, or the XHR load handler running just after a blur)
+    // can leave the browser's caret resting at the previous
+    // boundary while ProseMirror's own selection is correct. This
+    // reasserts the selection on the next tick, which lands after
+    // any browser focus handling has settled. Idempotent if the
+    // plugin already placed the caret there.
+    setTimeout(function() {
+        try {
+            const afterPos = located.pos + imageNode.nodeSize;
+            const $after = editor.state.doc.resolve(afterPos);
+            if ($after.nodeAfter && $after.nodeAfter.isTextblock) {
+                editor.commands.setTextSelection(afterPos + 1);
+                editor.commands.focus();
+            }
+        } catch (e) { /* position no longer valid — nothing to do */ }
+    }, 0);
+}
 
                             function render(n) {
                                 const isIdle = n.attrs.status === 'idle';
