@@ -3698,35 +3698,41 @@ var MessengerModule = (function(Utils, EventBus) {
     if (located.node.attrs.uploadId) {
         _uploadRegistry.delete(located.node.attrs.uploadId);
     }
+
     const imageNode = editor.schema.nodes.image.create(imageAttrs);
-    editor.view.dispatch(
-        editor.state.tr.replaceWith(
-            located.pos,
-            located.pos + located.node.nodeSize,
-            imageNode
-        )
+    const tr = editor.state.tr.replaceWith(
+        located.pos,
+        located.pos + located.node.nodeSize,
+        imageNode
     );
 
-    // Move the caret into the paragraph after the image so typing
-    // continues naturally. TrailingEmbedParagraph should already
-    // have added that paragraph and set the selection inside it —
-    // but a focus/blur cycle around this moment (the URL modal
-    // closing, or the XHR load handler running just after a blur)
-    // can leave the browser's caret resting at the previous
-    // boundary while ProseMirror's own selection is correct. This
-    // reasserts the selection on the next tick, which lands after
-    // any browser focus handling has settled. Idempotent if the
-    // plugin already placed the caret there.
-    setTimeout(function() {
-        try {
-            const afterPos = located.pos + imageNode.nodeSize;
-            const $after = editor.state.doc.resolve(afterPos);
-            if ($after.nodeAfter && $after.nodeAfter.isTextblock) {
-                editor.commands.setTextSelection(afterPos + 1);
-                editor.commands.focus();
-            }
-        } catch (e) { /* position no longer valid — nothing to do */ }
-    }, 0);
+    // Set the selection in the same transaction as the replacement,
+    // rather than deferring it to a setTimeout or a rAF. Deferring
+    // leaves a window between the commit and the fix during which
+    // the browser installs its own default caret at position 0 —
+    // and by the time the deferred callback runs, focus() restores
+    // THAT position rather than the one we meant to set.
+    //
+    // TrailingEmbedParagraph should have already inserted a
+    // paragraph after the image (appendTransaction fires on this
+    // same dispatch). If it hasn't for some reason — because the
+    // transaction wasn't considered "changed", or because the doc
+    // happened to be built in a way the plugin didn't catch — we
+    // add the paragraph ourselves so the selection always has a
+    // valid textblock to land in.
+    const afterPos = located.pos + imageNode.nodeSize;
+    const $after = tr.doc.resolve(afterPos);
+
+    if ($after.nodeAfter && $after.nodeAfter.isTextblock) {
+        tr.setSelection(TextSelection.near($after, 1));
+    } else {
+        const para = editor.schema.nodes.paragraph.create();
+        tr.insert(afterPos, para);
+        tr.setSelection(TextSelection.near(tr.doc.resolve(afterPos + 1), 1));
+    }
+
+    editor.view.dispatch(tr);
+    editor.commands.focus();
 }
 
                             function render(n) {
