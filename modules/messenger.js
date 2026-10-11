@@ -77,6 +77,19 @@
 //      paste-URL and link-preview flows are unaffected — they route
 //      through insertContent / linkPreviewPlugin, not through the
 //      upload placeholder.
+// v17: image placeholder grows an idle dropzone state. The toolbar
+//      image button no longer opens a dropdown; it inserts an idle
+//      imageUploadPlaceholder at the cursor. That placeholder renders
+//      a dashed dropzone — icon, "Click to upload or drag and drop",
+//      plus an "insert by URL" link — and transitions to the v16
+//      progress card once a file is chosen. This collapses the old
+//      "By URL / Upload from computer" dropdown into a single surface
+//      that offers both paths side by side. Send is now blocked for
+//      any placeholder regardless of status, not just while uploading,
+//      so an idle or failed placeholder is always resolved (retried,
+//      uploaded, or dismissed) before the message can go out. The
+//      URL-modal path replaces the placeholder with a real image node
+//      and never touches the upload registry.
 var MessengerModule = (function(Utils, EventBus) {
     'use strict';
 
@@ -147,9 +160,6 @@ var MessengerModule = (function(Utils, EventBus) {
         return txt.value;
     }
 
-    // Normalise a YouTube/Vimeo time value into seconds.
-    // Handles "90", "90s", "1m30s", "1h2m3s".
-    // Returns null if the input is empty, malformed, or resolves to 0.
     function parseTimeString(t) {
         if (t == null) return null;
         var s = String(t).trim().toLowerCase();
@@ -218,7 +228,6 @@ var MessengerModule = (function(Utils, EventBus) {
         } catch(e) { return dateStr; }
     }
 
-    // v16: byte-count formatter for the upload placeholder's meta line.
     function formatBytes(bytes) {
         if (!bytes || bytes < 0) return '0 B';
         var units = ['B', 'KB', 'MB', 'GB'];
@@ -228,11 +237,6 @@ var MessengerModule = (function(Utils, EventBus) {
         return n.toFixed(n >= 10 || i === 0 ? 0 : 2) + ' ' + units[i];
     }
 
-    // Unwrap .lite-embed-wrapper containers produced by the LiteYouTube /
-    // LiteVimeo renderHTML, emitting the legacy marker span that the
-    // forum stores. Title, author, and any start/end timestamps ride
-    // along as data-* attributes so replies and drafts can restore the
-    // full state without re-fetching.
     function unwrapLiteEmbedWrappers(html) {
         if (!html || html.indexOf('lite-embed-wrapper') === -1) return html;
         var temp = document.createElement('div');
@@ -263,18 +267,6 @@ var MessengerModule = (function(Utils, EventBus) {
 
     // ------------------------------------------------------------------------
     // SYNTAX HIGHLIGHTING (READER / PREVIEW SIDE ONLY)
-    // A deliberately small generic tokenizer. Handles the shapes common to
-    // every language in CODE_LANGUAGE_SUGGESTIONS — line/block comments,
-    // strings, numbers, and a curated keyword union. Not a real parser;
-    // it produces a visual hint, not a correctness guarantee.
-    //
-    // v14: the editor itself now uses CodeBlockLowlight for its own
-    // rendering. This helper still runs on the reader-side preview and on
-    // the copied-out HTML the forum stores, because htmlToLegacy strips
-    // inner tags before writing the [CODE] payload — so the forum never
-    // sees hljs-* spans, only the plain code. The transformPreviewHtml
-    // path also reads textContent, which strips lowlight spans before
-    // re-highlighting here, so nothing double-wraps.
     // ------------------------------------------------------------------------
     var CODE_HIGHLIGHT_KEYWORDS = [
         'abstract','as','assert','async','await','bool','break','case','catch','class','const','continue',
@@ -621,8 +613,6 @@ var MessengerModule = (function(Utils, EventBus) {
             }
         });
         observerCallbacks = [];
-        // v16: drop any in-flight upload references on reset so a
-        // subsequent initialize starts with a clean registry.
         _uploadRegistry.clear();
     }
 
@@ -1149,11 +1139,6 @@ var MessengerModule = (function(Utils, EventBus) {
             }
         );
 
-        // Lite embed markers → custom elements. Round-trips the payload
-        // written by htmlToLegacy; the LiteYouTube/LiteVimeo parseHTML
-        // picks up title, author, and any start/end timestamps from
-        // data-* attributes, so the caption and playback range render
-        // without a second fetch.
         html = html.replace(
             /<span\b[^>]*\bff-lite-youtube\b[^>]*>([\s\S]*?)<\/span>/gis,
             function(match) {
@@ -1225,9 +1210,6 @@ var MessengerModule = (function(Utils, EventBus) {
                 : content;
         });
 
-        // Inline code marker → <code>. ForumFree re-escapes the & in &lt;
-        // when it round-trips, so one decode pass undoes that and the
-        // subsequent escape restores well-formed HTML for TipTap to parse.
         html = html.replace(
             /<span[^>]*\bff-inline-code\b[^>]*>([\s\S]*?)<\/span>/gis,
             function(_, content) {
@@ -1243,10 +1225,6 @@ var MessengerModule = (function(Utils, EventBus) {
     function htmlToLegacy(html) {
         if (!html || typeof html !== 'string') return html;
 
-        // Unwrap the lite-embed caption wrapper first, converting each
-        // .lite-embed-wrapper into the marker span form. Runs before the
-        // regex loop so the existing lite-youtube / lite-vimeo replacements
-        // below only serve as defensive coverage for stray bare elements.
         html = unwrapLiteEmbedWrappers(html);
 
         var result = html;
@@ -1265,10 +1243,6 @@ var MessengerModule = (function(Utils, EventBus) {
                 ''
             );
 
-            // Lite embeds. Run first so an embed nested inside a quote
-            // or spoiler gets serialized before the outer container's
-            // regex can strip or re-escape the custom element.
-            // Start / end timestamps are preserved on the marker.
             result = result.replace(
                 /<lite-youtube\b[^>]*\bvideoid="([^"]*)"[^>]*>\s*<\/lite-youtube>/gi,
                 function(match, videoid) {
@@ -1310,11 +1284,6 @@ var MessengerModule = (function(Utils, EventBus) {
             });
 
             result = result.replace(/<pre([^>]*)>\s*<code[^>]*>([\s\S]*?)<\/code>\s*<\/pre>/gi, function(match, preAttrs, inner) {
-                // Inner may contain syntax-highlight spans — from the
-                // reader-side highlighter in a rare preview-then-send path,
-                // or from CodeBlockLowlight in the editor. Either way, strip
-                // all tags to recover the plain source text the forum
-                // stores. hljs-* spans and code-* spans both vanish here.
                 var plain = inner.replace(/<[^>]*>/g, '');
                 var decoded = plain
                     .replace(/&lt;/g, '<')
@@ -1332,9 +1301,6 @@ var MessengerModule = (function(Utils, EventBus) {
                 return prefix + '[CODE]' + decoded + '[/CODE]';
             });
 
-            // Inline code → ff-inline-code marker. Runs after the pre pass, so
-            // any <code> still present is guaranteed to be inline (the block
-            // form was already consumed by the <pre><code> pair above).
             result = result.replace(/<code\b[^>]*>([\s\S]*?)<\/code>/gi, function(match, inner) {
                 return '<span class="ff-inline-code">' + inner + '</span>';
             });
@@ -1400,9 +1366,6 @@ var MessengerModule = (function(Utils, EventBus) {
         Array.from(temp.querySelectorAll('pre')).forEach(function(pre) {
             if (pre.closest('.modern-code')) return;
             var code = pre.querySelector('code');
-            // textContent strips any hljs-* spans that CodeBlockLowlight
-            // emitted in the editor, so this re-runs the reader-side
-            // highlighter on the raw source and there's no double wrapping.
             var rawText = code ? (code.textContent || '') : (pre.textContent || '');
             var codeContent = highlightCode(rawText);
             var lang = (pre.getAttribute('data-language') || '').trim() || 'Code';
@@ -1928,14 +1891,6 @@ var MessengerModule = (function(Utils, EventBus) {
         var draftSaveTimer      = null;
         var livePreviewTimer    = null;
 
-        // After inserting a lite embed or a block image, if the doc now
-        // ends with an empty paragraph directly following the atom, move
-        // the cursor into it. The trailing-paragraph plugin guarantees
-        // that paragraph exists, but ProseMirror leaves the selection in
-        // a gap position — no text cursor, no typing. This helper covers
-        // the explicit call sites (paste handler, lite embed inserts)
-        // where we want the cursor placed immediately; the plugin itself
-        // also sets the selection for the general case.
         function focusTrailingEmbedParagraph() {
             if (!editor) return;
             const doc = editor.state.doc;
@@ -1945,16 +1900,9 @@ var MessengerModule = (function(Utils, EventBus) {
             if (last.type.name !== 'paragraph' || last.content.size !== 0) return;
             const atomName = secondLast.type.name;
             if (atomName !== 'liteYouTube' && atomName !== 'liteVimeo' && atomName !== 'image' && atomName !== 'imageUploadPlaceholder') return;
-            // doc.content.size - 1 is the single cursor position inside the
-            // empty trailing paragraph. setTextSelection on that puts a real
-            // text cursor there and chain().focus() gives it focus.
             editor.chain().focus().setTextSelection(doc.content.size - 1).run();
         }
 
-        // Fetch title + author for a fresh embed and patch the node once the
-        // worker responds. The worker's provider map (OEMBED_PROVIDERS) hits
-        // YouTube's and Vimeo's oEmbed endpoints directly, so both fields
-        // usually come back in a single round-trip.
         function fetchEmbedMetadata(kind, videoid) {
             if (!editor || !videoid) return;
             var canonicalUrl = kind === 'liteYouTube'
@@ -1991,10 +1939,6 @@ var MessengerModule = (function(Utils, EventBus) {
                 .catch(function() { /* caption is optional — silent fail */ });
         }
 
-        // One entry point for all four paste-handler branches. Inserts the
-        // node, moves the cursor into the trailing paragraph, and kicks off
-        // the metadata fetch. opts.start / opts.end (integer seconds) are
-        // forwarded to the node attrs when present.
         function insertLiteEmbed(kind, videoid, opts) {
             if (!editor) return;
             opts = opts || {};
@@ -2083,25 +2027,22 @@ var MessengerModule = (function(Utils, EventBus) {
 
         // ------------------------------------------------------------------
         // LIVE PREVIEW REFRESH
-        // Debounced. Runs only while the preview panel is open, and never
-        // resets expansion state inside expanded quotes / spoilers.
         // ------------------------------------------------------------------
         function updateLivePreview() {
             if (!editor || editorContentIsEmpty(editor.getHTML())) return;
 
-            // v16: skip the re-render while an upload is in flight. The
-            // placeholder renders its own card; the preview would just
-            // repaint on every progress tick, which is wasted work.
-            var hasInFlightUpload = false;
+            // v17: skip the re-render while any placeholder exists — its
+            // own card is its UI, and the preview would just repaint on
+            // every progress tick during an upload.
+            var hasPlaceholder = false;
             editor.state.doc.content.content.some(function(child) {
-                if (child.type.name === 'imageUploadPlaceholder' &&
-                    child.attrs.status === 'uploading') {
-                    hasInFlightUpload = true;
+                if (child.type.name === 'imageUploadPlaceholder') {
+                    hasPlaceholder = true;
                     return true;
                 }
                 return false;
             });
-            if (hasInFlightUpload) return;
+            if (hasPlaceholder) return;
 
             var previewArea = container.querySelector('#modern-preview-area');
             if (!previewArea || previewArea.style.display === 'none') return;
@@ -2132,16 +2073,18 @@ var MessengerModule = (function(Utils, EventBus) {
             var hasSubject   = !!(modernTitle && modernTitle.value.trim().length > 0);
             var hasBody      = !!(editor && !editorContentIsEmpty(editor.getHTML()));
 
-            // v16: block Send while any upload is in flight. The
-            // placeholder nodes are stripped from the serialized
-            // payload, so sending mid-upload would silently drop the
-            // images the user just added.
-            var uploadInFlight = false;
+            // v17: any placeholder — idle, uploading, or failed — blocks
+            // Send. An idle placeholder means "the user is about to add
+            // an image"; a failed one means the image never arrived. In
+            // both cases, sending would silently drop content the user
+            // intended to include. The placeholder is stripped from the
+            // serialized payload by htmlToLegacy, so the send itself
+            // would succeed — which is exactly the problem.
+            var hasPlaceholder = false;
             if (editor) {
                 editor.state.doc.descendants(function(node) {
-                    if (node.type.name === 'imageUploadPlaceholder' &&
-                        node.attrs.status === 'uploading') {
-                        uploadInFlight = true;
+                    if (node.type.name === 'imageUploadPlaceholder') {
+                        hasPlaceholder = true;
                         return false;
                     }
                     return true;
@@ -2149,7 +2092,7 @@ var MessengerModule = (function(Utils, EventBus) {
             }
 
             if (modernSubmitBtnRef) {
-                var sendReady = hasRecipient && hasSubject && hasBody && !uploadInFlight;
+                var sendReady = hasRecipient && hasSubject && hasBody && !hasPlaceholder;
                 modernSubmitBtnRef.disabled = !sendReady;
                 modernSubmitBtnRef.setAttribute('aria-disabled', String(!sendReady));
 
@@ -2160,7 +2103,7 @@ var MessengerModule = (function(Utils, EventBus) {
                     if (!hasRecipient) missing.push('a recipient');
                     if (!hasSubject)   missing.push('a subject');
                     if (!hasBody)      missing.push('a message body');
-                    if (uploadInFlight) missing.push('wait for the upload to finish');
+                    if (hasPlaceholder) missing.push('finish or remove the image placeholder');
                     modernSubmitBtnRef.setAttribute('title', 'Add ' + missing.join(', ') + ' to send');
                 }
             }
@@ -2185,10 +2128,6 @@ var MessengerModule = (function(Utils, EventBus) {
             }
         }
 
-        // v14: the count comes from editor.storage.characterCount now
-        // (populated by the CharacterCount extension), not editor.getText().
-        // This keeps the counter consistent with the extension's own
-        // internal count and its optional limit enforcement.
         function updateCharCounter() {
             if (!MAX_MESSAGE_LENGTH || !editor) return;
             var len = editor.storage.characterCount.characters();
@@ -2670,10 +2609,6 @@ var MessengerModule = (function(Utils, EventBus) {
 
         var blockquoteBtn = makeToolbarButton('fa-regular fa-quote-left', 'Blockquote');
 
-        // Unified Code dropdown — replaces the two separate code buttons.
-        // Trigger highlights when either inline code or code block is active.
-        // Keyboard shortcuts (Ctrl+E for inline) bypass the dropdown and
-        // apply directly, since keyboard users don't want extra clicks.
         var codeDropdownContainer = document.createElement('div');
         codeDropdownContainer.className = 'modern-dropdown';
         codeDropdownContainer.style.cssText = 'position:relative;display:inline-block';
@@ -2739,35 +2674,12 @@ var MessengerModule = (function(Utils, EventBus) {
 
         var linkBtn = makeToolbarButton('fa-regular fa-link', 'Insert link', { shortcut: 'Control+K' });
 
-        var imageDropdownContainer = document.createElement('div');
-        imageDropdownContainer.className = 'modern-dropdown';
-        imageDropdownContainer.style.cssText = 'position:relative;display:inline-block';
-        var imageDropdownBtn = document.createElement('button');
-        imageDropdownBtn.type = 'button';
-        imageDropdownBtn.className = 'modern-editor-btn';
-        imageDropdownBtn.innerHTML = '<i class="fa-regular fa-image"></i>';
-        imageDropdownBtn.title = 'Insert image';
-        imageDropdownBtn.setAttribute('aria-label', 'Insert image');
-        imageDropdownBtn.setAttribute('aria-haspopup', 'menu');
-        imageDropdownBtn.setAttribute('aria-expanded', 'false');
-        var imageDropdownMenu = document.createElement('div');
-        imageDropdownMenu.className = 'modern-dropdown-menu';
-        imageDropdownMenu.setAttribute('role', 'menu');
-        imageDropdownMenu.style.cssText = 'position:absolute;top:100%;left:0;background:var(--surface-color);border:1px solid var(--border-color);border-radius:var(--radius-sm);z-index:1000;min-width:200px;display:none;';
-        imageDropdownMenu.innerHTML = ''
-            + '<button class="modern-dropdown-item" role="menuitem" id="image-url-option"><i class="fa-regular fa-link"></i> By URL</button>'
-            + '<button class="modern-dropdown-item" role="menuitem" id="image-upload-option"><i class="fa-regular fa-cloud-arrow-up"></i> Upload from computer</button>';
-        imageDropdownContainer.appendChild(imageDropdownBtn);
-        imageDropdownContainer.appendChild(imageDropdownMenu);
-        toolbar.appendChild(imageDropdownContainer);
-        imageDropdownBtn.onclick = function(e) {
-            e.stopPropagation();
-            var isOpen = imageDropdownMenu.style.display === 'block';
-            document.querySelectorAll('.modern-dropdown-menu').forEach(function(m) { m.style.display = 'none'; });
-            document.querySelectorAll('.modern-editor-btn[aria-haspopup="menu"]').forEach(function(b) { b.setAttribute('aria-expanded', 'false'); });
-            if (!isOpen) openDropdown(imageDropdownBtn, imageDropdownMenu);
-        };
-        imageDropdownMenu.addEventListener('click', function(e) { e.stopPropagation(); });
+        // v17: image button is now a plain insert. It drops an idle
+        // imageUploadPlaceholder at the cursor; that placeholder carries
+        // the dropzone, the file picker, and the "insert by URL" link.
+        // The old By URL / Upload from computer dropdown has been
+        // removed — its two options live inside the placeholder.
+        var imageBtn = makeToolbarButton('fa-regular fa-image', 'Insert image');
 
         addSeparator();
         var spoilerBtn = makeToolbarButton('fa-regular fa-eye-slash', 'Spoiler', { shortcut: 'Control+Shift+S' });
@@ -2840,9 +2752,6 @@ var MessengerModule = (function(Utils, EventBus) {
                         e.stopPropagation();
                         if (editor) {
                             var emojiChar = this.getAttribute('data-emoji');
-                            // Emoji must use the inline `emoji` node, not
-                            // `image` (which is block-level). Using `image`
-                            // would place every picked emoji on its own line.
                             editor.chain().focus().insertContent({
                                 type: 'emoji',
                                 attrs: {
@@ -2880,11 +2789,6 @@ var MessengerModule = (function(Utils, EventBus) {
             }
         });
 
-        // v16: rewritten to insert the placeholder node. The actual XHR
-        // and progress tracking now live inside the node view, so this
-        // function only needs to register the File and drop the node.
-        // All three call sites (paste-file, drag-drop, file-picker) route
-        // through here and get the same UX as a result.
         function uploadImageToWorker(file, editorInstance) {
             if (!file || !editorInstance) return;
 
@@ -2941,7 +2845,6 @@ var MessengerModule = (function(Utils, EventBus) {
             });
         }
 
-        // initial value pre-fills the field for edit-in-place usage.
         function showSpoilerTitleModal(initial, callback) {
             var modalOverlay = document.createElement('div');
             modalOverlay.className = 'modern-modal-overlay';
@@ -3033,8 +2936,6 @@ var MessengerModule = (function(Utils, EventBus) {
             });
         }
 
-        // initialHref pre-fills the URL field for edit-in-place usage.
-        // Text field is hidden when editing (link text stays put).
         function showLinkModal(initialHref, callback) {
             var modalOverlay = document.createElement('div');
             modalOverlay.className = 'modern-modal-overlay';
@@ -3084,8 +2985,6 @@ var MessengerModule = (function(Utils, EventBus) {
             urlInput.addEventListener('keypress', function(e) { if (e.key === 'Enter') modalBox.querySelector('#modal-submit').click(); });
         }
 
-        // Image edit modal — alt text + display size. Used from the image
-        // hover toolbar's "pencil" button.
         function showImageEditModal(initialAlt, initialSize, callback) {
             var modalOverlay = document.createElement('div');
             modalOverlay.className = 'modern-modal-overlay';
@@ -3147,19 +3046,6 @@ var MessengerModule = (function(Utils, EventBus) {
             };
         }
 
-        // Image hover toolbar. Three buttons positioned near the hovered
-        // or clicked image: NSFW toggle, Edit (alt text + size), and
-        // Delete. Shows on hover (desktop) and on click (touch). Stays
-        // put briefly after click so touch users have time to hit the
-        // buttons.
-        //
-        // v15: the Delete button was added here because block-atom
-        // deletion is unreliable via keyboard alone — clicking an image
-        // produces a NodeSelection, but TipTap 2.x does not install
-        // prosemirror-commands' baseKeymap, so no key was bound to
-        // consume that selection. DeleteAdjacentAtom now covers the
-        // caret-at-boundary cases; this button covers the click-first
-        // case and gives touch users a visible affordance.
         function setupImageNsfwOverlay(editorRoot, editorInstance) {
             if (!editorRoot || !editorInstance) return;
 
@@ -3181,9 +3067,6 @@ var MessengerModule = (function(Utils, EventBus) {
             editBtn.title = 'Edit image (alt text, size)';
             editBtn.setAttribute('aria-label', 'Edit image');
 
-            // v15: Delete button. Discoverable affordance for removing
-            // the image outright — same dispatch as the keyboard paths,
-            // but reachable by a single click on the toolbar.
             var deleteBtn = document.createElement('button');
             deleteBtn.type = 'button';
             deleteBtn.className = 'editor-image-delete-btn';
@@ -3212,12 +3095,6 @@ var MessengerModule = (function(Utils, EventBus) {
 
             function positionToolbar(img) {
                 var rect = img.getBoundingClientRect();
-                // Anchor the toolbar's right edge to the image's right edge
-                // minus a small inset, rather than positioning by a magic
-                // number. translateX(-100%) moves the element left by its
-                // own rendered width, whatever that is, so the placement
-                // stays correct if the button count, gap size, or border
-                // width changes later.
                 var INSET = 8;
                 toolbarEl.style.top = (rect.top + window.pageYOffset + 6) + 'px';
                 toolbarEl.style.left = (rect.right + window.pageXOffset - INSET) + 'px';
@@ -3256,8 +3133,6 @@ var MessengerModule = (function(Utils, EventBus) {
                 showToolbar(img);
             });
 
-            // Touch-friendly: clicking an image also shows the toolbar.
-            // On desktop this is redundant with hover but harmless.
             editorRoot.addEventListener('click', function(e) {
                 var img = e.target.closest('img');
                 if (!isNsfwEligible(img)) return;
@@ -3343,9 +3218,6 @@ var MessengerModule = (function(Utils, EventBus) {
                 hoveredImg = null;
             });
 
-            // v15: Delete handler. Same dispatch the keyboard path uses —
-            // a direct range deletion at the node's own position, so it
-            // does not depend on a NodeSelection existing first.
             deleteBtn.addEventListener('click', function(e) {
                 e.preventDefault();
                 e.stopPropagation();
@@ -3375,7 +3247,6 @@ var MessengerModule = (function(Utils, EventBus) {
             });
         }
 
-        // Emoticon autocomplete.
         function setupEmoticonAutocomplete(editorInstance, editorRoot) {
             if (!editorInstance || !editorRoot) return;
 
@@ -3510,7 +3381,6 @@ var MessengerModule = (function(Utils, EventBus) {
                 var triggerStart = from - queryLen - 1;
 
                 var cp = emojiToCodePoint(item.emoji);
-                // Emoji must use the inline `emoji` node, not `image`.
                 editorInstance.chain().focus()
                     .deleteRange({ from: triggerStart, to: from })
                     .insertContent({
@@ -3597,19 +3467,9 @@ var MessengerModule = (function(Utils, EventBus) {
                     throw new Error('Editor, Node, Mark, Extension, or InputRule not found in @tiptap/core');
                 }
 
-                // TextSelection is required by the trailing-paragraph and
-                // normalize-empty-doc plugins to move the caret.
-                // NodeSelection (v15) is used by DeleteAdjacentAtom to
-                // recognise when a block atom is currently selected.
                 const { Plugin, PluginKey, TextSelection, NodeSelection } = await import('https://esm.sh/prosemirror-state@1.4.3');
                 const { Decoration, DecorationSet } = await import('https://esm.sh/prosemirror-view@1.33.0');
 
-                // v14: imports for the ecosystem extensions.
-                //  - codeBlockModule was dropped; CodeBlockLowlight
-                //    replaces it outright.
-                //  - lowlight supplies highlight.js's tokenizer under a
-                //    flat createLowlight(common) API.
-                //  - CharacterCount and Typography are new additions.
                 const starterKitModule = await import('https://esm.sh/@tiptap/starter-kit@2.5.2');
                 const placeholderModule = await import('https://esm.sh/@tiptap/extension-placeholder@2.5.2');
                 const underlineModule = await import('https://esm.sh/@tiptap/extension-underline@2.5.2');
@@ -3646,9 +3506,6 @@ var MessengerModule = (function(Utils, EventBus) {
                 if (!CharacterCount) throw new Error('CharacterCount extension not found');
                 if (!Typography) throw new Error('Typography extension not found');
 
-                // One lowlight instance for the whole editor. `common` bundles
-                // the ~35 languages highlight.js considers the common set,
-                // which comfortably covers CODE_LANGUAGE_SUGGESTIONS.
                 const lowlight = createLowlight(common);
 
                 const CustomLink = Link.configure({
@@ -3658,7 +3515,6 @@ var MessengerModule = (function(Utils, EventBus) {
                     HTMLAttributes: { target: '_blank', rel: 'noopener noreferrer' },
                 });
 
-                // Block-level image. Each post image occupies its own block.
                 const CustomImage = BaseImage.extend({
                     inline: false,
                     group: 'block',
@@ -3702,19 +3558,18 @@ var MessengerModule = (function(Utils, EventBus) {
                 });
 
                 // ------------------------------------------------------------------
-                // Upload placeholder. A block atom that renders as a small
-                // card (filename, size, progress bar, cancel button) while
-                // an image is uploading, then replaces itself with a real
-                // `image` node on success. The File object itself lives in
-                // `_uploadRegistry`, keyed by uploadId — a File can't be a
-                // ProseMirror attribute because it wouldn't survive
-                // serialization, and the node view needs to be able to
-                // restart the upload on retry.
+                // Upload placeholder. A block atom that renders as either
+                // an idle dropzone ("Click to upload or drag and drop /
+                // insert by URL") or a progress card, and replaces itself
+                // with a real `image` node on success. The File object
+                // itself lives in `_uploadRegistry`, keyed by uploadId — a
+                // File can't be a ProseMirror attribute because it
+                // wouldn't survive serialization, and the node view needs
+                // to be able to restart the upload on retry.
                 //
                 // `renderHTML` produces a marker span that htmlToLegacy
                 // strips. The node never survives to the saved payload,
-                // so this is purely defensive: it guards against the user
-                // submitting mid-upload.
+                // so this is purely defensive.
                 // ------------------------------------------------------------------
                 const ImageUploadPlaceholder = Node.create({
                     name: 'imageUploadPlaceholder',
@@ -3727,13 +3582,13 @@ var MessengerModule = (function(Utils, EventBus) {
                             uploadId:     { default: null },
                             filename:     { default: '' },
                             filesize:     { default: 0 },
-                            progress:     { default: 0 },       // 0..100
-                            status:       { default: 'uploading' }, // 'uploading' | 'failed'
+                            progress:     { default: 0 },
+                            status:       { default: 'idle' }, // 'idle' | 'uploading' | 'failed'
                             errorMessage: { default: '' },
                         };
                     },
                     parseHTML() {
-                        return [];  // never parsed from HTML — placeholder is runtime-only
+                        return [];
                     },
                     renderHTML({ node }) {
                         return ['span', {
@@ -3743,12 +3598,29 @@ var MessengerModule = (function(Utils, EventBus) {
                     },
                     addNodeView() {
                         return ({ node, editor, getPos }) => {
-                            // --- DOM scaffold, built once ---
+                            // =====================================================
+                            // DOM scaffold — two sibling views, one for each
+                            // top-level state. render() toggles their display.
+                            // =====================================================
                             const dom = document.createElement('div');
                             dom.className = 'ff-upload-placeholder';
                             dom.setAttribute('contenteditable', 'false');
 
-                            dom.innerHTML = ''
+                            // ---------- idle dropzone ----------
+                            const dropzoneView = document.createElement('div');
+                            dropzoneView.className = 'ff-upload-dropzone';
+                            dropzoneView.innerHTML = ''
+                                + '<div class="ff-upload-dropzone-icon"><i class="fa-regular fa-cloud-arrow-up" aria-hidden="true"></i></div>'
+                                + '<div class="ff-upload-dropzone-text">'
+                                +   '<div class="ff-upload-dropzone-primary"><em>Click to upload</em> or drag and drop</div>'
+                                +   '<div class="ff-upload-dropzone-secondary">or <button type="button" class="ff-upload-by-url">insert by URL</button></div>'
+                                + '</div>'
+                                + '<button type="button" class="ff-upload-btn is-danger ff-upload-dismiss-btn" aria-label="Remove"><i class="fa-regular fa-xmark" aria-hidden="true"></i></button>';
+
+                            // ---------- uploading / failed ----------
+                            const progressView = document.createElement('div');
+                            progressView.className = 'ff-upload-progress';
+                            progressView.innerHTML = ''
                                 + '<div class="ff-upload-progress-track"><div class="ff-upload-progress-fill"></div></div>'
                                 + '<div class="ff-upload-icon"><i class="fa-regular fa-cloud-arrow-up" aria-hidden="true"></i></div>'
                                 + '<div class="ff-upload-info">'
@@ -3761,22 +3633,27 @@ var MessengerModule = (function(Utils, EventBus) {
                                 +   '<button type="button" class="ff-upload-btn is-danger ff-upload-cancel-btn" aria-label="Cancel upload"><i class="fa-regular fa-xmark" aria-hidden="true"></i></button>'
                                 + '</div>';
 
-                            const filenameEl = dom.querySelector('.ff-upload-filename');
-                            const metaEl     = dom.querySelector('.ff-upload-meta');
-                            const percentEl  = dom.querySelector('.ff-upload-percent');
-                            const fillEl     = dom.querySelector('.ff-upload-progress-fill');
-                            const retryBtn   = dom.querySelector('.ff-upload-retry-btn');
-                            const cancelBtn  = dom.querySelector('.ff-upload-cancel-btn');
+                            dom.appendChild(dropzoneView);
+                            dom.appendChild(progressView);
+
+                            // ---------- element refs ----------
+                            const dismissBtn = dropzoneView.querySelector('.ff-upload-dismiss-btn');
+                            const urlBtn     = dropzoneView.querySelector('.ff-upload-by-url');
+
+                            const filenameEl = progressView.querySelector('.ff-upload-filename');
+                            const metaEl     = progressView.querySelector('.ff-upload-meta');
+                            const percentEl  = progressView.querySelector('.ff-upload-percent');
+                            const fillEl     = progressView.querySelector('.ff-upload-progress-fill');
+                            const retryBtn   = progressView.querySelector('.ff-upload-retry-btn');
+                            const cancelBtn  = progressView.querySelector('.ff-upload-cancel-btn');
                             const cancelIcon = cancelBtn.querySelector('i');
 
                             let currentXhr = null;
 
-                            // --- helpers ---
-
+                            // =====================================================
+                            // Helpers
+                            // =====================================================
                             function findSelf() {
-                                // getPos() is a live closure — always returns
-                                // the node's current position, even if the
-                                // user typed before it.
                                 const pos = getPos();
                                 if (typeof pos !== 'number') return null;
                                 const n = editor.state.doc.nodeAt(pos);
@@ -3794,7 +3671,37 @@ var MessengerModule = (function(Utils, EventBus) {
                                 editor.view.dispatch(tr);
                             }
 
+                            function deleteSelf() {
+                                const located = findSelf();
+                                if (!located) return;
+                                if (located.node.attrs.uploadId) {
+                                    _uploadRegistry.delete(located.node.attrs.uploadId);
+                                }
+                                editor.view.dispatch(
+                                    editor.state.tr.delete(located.pos, located.pos + located.node.nodeSize)
+                                );
+                            }
+
+                            function replaceWithImage(imageAttrs) {
+                                const located = findSelf();
+                                if (!located) return;
+                                if (located.node.attrs.uploadId) {
+                                    _uploadRegistry.delete(located.node.attrs.uploadId);
+                                }
+                                const imageNode = editor.schema.nodes.image.create(imageAttrs);
+                                editor.view.dispatch(
+                                    editor.state.tr.replaceWith(located.pos, located.pos + located.node.nodeSize, imageNode)
+                                );
+                            }
+
                             function render(n) {
+                                const isIdle = n.attrs.status === 'idle';
+                                dropzoneView.style.display = isIdle ? '' : 'none';
+                                progressView.style.display = isIdle ? 'none' : '';
+                                dom.classList.toggle('is-idle', isIdle);
+
+                                if (isIdle) return;
+
                                 const isFailed = n.attrs.status === 'failed';
                                 dom.classList.toggle('is-failed', isFailed);
                                 filenameEl.textContent = n.attrs.filename || 'image';
@@ -3820,19 +3727,13 @@ var MessengerModule = (function(Utils, EventBus) {
                                 const located = findSelf();
                                 if (!located) return;
                                 const uploadId = located.node.attrs.uploadId;
+                                if (!uploadId) return;
                                 const entry = _uploadRegistry.get(uploadId);
                                 if (!entry || !entry.file) {
                                     patchAttrs({ status: 'failed', errorMessage: 'File no longer available' });
                                     return;
                                 }
 
-                                patchAttrs({ status: 'uploading', progress: 0, errorMessage: '' });
-
-                                // XHR rather than fetch — fetch has no upload
-                                // progress event in any current browser.
-                                // XHR's `upload.onprogress` is the only way to
-                                // get real byte-level progress for a request
-                                // body.
                                 const xhr = new XMLHttpRequest();
                                 currentXhr = xhr;
 
@@ -3856,15 +3757,7 @@ var MessengerModule = (function(Utils, EventBus) {
                                         patchAttrs({ status: 'failed', errorMessage: 'No URL in response' });
                                         return;
                                     }
-
-                                    // Replace ourselves with the real image
-                                    // node. This also destroys the node view,
-                                    // which is fine — the XHR is done, and
-                                    // destroy() is a no-op when the XHR has
-                                    // already completed.
-                                    const found = findSelf();
-                                    if (!found) return;
-                                    const imageNode = editor.schema.nodes.image.create({
+                                    replaceWithImage({
                                         src: data.url,
                                         alt: entry.file.name || 'Uploaded image',
                                         loading: 'lazy',
@@ -3872,10 +3765,6 @@ var MessengerModule = (function(Utils, EventBus) {
                                         width: data.width ? parseInt(data.width, 10) : null,
                                         height: data.height ? parseInt(data.height, 10) : null,
                                     });
-                                    editor.view.dispatch(
-                                        editor.state.tr.replaceWith(found.pos, found.pos + found.node.nodeSize, imageNode)
-                                    );
-                                    _uploadRegistry.delete(uploadId);
                                     showToast('Image uploaded', { type: 'success' });
                                 });
 
@@ -3885,8 +3774,7 @@ var MessengerModule = (function(Utils, EventBus) {
                                 });
 
                                 xhr.addEventListener('abort', function() {
-                                    // Nothing to do — destroy() or cancel
-                                    // handler manages cleanup.
+                                    // Cleanup handled by the click handler.
                                 });
 
                                 const form = new FormData();
@@ -3894,6 +3782,102 @@ var MessengerModule = (function(Utils, EventBus) {
                                 xhr.send(form);
                             }
 
+                            function handleFileChosen(file) {
+                                const uploadId = 'up-' + Date.now() + '-' + Math.random().toString(36).slice(2, 9);
+                                _uploadRegistry.set(uploadId, { file: file });
+                                patchAttrs({
+                                    uploadId: uploadId,
+                                    filename: file.name || 'image',
+                                    filesize: file.size || 0,
+                                    progress: 0,
+                                    status: 'uploading',
+                                    errorMessage: '',
+                                });
+                                startUpload();
+                            }
+
+                            function openFilePicker() {
+                                const input = document.createElement('input');
+                                input.type = 'file';
+                                input.accept = 'image/*';
+                                input.onchange = function() {
+                                    if (input.files && input.files[0]) handleFileChosen(input.files[0]);
+                                };
+                                input.click();
+                            }
+
+                            // =====================================================
+                            // Dropzone interactions
+                            // =====================================================
+                            dropzoneView.addEventListener('click', function(e) {
+                                if (e.target.closest('.ff-upload-by-url')) return;
+                                if (e.target.closest('.ff-upload-dismiss-btn')) return;
+                                e.preventDefault();
+                                e.stopPropagation();
+                                openFilePicker();
+                            });
+
+                            urlBtn.addEventListener('click', function(e) {
+                                e.preventDefault();
+                                e.stopPropagation();
+                                showInputModal('Insert image URL', 'https://example.com/image.jpg', function(url) {
+                                    const img = new Image();
+                                    img.onload = function() {
+                                        const w = this.naturalWidth;
+                                        const h = this.naturalHeight;
+                                        replaceWithImage({
+                                            src: url,
+                                            alt: 'image',
+                                            loading: 'lazy',
+                                            decoding: 'async',
+                                            width: w,
+                                            height: h,
+                                        });
+                                    };
+                                    img.onerror = function() {
+                                        replaceWithImage({
+                                            src: url,
+                                            alt: 'image',
+                                            loading: 'lazy',
+                                            decoding: 'async',
+                                        });
+                                    };
+                                    img.src = url;
+                                });
+                            });
+
+                            dismissBtn.addEventListener('click', function(e) {
+                                e.preventDefault();
+                                e.stopPropagation();
+                                deleteSelf();
+                            });
+
+                            dropzoneView.addEventListener('dragover', function(e) {
+                                e.preventDefault();
+                                e.stopPropagation();
+                                dropzoneView.classList.add('is-dragover');
+                            });
+
+                            dropzoneView.addEventListener('dragleave', function(e) {
+                                e.preventDefault();
+                                e.stopPropagation();
+                                dropzoneView.classList.remove('is-dragover');
+                            });
+
+                            dropzoneView.addEventListener('drop', function(e) {
+                                e.preventDefault();
+                                e.stopPropagation();
+                                dropzoneView.classList.remove('is-dragover');
+                                const files = e.dataTransfer && e.dataTransfer.files;
+                                if (!files || !files.length) return;
+                                const file = files[0];
+                                if (!file.type || file.type.indexOf('image/') !== 0) return;
+                                handleFileChosen(file);
+                            });
+
+                            // =====================================================
+                            // Progress interactions
+                            // =====================================================
                             cancelBtn.addEventListener('click', function(e) {
                                 e.preventDefault();
                                 e.stopPropagation();
@@ -3901,22 +3885,27 @@ var MessengerModule = (function(Utils, EventBus) {
                                     try { currentXhr.abort(); } catch (err) {}
                                     currentXhr = null;
                                 }
-                                const located = findSelf();
-                                if (!located) return;
-                                _uploadRegistry.delete(located.node.attrs.uploadId);
-                                editor.view.dispatch(
-                                    editor.state.tr.delete(located.pos, located.pos + located.node.nodeSize)
-                                );
+                                deleteSelf();
                             });
 
                             retryBtn.addEventListener('click', function(e) {
                                 e.preventDefault();
                                 e.stopPropagation();
+                                if (currentXhr) {
+                                    try { currentXhr.abort(); } catch (err) {}
+                                    currentXhr = null;
+                                }
+                                patchAttrs({ status: 'uploading', progress: 0, errorMessage: '' });
                                 startUpload();
                             });
 
+                            // =====================================================
+                            // Initial render + optional upload
+                            // =====================================================
                             render(node);
-                            startUpload();
+                            if (node.attrs.status === 'uploading') {
+                                startUpload();
+                            }
 
                             return {
                                 dom,
@@ -3930,18 +3919,15 @@ var MessengerModule = (function(Utils, EventBus) {
                                         try { currentXhr.abort(); } catch (e) {}
                                         currentXhr = null;
                                     }
-                                    // Always clear the registry entry on
-                                    // destroy. Success path already deleted
-                                    // it; this is for cancel, editor teardown,
-                                    // and any future edge case.
                                     const located = findSelf();
-                                    if (located) _uploadRegistry.delete(located.node.attrs.uploadId);
+                                    if (located && located.node.attrs.uploadId) {
+                                        _uploadRegistry.delete(located.node.attrs.uploadId);
+                                    }
                                 },
                                 stopEvent(event) {
-                                    // Let clicks on our buttons be handled by
-                                    // us; don't let ProseMirror try to
-                                    // interpret them as selection.
-                                    return !!event.target.closest('.ff-upload-btn');
+                                    const t = event.target;
+                                    if (!t || !t.closest) return false;
+                                    return !!t.closest('.ff-upload-dropzone, .ff-upload-progress, .ff-upload-btn, .ff-upload-by-url');
                                 },
                                 ignoreMutation() { return true; },
                             };
@@ -3949,9 +3935,7 @@ var MessengerModule = (function(Utils, EventBus) {
                     },
                 });
 
-                // Inline emoji node. Used by the picker, the emoticon
-                // autocomplete, and the ASCII input rule so twemoji render
-                // inline within text rather than as block elements.
+                // Inline emoji node.
                 const Emoji = Node.create({
                     name: 'emoji',
                     inline: true,
@@ -3984,16 +3968,6 @@ var MessengerModule = (function(Utils, EventBus) {
                     },
                 });
 
-                // v14: CodeBlockLowlight extended rather than BaseCodeBlock.
-                // The language attribute plumbing is unchanged; what changes
-                // is that the editor's own rendering goes through
-                // highlight.js, so the code you see while typing is
-                // correctly tokenized per language.
-                //
-                // htmlToLegacy strips every inner tag before writing the
-                // [CODE] payload, so the hljs-* spans never reach the
-                // forum. transformPreviewHtml reads textContent, so the
-                // reader-side highlighter still runs on plain source.
                 const CustomCodeBlock = CodeBlockLowlight.extend({
                     addAttributes() {
                         return {
@@ -4028,7 +4002,6 @@ var MessengerModule = (function(Utils, EventBus) {
                                     const emojiUrl = TWEMOJI_BASE + codepoint + '.svg';
                                     const emoticonStart = range.to - emoticon.length;
 
-                                    // Use the inline emoji node, not image.
                                     const emojiNode = state.schema.nodes.emoji.create({
                                         src: emojiUrl,
                                         alt: unicodeEmoji,
@@ -4044,11 +4017,6 @@ var MessengerModule = (function(Utils, EventBus) {
                     }
                 });
 
-                // ------------------------------------------------------------------
-                // Lite embed URL extractors. Used by the paste handler below.
-                // Return an object so start / end timestamps ride along to the
-                // node attrs when present.
-                // ------------------------------------------------------------------
                 function parseYouTubeUrl(url) {
                     if (!url || typeof url !== 'string') return null;
                     const m = url.match(/(?:youtube\.com\/(?:watch\?(?:.*&)?v=|embed\/|shorts\/)|youtu\.be\/)([A-Za-z0-9_-]{6,})/);
@@ -4074,7 +4042,7 @@ var MessengerModule = (function(Utils, EventBus) {
                                 const parsed = parseInt(e, 10);
                                 if (!isNaN(parsed) && parsed > 0) end = parsed;
                             }
-                        } catch (err) { /* malformed URL — no timestamps */ }
+                        } catch (err) { }
                     }
 
                     return { videoid, start, end };
@@ -4110,7 +4078,7 @@ var MessengerModule = (function(Utils, EventBus) {
                                 }
                             }
                         }
-                    } catch (err) { /* malformed URL */ }
+                    } catch (err) { }
 
                     return { videoid, start };
                 }
@@ -4241,15 +4209,6 @@ var MessengerModule = (function(Utils, EventBus) {
                     },
                 });
 
-                // ------------------------------------------------------------------
-                // Lite embeds — YouTube and Vimeo.
-                // Atom block nodes that render a caption wrapper around the
-                // lite-* custom element. The wrapper carries the video id,
-                // optional title/author, and any start/end timestamps.
-                // The custom element itself (defined by the self-hosted
-                // lite-embed.js module) reads start/end at activation and
-                // translates them into the provider's native iframe URL.
-                // ------------------------------------------------------------------
                 const LiteYouTube = Node.create({
                     name: 'liteYouTube',
                     group: 'block',
@@ -4784,20 +4743,6 @@ var MessengerModule = (function(Utils, EventBus) {
                     },
                 });
 
-                // ------------------------------------------------------------------
-                // Collapse the document back to a single empty paragraph whenever
-                // every top-level node is an empty paragraph. This is what actually
-                // restores the TipTap placeholder after a full delete: without it,
-                // deleting the last text / image can leave a stack of empty
-                // paragraphs that editor.isEmpty (and the Placeholder decoration)
-                // treat as non-empty, so the hint never re-renders and a stale
-                // draft survives a reload.
-                //
-                // The check is deliberately narrow — only empty paragraphs trigger
-                // the collapse. An empty code block, an empty spoiler, an image,
-                // a lite embed, or anything else structural is left alone so the
-                // user can still insert a block and then type into it.
-                // ------------------------------------------------------------------
                 const NormalizeEmptyDoc = Extension.create({
                     name: 'normalizeEmptyDoc',
                     addProseMirrorPlugins() {
@@ -4815,7 +4760,6 @@ var MessengerModule = (function(Utils, EventBus) {
                                     );
                                     if (!allEmptyParagraphs) return null;
 
-                                    // Already just one empty paragraph? Nothing to do.
                                     if (doc.childCount === 1) return null;
 
                                     const paragraph = newState.schema.nodes.paragraph.create();
@@ -4832,35 +4776,9 @@ var MessengerModule = (function(Utils, EventBus) {
                     },
                 });
 
-                // ------------------------------------------------------------------
-                // Backspace / Delete adjacent to a block atom.
-                //
-                // Two failure modes this exists to fix:
-                //   1. Cursor at the very start of a paragraph whose previous
-                //      sibling is a block atom (image, lite embed, horizontal
-                //      rule). ProseMirror runs joinBackwards, which only knows
-                //      how to merge textblocks. It can't merge a paragraph with
-                //      an image, so it silently fails.
-                //   2. Clicking a block atom produces a NodeSelection, but
-                //      TipTap 2.x does not install prosemirror-commands'
-                //      baseKeymap by default, so nothing is bound to consume
-                //      the selection on Backspace/Delete.
-                //
-                // The check for "is this a block atom" uses a name whitelist
-                // rather than spec.atom, because TipTap's Image extension does
-                // not set that flag — the image is a leaf because it has no
-                // content spec, not because it declares itself an atom.
-                //
-                // Implemented as a ProseMirror plugin (not a TipTap
-                // addKeyboardShortcuts extension) so it sits in the same
-                // keydown pipeline as ProseMirror's own keymap and runs
-                // before it.
-                // ------------------------------------------------------------------
                 const DeleteAdjacentAtom = Extension.create({
                     name: 'deleteAdjacentAtom',
                     addProseMirrorPlugins() {
-                        // Extend this set if more block-level atom nodes are
-                        // added to the schema later.
                         const BLOCK_ATOM_NAMES = new Set([
                             'image', 'liteYouTube', 'liteVimeo', 'horizontalRule',
                             'imageUploadPlaceholder',
@@ -4883,11 +4801,6 @@ var MessengerModule = (function(Utils, EventBus) {
                                         const { state } = view;
                                         const { selection } = state;
 
-                                        // Case 1: a block atom is currently selected.
-                                        // This is what happens after the user clicks
-                                        // the image — ProseMirror produces a
-                                        // NodeSelection. Delete it directly; there
-                                        // is no text to remove.
                                         if (selection instanceof NodeSelection) {
                                             view.dispatch(
                                                 state.tr.delete(selection.from, selection.to)
@@ -4898,9 +4811,6 @@ var MessengerModule = (function(Utils, EventBus) {
                                         if (!selection.empty) return false;
                                         const $from = selection.$from;
 
-                                        // Case 2a: Backspace at the very start of a
-                                        // textblock, previous sibling is a block
-                                        // atom.
                                         if (key === 'Backspace') {
                                             if ($from.parentOffset !== 0) return false;
                                             if ($from.depth === 0) return false;
@@ -4915,8 +4825,6 @@ var MessengerModule = (function(Utils, EventBus) {
                                             return true;
                                         }
 
-                                        // Case 2b: Delete at the very end of a
-                                        // textblock, next sibling is a block atom.
                                         if (key === 'Delete') {
                                             if ($from.parentOffset !== $from.parent.content.size) return false;
 
@@ -4938,19 +4846,6 @@ var MessengerModule = (function(Utils, EventBus) {
                     },
                 });
 
-                // ------------------------------------------------------------------
-                // Trailing paragraph after a block atom (lite embed or image).
-                // A block-level leaf has no internal text positions, so when it's
-                // the last node in the doc there is no position after it for a
-                // cursor to land on. This plugin inserts an empty paragraph and
-                // moves the selection into it — without the selection move, the
-                // caret sits in a gap position that ProseMirror won't render,
-                // and the user has to click before typing.
-                //
-                // Wrapped as a TipTap Extension so ProseMirror receives it through
-                // the state pipeline — appendTransaction is a state-level hook and
-                // cannot be passed via editorProps.plugins.
-                // ------------------------------------------------------------------
                 const TrailingEmbedParagraph = Extension.create({
                     name: 'trailingEmbedParagraph',
                     addProseMirrorPlugins() {
@@ -4968,9 +4863,6 @@ var MessengerModule = (function(Utils, EventBus) {
                                     const paragraph = newState.schema.nodes.paragraph.create();
                                     const tr = newState.tr.insert(newState.doc.content.size, paragraph);
 
-                                    // Move the cursor into the new paragraph so typing
-                                    // works immediately. Without this the selection sits
-                                    // in the gap between the atom and the paragraph.
                                     const $pos = tr.doc.resolve(tr.doc.content.size - 1);
                                     tr.setSelection(TextSelection.near($pos));
 
@@ -4981,15 +4873,6 @@ var MessengerModule = (function(Utils, EventBus) {
                     },
                 });
 
-                // ------------------------------------------------------------------
-                // Range-selection highlight for lite embeds.
-                // A click directly on the embed produces a NodeSelection, which
-                // ProseMirror marks with .ProseMirror-selectednode. A drag-select
-                // that spans the embed produces a TextSelection, which does not get
-                // a class — and the browser's native selection can't paint over the
-                // custom element. This plugin adds .lite-embed-in-selection to any
-                // embed that participates in a non-empty range selection.
-                // ------------------------------------------------------------------
                 const LiteEmbedSelection = Extension.create({
                     name: 'liteEmbedSelection',
                     addProseMirrorPlugins() {
@@ -5041,8 +4924,6 @@ var MessengerModule = (function(Utils, EventBus) {
                         StarterKit.configure({ codeBlock: false }),
                         CustomCodeBlock,
 
-                        // v14: function-form placeholder so headings and
-                        // code blocks can carry their own hint text.
                         Placeholder.configure({
                             placeholder: ({ node }) => {
                                 if (node.type.name === 'heading') return 'Heading…';
@@ -5053,14 +4934,7 @@ var MessengerModule = (function(Utils, EventBus) {
 
                         Underline,
                         CustomImage,
-
-                        // v16: placeholder node for in-flight uploads.
-                        // Sits alongside CustomImage in the extension
-                        // list because they are the same kind of thing —
-                        // a block-level image-shaped node — and read as
-                        // a pair.
                         ImageUploadPlaceholder,
-
                         Emoji,
                         CustomLink,
                         LiteYouTube,
@@ -5076,18 +4950,10 @@ var MessengerModule = (function(Utils, EventBus) {
                         DeleteAdjacentAtom,
                         LiteEmbedSelection,
 
-                        // v14: CharacterCount powers updateCharCounter and
-                        // the send-path length check. The limit matches
-                        // MAX_MESSAGE_LENGTH when one is configured;
-                        // otherwise the extension counts without blocking.
                         CharacterCount.configure({
                             limit: MAX_MESSAGE_LENGTH > 0 ? MAX_MESSAGE_LENGTH : null,
                         }),
 
-                        // v14: Typography supplies the standard em-dash,
-                        // ellipsis, and smart-quote InputRules. Runs on the
-                        // same keymap as EmoticonRule; their patterns are
-                        // disjoint so there's no conflict.
                         Typography,
                     ],
                     content: initialHtml,
@@ -5110,11 +4976,7 @@ var MessengerModule = (function(Utils, EventBus) {
                                 .replace(/ {2,}/g, ' ');
                         },
                         handlePaste: function(view, event) {
-                            // ----- 1. File paste (images) -----
-                            // Runs first because a pasted file is orthogonal to
-                            // cursor position — if the clipboard carries an
-                            // image, we always want to upload it, regardless of
-                            // where the cursor is.
+                            // 1. File paste (images)
                             var files = event.clipboardData ? event.clipboardData.files : null;
                             if (files && files.length) {
                                 var imgs = Array.prototype.slice.call(files).filter(function(f) {
@@ -5127,21 +4989,7 @@ var MessengerModule = (function(Utils, EventBus) {
                                 }
                             }
 
-                            // ----- 2. Inline-code paste -----
-                            // When the cursor is inside a code mark and the
-                            // clipboard carries plain text, insert it as a
-                            // single text node with the mark explicitly
-                            // applied. Without this, the default paste path
-                            // treats the insertion as a batch and the mark's
-                            // boundary rules (inclusive: false, same as bold)
-                            // can leave the pasted run unmarked — the pill
-                            // splits into two around the pasted word.
-                            // Newlines and whitespace runs collapse to single
-                            // spaces so a multi-line snippet becomes a
-                            // one-line pill; a multi-line paste isn't what
-                            // inline code is for, and forcing the collapse
-                            // nudges users toward the code-block button for
-                            // real snippets.
+                            // 2. Inline-code paste
                             if (view.state.selection.empty) {
                                 var $from = view.state.selection.$from;
                                 var codeMarkType = view.state.schema.marks.code;
@@ -5161,12 +5009,7 @@ var MessengerModule = (function(Utils, EventBus) {
                                 }
                             }
 
-                            // ----- 3. Shift + paste override -----
-                            // Shift+paste is the browser-level "paste as plain
-                            // text" gesture. If the user is not inside a code
-                            // mark and held Shift, we insert the plain-text
-                            // version directly so the source's rich formatting
-                            // is dropped.
+                            // 3. Shift+paste
                             if (event.shiftKey) {
                                 var text = event.clipboardData.getData('text/plain');
                                 if (text) {
@@ -5176,18 +5019,9 @@ var MessengerModule = (function(Utils, EventBus) {
                                 }
                             }
 
-                            // ----- 4. Lite embeds (YouTube, Vimeo) -----
-                            // Two entry points: pasted iframe HTML from an embed
-                            // code, or a bare video URL. Both resolve to the
-                            // same atom nodes so the reader side can render the
-                            // lite facade. Start / end timestamps, when present
-                            // in the source, are captured and forwarded to the
-                            // node.
+                            // 4. Lite embeds
                             var clipboard = event.clipboardData;
                             if (clipboard) {
-                                // 4a. iframe HTML — extract the src and hand it
-                                // to the URL parser so start/end params ride
-                                // along.
                                 var htmlData = clipboard.getData('text/html');
                                 if (htmlData && htmlData.indexOf('<iframe') !== -1) {
                                     var srcMatch = htmlData.match(/<iframe[^>]+src=["']([^"']+)["']/i);
@@ -5213,7 +5047,6 @@ var MessengerModule = (function(Utils, EventBus) {
                                     }
                                 }
 
-                                // 4b. Bare URL
                                 var textData = clipboard.getData('text/plain');
                                 if (textData) {
                                     var candidate = textData.trim();
@@ -5239,11 +5072,6 @@ var MessengerModule = (function(Utils, EventBus) {
                                 }
                             }
 
-                            // ----- 5. Fall through -----
-                            // Let the default ProseMirror paste handler run.
-                            // This covers ordinary rich-text pastes (from web
-                            // pages, Word, other editors) that go through the
-                            // transformPastedHTML preprocessing.
                             return false;
                         },
                     },
@@ -5261,9 +5089,6 @@ var MessengerModule = (function(Utils, EventBus) {
                         }
 
                         if (editorContentIsEmpty(html)) {
-                            // Effectively empty — kill any pending save and
-                            // wipe the stored draft so a reload can't
-                            // resurrect deleted content.
                             if (draftSaveTimer) {
                                 clearTimeout(draftSaveTimer);
                                 draftSaveTimer = null;
@@ -5317,7 +5142,6 @@ var MessengerModule = (function(Utils, EventBus) {
 
                 blockquoteBtn.onclick = function() { exec(function() { editor.chain().focus().toggleBlockquote().run(); }); };
 
-                // Edit-in-place when inside a spoiler; insert-new otherwise.
                 spoilerBtn.onclick = function() {
                     if (!editor) return;
 
@@ -5345,7 +5169,6 @@ var MessengerModule = (function(Utils, EventBus) {
                     exec(function() { editor.chain().focus().toggleNSFW().run(); });
                 };
 
-                // Edit-in-place when cursor is inside an existing link.
                 linkBtn.onclick = function() {
                     if (!editor) return;
 
@@ -5379,37 +5202,16 @@ var MessengerModule = (function(Utils, EventBus) {
                     });
                 };
 
-                imageDropdownMenu.querySelector('#image-url-option').onclick = function() {
-                    closeDropdown(imageDropdownBtn, imageDropdownMenu);
-                    showInputModal('Insert image URL', 'https://example.com/image.jpg', function(url) {
-                        var img = new Image();
-                        img.onload = function() {
-                            editor.chain().focus().insertContent({
-                                type: 'image',
-                                attrs: {
-                                    src: url, alt: 'image', loading: 'lazy', decoding: 'async',
-                                    width: this.width, height: this.height
-                                }
-                            }).run();
-                        };
-                        img.onerror = function() {
-                            editor.chain().focus().insertContent({
-                                type: 'image', attrs: { src: url, alt: 'image', loading: 'lazy', decoding: 'async' }
-                            }).run();
-                        };
-                        img.src = url;
-                    });
-                };
-
-                imageDropdownMenu.querySelector('#image-upload-option').onclick = function() {
-                    closeDropdown(imageDropdownBtn, imageDropdownMenu);
-                    var input = document.createElement('input');
-                    input.type = 'file';
-                    input.accept = 'image/*';
-                    input.onchange = function() {
-                        if (input.files && input.files[0]) uploadImageToWorker(input.files[0], editor);
-                    };
-                    input.click();
+                // v17: image button inserts an idle upload placeholder.
+                // The placeholder's own dropzone carries the file picker,
+                // the drag-and-drop target, and the "insert by URL" link,
+                // so this handler only needs to drop the node in place.
+                imageBtn.onclick = function() {
+                    if (!editor) return;
+                    editor.chain().focus().insertContent({
+                        type: 'imageUploadPlaceholder',
+                        attrs: { status: 'idle' },
+                    }).run();
                 };
 
                 function updateActiveStates() {
@@ -5436,7 +5238,6 @@ var MessengerModule = (function(Utils, EventBus) {
                     underlineBtn.classList.toggle('active', isActive.underline);
                     strikeBtn.classList.toggle('active', isActive.strike);
                     blockquoteBtn.classList.toggle('active', isActive.blockquote);
-                    // The unified Code trigger lights up when either variant is active.
                     codeDropdownBtn.classList.toggle('active', isActive.code || isActive.codeBlock);
                     spoilerBtn.classList.toggle('active', isActive.spoiler);
                     nsfwBtn.classList.toggle('active', isActive.nsfw);
@@ -5597,8 +5398,6 @@ var MessengerModule = (function(Utils, EventBus) {
                 if (!subjectValue) return;
                 if (!editor || editorContentIsEmpty(editor.getHTML())) return;
 
-                // v14: the length check reads from CharacterCount's storage,
-                // which is the same number the live counter shows.
                 if (MAX_MESSAGE_LENGTH && editor.storage.characterCount.characters() > MAX_MESSAGE_LENGTH) {
                     showToast('Message exceeds the maximum length', { type: 'error' });
                     return;
