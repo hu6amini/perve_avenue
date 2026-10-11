@@ -62,6 +62,21 @@
 //      hover toolbar gains a delete button so touch users have a
 //      visible affordance instead of relying on a keyboard gesture.
 //      NodeSelection is now imported from prosemirror-state.
+// v16: image upload placeholder. A new block atom node,
+//      imageUploadPlaceholder, renders a small card with the filename,
+//      file size, a live progress bar, and cancel/retry buttons while
+//      an image uploads. The actual File lives in a module-level Map
+//      keyed by uploadId, since a File cannot be a ProseMirror
+//      attribute. On success the node replaces itself with a real
+//      image node; on failure it flips to a retry state. Progress
+//      comes from XMLHttpRequest's upload.onprogress event, the only
+//      browser-level hook for request-body progress — fetch has none.
+//      The marker span the node renders is stripped by htmlToLegacy
+//      and the Send button is disabled while an upload is in flight,
+//      so a half-finished upload can never reach the forum. The
+//      paste-URL and link-preview flows are unaffected — they route
+//      through insertContent / linkPreviewPlugin, not through the
+//      upload placeholder.
 var MessengerModule = (function(Utils, EventBus) {
     'use strict';
 
@@ -74,6 +89,13 @@ var MessengerModule = (function(Utils, EventBus) {
     var UPLOAD_WORKER_URL = 'https://imgbb-upload-proxy.nhristakiev.workers.dev/';
     var OG_WORKER_URL = 'https://og-worker.nhristakiev.workers.dev/?url=';
     var TWEMOJI_BASE = 'https://twemoji.maxcdn.com/v/latest/svg/';
+
+    // Live File objects for in-flight uploads, keyed by uploadId. A File
+    // can't be a ProseMirror attribute (it wouldn't serialize and can't
+    // be compared for equality), so the node carries only an id and the
+    // bytes live here. Cleared by the node view's destroy() and by the
+    // success/cancel handlers.
+    var _uploadRegistry = new Map();
 
     var currentUrl = window.location.href;
     var currentSection = 'compose';
@@ -194,6 +216,16 @@ var MessengerModule = (function(Utils, EventBus) {
         try {
             return new Date(dateStr).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' });
         } catch(e) { return dateStr; }
+    }
+
+    // v16: byte-count formatter for the upload placeholder's meta line.
+    function formatBytes(bytes) {
+        if (!bytes || bytes < 0) return '0 B';
+        var units = ['B', 'KB', 'MB', 'GB'];
+        var i = 0;
+        var n = bytes;
+        while (n >= 1024 && i < units.length - 1) { n /= 1024; i++; }
+        return n.toFixed(n >= 10 || i === 0 ? 0 : 2) + ' ' + units[i];
     }
 
     // Unwrap .lite-embed-wrapper containers produced by the LiteYouTube /
@@ -589,6 +621,9 @@ var MessengerModule = (function(Utils, EventBus) {
             }
         });
         observerCallbacks = [];
+        // v16: drop any in-flight upload references on reset so a
+        // subsequent initialize starts with a clean registry.
+        _uploadRegistry.clear();
     }
 
     function waitForGlobalFunctions() {
@@ -1218,6 +1253,17 @@ var MessengerModule = (function(Utils, EventBus) {
         var maxIterations = 10;
         for (var i = 0; i < maxIterations; i++) {
             var before = result;
+
+            // v16: drop any upload placeholder markers. The node is a
+            // runtime-only construct — on success it is replaced by a
+            // real image node, on failure it stays until dismissed.
+            // This is defensive: if the user somehow triggers submit
+            // while an upload is still in flight, the marker is
+            // removed from the payload rather than sent as-is.
+            result = result.replace(
+                /<span[^>]*\bff-upload-placeholder-marker\b[^>]*>\s*<\/span>/gi,
+                ''
+            );
 
             // Lite embeds. Run first so an embed nested inside a quote
             // or spoiler gets serialized before the outer container's
@@ -1898,7 +1944,7 @@ var MessengerModule = (function(Utils, EventBus) {
             const secondLast = doc.child(doc.childCount - 2);
             if (last.type.name !== 'paragraph' || last.content.size !== 0) return;
             const atomName = secondLast.type.name;
-            if (atomName !== 'liteYouTube' && atomName !== 'liteVimeo' && atomName !== 'image') return;
+            if (atomName !== 'liteYouTube' && atomName !== 'liteVimeo' && atomName !== 'image' && atomName !== 'imageUploadPlaceholder') return;
             // doc.content.size - 1 is the single cursor position inside the
             // empty trailing paragraph. setTextSelection on that puts a real
             // text cursor there and chain().focus() gives it focus.
@@ -2042,6 +2088,21 @@ var MessengerModule = (function(Utils, EventBus) {
         // ------------------------------------------------------------------
         function updateLivePreview() {
             if (!editor || editorContentIsEmpty(editor.getHTML())) return;
+
+            // v16: skip the re-render while an upload is in flight. The
+            // placeholder renders its own card; the preview would just
+            // repaint on every progress tick, which is wasted work.
+            var hasInFlightUpload = false;
+            editor.state.doc.content.content.some(function(child) {
+                if (child.type.name === 'imageUploadPlaceholder' &&
+                    child.attrs.status === 'uploading') {
+                    hasInFlightUpload = true;
+                    return true;
+                }
+                return false;
+            });
+            if (hasInFlightUpload) return;
+
             var previewArea = container.querySelector('#modern-preview-area');
             if (!previewArea || previewArea.style.display === 'none') return;
 
@@ -2071,8 +2132,24 @@ var MessengerModule = (function(Utils, EventBus) {
             var hasSubject   = !!(modernTitle && modernTitle.value.trim().length > 0);
             var hasBody      = !!(editor && !editorContentIsEmpty(editor.getHTML()));
 
+            // v16: block Send while any upload is in flight. The
+            // placeholder nodes are stripped from the serialized
+            // payload, so sending mid-upload would silently drop the
+            // images the user just added.
+            var uploadInFlight = false;
+            if (editor) {
+                editor.state.doc.descendants(function(node) {
+                    if (node.type.name === 'imageUploadPlaceholder' &&
+                        node.attrs.status === 'uploading') {
+                        uploadInFlight = true;
+                        return false;
+                    }
+                    return true;
+                });
+            }
+
             if (modernSubmitBtnRef) {
-                var sendReady = hasRecipient && hasSubject && hasBody;
+                var sendReady = hasRecipient && hasSubject && hasBody && !uploadInFlight;
                 modernSubmitBtnRef.disabled = !sendReady;
                 modernSubmitBtnRef.setAttribute('aria-disabled', String(!sendReady));
 
@@ -2083,6 +2160,7 @@ var MessengerModule = (function(Utils, EventBus) {
                     if (!hasRecipient) missing.push('a recipient');
                     if (!hasSubject)   missing.push('a subject');
                     if (!hasBody)      missing.push('a message body');
+                    if (uploadInFlight) missing.push('wait for the upload to finish');
                     modernSubmitBtnRef.setAttribute('title', 'Add ' + missing.join(', ') + ' to send');
                 }
             }
@@ -2802,43 +2880,27 @@ var MessengerModule = (function(Utils, EventBus) {
             }
         });
 
+        // v16: rewritten to insert the placeholder node. The actual XHR
+        // and progress tracking now live inside the node view, so this
+        // function only needs to register the File and drop the node.
+        // All three call sites (paste-file, drag-drop, file-picker) route
+        // through here and get the same UX as a result.
         function uploadImageToWorker(file, editorInstance) {
-            var formData = new FormData();
-            formData.append('image', file);
-            var currentPos = editorInstance.state.selection.from;
-            var placeholderText = '⬆️ Uploading…';
-            editorInstance.chain().focus().insertContent(placeholderText).run();
-            var placeholderStart = currentPos;
-            var placeholderEnd = currentPos + placeholderText.length;
+            if (!file || !editorInstance) return;
 
-            fetch(UPLOAD_WORKER_URL, { method: 'POST', body: formData })
-                .then(function(response) { return response.json(); })
-                .then(function(data) {
-                    editorInstance.chain().focus().deleteRange({ from: placeholderStart, to: placeholderEnd }).run();
-                    if (data.url) {
-                        editorInstance.chain().focus().insertContent({
-                            type: 'image',
-                            attrs: {
-                                src: data.url,
-                                alt: 'Uploaded image',
-                                loading: 'lazy',
-                                decoding: 'async',
-                                width: data.width ? parseInt(data.width) : null,
-                                height: data.height ? parseInt(data.height) : null
-                            }
-                        }).run();
-                        showToast('Image uploaded', { type: 'success' });
-                    } else {
-                        editorInstance.chain().focus().insertContent('[Upload failed]').run();
-                        showToast('Upload failed', { type: 'error' });
-                    }
-                })
-                .catch(function(error) {
-                    console.error('Upload error:', error);
-                    editorInstance.chain().focus().deleteRange({ from: placeholderStart, to: placeholderEnd }).run();
-                    editorInstance.chain().focus().insertContent('[Upload error]').run();
-                    showToast('Upload error', { type: 'error' });
-                });
+            var uploadId = 'up-' + Date.now() + '-' + Math.random().toString(36).slice(2, 9);
+            _uploadRegistry.set(uploadId, { file: file });
+
+            editorInstance.chain().focus().insertContent({
+                type: 'imageUploadPlaceholder',
+                attrs: {
+                    uploadId: uploadId,
+                    filename: file.name || 'image',
+                    filesize: file.size || 0,
+                    progress: 0,
+                    status: 'uploading',
+                },
+            }).run();
         }
 
         function showInputModal(title, placeholder, callback) {
@@ -3149,21 +3211,18 @@ var MessengerModule = (function(Utils, EventBus) {
             }
 
             function positionToolbar(img) {
-    var rect = img.getBoundingClientRect();
-    // Anchor the toolbar's right edge to the image's right edge minus
-    // a small inset, rather than positioning by a magic-number left
-    // offset. translateX(-100%) moves the element left by its own
-    // rendered width, whatever that is, so the placement stays
-    // correct if the button count, gap size, or border width
-    // changes later. The previous fixed -110px assumed a toolbar
-    // exactly 110px wide; with the 1px border per button and 6px
-    // gaps the real width is 114px, which pushed the toolbar 4px
-    // past the image's right edge.
-    var INSET = 8;
-    toolbarEl.style.top = (rect.top + window.pageYOffset + 6) + 'px';
-    toolbarEl.style.left = (rect.right + window.pageXOffset - INSET) + 'px';
-    toolbarEl.style.transform = 'translateX(-100%)';
-}
+                var rect = img.getBoundingClientRect();
+                // Anchor the toolbar's right edge to the image's right edge
+                // minus a small inset, rather than positioning by a magic
+                // number. translateX(-100%) moves the element left by its
+                // own rendered width, whatever that is, so the placement
+                // stays correct if the button count, gap size, or border
+                // width changes later.
+                var INSET = 8;
+                toolbarEl.style.top = (rect.top + window.pageYOffset + 6) + 'px';
+                toolbarEl.style.left = (rect.right + window.pageXOffset - INSET) + 'px';
+                toolbarEl.style.transform = 'translateX(-100%)';
+            }
 
             function showToolbar(img) {
                 if (hideTimer) { clearTimeout(hideTimer); hideTimer = null; }
@@ -3187,6 +3246,7 @@ var MessengerModule = (function(Utils, EventBus) {
                 var alt = img.getAttribute('alt') || '';
                 if (alt.startsWith(':') && alt.endsWith(':')) return false;
                 if (img.closest('.link-preview-card, .simple-link, .modern-embedded-link')) return false;
+                if (img.closest('.ff-upload-placeholder')) return false;
                 return true;
             }
 
@@ -3638,6 +3698,254 @@ var MessengerModule = (function(Utils, EventBus) {
                                 height: node.attrs.height,
                             },
                         ];
+                    },
+                });
+
+                // ------------------------------------------------------------------
+                // Upload placeholder. A block atom that renders as a small
+                // card (filename, size, progress bar, cancel button) while
+                // an image is uploading, then replaces itself with a real
+                // `image` node on success. The File object itself lives in
+                // `_uploadRegistry`, keyed by uploadId — a File can't be a
+                // ProseMirror attribute because it wouldn't survive
+                // serialization, and the node view needs to be able to
+                // restart the upload on retry.
+                //
+                // `renderHTML` produces a marker span that htmlToLegacy
+                // strips. The node never survives to the saved payload,
+                // so this is purely defensive: it guards against the user
+                // submitting mid-upload.
+                // ------------------------------------------------------------------
+                const ImageUploadPlaceholder = Node.create({
+                    name: 'imageUploadPlaceholder',
+                    group: 'block',
+                    atom: true,
+                    draggable: false,
+                    selectable: true,
+                    addAttributes() {
+                        return {
+                            uploadId:     { default: null },
+                            filename:     { default: '' },
+                            filesize:     { default: 0 },
+                            progress:     { default: 0 },       // 0..100
+                            status:       { default: 'uploading' }, // 'uploading' | 'failed'
+                            errorMessage: { default: '' },
+                        };
+                    },
+                    parseHTML() {
+                        return [];  // never parsed from HTML — placeholder is runtime-only
+                    },
+                    renderHTML({ node }) {
+                        return ['span', {
+                            class: 'ff-upload-placeholder-marker',
+                            'data-upload-id': node.attrs.uploadId || '',
+                        }];
+                    },
+                    addNodeView() {
+                        return ({ node, editor, getPos }) => {
+                            // --- DOM scaffold, built once ---
+                            const dom = document.createElement('div');
+                            dom.className = 'ff-upload-placeholder';
+                            dom.setAttribute('contenteditable', 'false');
+
+                            dom.innerHTML = ''
+                                + '<div class="ff-upload-progress-track"><div class="ff-upload-progress-fill"></div></div>'
+                                + '<div class="ff-upload-icon"><i class="fa-regular fa-cloud-arrow-up" aria-hidden="true"></i></div>'
+                                + '<div class="ff-upload-info">'
+                                +   '<div class="ff-upload-filename"></div>'
+                                +   '<div class="ff-upload-meta"></div>'
+                                + '</div>'
+                                + '<div class="ff-upload-actions">'
+                                +   '<span class="ff-upload-percent">0%</span>'
+                                +   '<button type="button" class="ff-upload-btn ff-upload-retry-btn" hidden aria-label="Retry upload"><i class="fa-regular fa-arrow-rotate-right" aria-hidden="true"></i></button>'
+                                +   '<button type="button" class="ff-upload-btn is-danger ff-upload-cancel-btn" aria-label="Cancel upload"><i class="fa-regular fa-xmark" aria-hidden="true"></i></button>'
+                                + '</div>';
+
+                            const filenameEl = dom.querySelector('.ff-upload-filename');
+                            const metaEl     = dom.querySelector('.ff-upload-meta');
+                            const percentEl  = dom.querySelector('.ff-upload-percent');
+                            const fillEl     = dom.querySelector('.ff-upload-progress-fill');
+                            const retryBtn   = dom.querySelector('.ff-upload-retry-btn');
+                            const cancelBtn  = dom.querySelector('.ff-upload-cancel-btn');
+                            const cancelIcon = cancelBtn.querySelector('i');
+
+                            let currentXhr = null;
+
+                            // --- helpers ---
+
+                            function findSelf() {
+                                // getPos() is a live closure — always returns
+                                // the node's current position, even if the
+                                // user typed before it.
+                                const pos = getPos();
+                                if (typeof pos !== 'number') return null;
+                                const n = editor.state.doc.nodeAt(pos);
+                                if (!n || n.type.name !== 'imageUploadPlaceholder') return null;
+                                return { pos, node: n };
+                            }
+
+                            function patchAttrs(patch) {
+                                const located = findSelf();
+                                if (!located) return;
+                                const tr = editor.state.tr.setNodeMarkup(located.pos, undefined, {
+                                    ...located.node.attrs,
+                                    ...patch,
+                                });
+                                editor.view.dispatch(tr);
+                            }
+
+                            function render(n) {
+                                const isFailed = n.attrs.status === 'failed';
+                                dom.classList.toggle('is-failed', isFailed);
+                                filenameEl.textContent = n.attrs.filename || 'image';
+                                metaEl.textContent = isFailed
+                                    ? (n.attrs.errorMessage || 'Upload failed')
+                                    : (formatBytes(n.attrs.filesize) + ' · Uploading…');
+                                percentEl.textContent = isFailed ? '!' : (n.attrs.progress + '%');
+                                fillEl.style.width = (isFailed ? 100 : n.attrs.progress) + '%';
+                                retryBtn.hidden = !isFailed;
+                                cancelIcon.className = isFailed
+                                    ? 'fa-regular fa-trash-can'
+                                    : 'fa-regular fa-xmark';
+                                cancelBtn.title = isFailed ? 'Remove' : 'Cancel upload';
+                                cancelBtn.setAttribute('aria-label', isFailed ? 'Remove' : 'Cancel upload');
+                            }
+
+                            function startUpload() {
+                                if (currentXhr) {
+                                    try { currentXhr.abort(); } catch (e) {}
+                                    currentXhr = null;
+                                }
+
+                                const located = findSelf();
+                                if (!located) return;
+                                const uploadId = located.node.attrs.uploadId;
+                                const entry = _uploadRegistry.get(uploadId);
+                                if (!entry || !entry.file) {
+                                    patchAttrs({ status: 'failed', errorMessage: 'File no longer available' });
+                                    return;
+                                }
+
+                                patchAttrs({ status: 'uploading', progress: 0, errorMessage: '' });
+
+                                // XHR rather than fetch — fetch has no upload
+                                // progress event in any current browser.
+                                // XHR's `upload.onprogress` is the only way to
+                                // get real byte-level progress for a request
+                                // body.
+                                const xhr = new XMLHttpRequest();
+                                currentXhr = xhr;
+
+                                xhr.open('POST', UPLOAD_WORKER_URL);
+                                xhr.upload.addEventListener('progress', function(e) {
+                                    if (!e.lengthComputable) return;
+                                    const pct = Math.round((e.loaded / e.total) * 100);
+                                    patchAttrs({ progress: pct });
+                                });
+
+                                xhr.addEventListener('load', function() {
+                                    currentXhr = null;
+                                    if (xhr.status < 200 || xhr.status >= 300) {
+                                        patchAttrs({ status: 'failed', errorMessage: 'Server error (' + xhr.status + ')' });
+                                        return;
+                                    }
+                                    let data;
+                                    try { data = JSON.parse(xhr.responseText); }
+                                    catch (e) { patchAttrs({ status: 'failed', errorMessage: 'Invalid response' }); return; }
+                                    if (!data.url) {
+                                        patchAttrs({ status: 'failed', errorMessage: 'No URL in response' });
+                                        return;
+                                    }
+
+                                    // Replace ourselves with the real image
+                                    // node. This also destroys the node view,
+                                    // which is fine — the XHR is done, and
+                                    // destroy() is a no-op when the XHR has
+                                    // already completed.
+                                    const found = findSelf();
+                                    if (!found) return;
+                                    const imageNode = editor.schema.nodes.image.create({
+                                        src: data.url,
+                                        alt: entry.file.name || 'Uploaded image',
+                                        loading: 'lazy',
+                                        decoding: 'async',
+                                        width: data.width ? parseInt(data.width, 10) : null,
+                                        height: data.height ? parseInt(data.height, 10) : null,
+                                    });
+                                    editor.view.dispatch(
+                                        editor.state.tr.replaceWith(found.pos, found.pos + found.node.nodeSize, imageNode)
+                                    );
+                                    _uploadRegistry.delete(uploadId);
+                                    showToast('Image uploaded', { type: 'success' });
+                                });
+
+                                xhr.addEventListener('error', function() {
+                                    currentXhr = null;
+                                    patchAttrs({ status: 'failed', errorMessage: 'Network error' });
+                                });
+
+                                xhr.addEventListener('abort', function() {
+                                    // Nothing to do — destroy() or cancel
+                                    // handler manages cleanup.
+                                });
+
+                                const form = new FormData();
+                                form.append('image', entry.file);
+                                xhr.send(form);
+                            }
+
+                            cancelBtn.addEventListener('click', function(e) {
+                                e.preventDefault();
+                                e.stopPropagation();
+                                if (currentXhr) {
+                                    try { currentXhr.abort(); } catch (err) {}
+                                    currentXhr = null;
+                                }
+                                const located = findSelf();
+                                if (!located) return;
+                                _uploadRegistry.delete(located.node.attrs.uploadId);
+                                editor.view.dispatch(
+                                    editor.state.tr.delete(located.pos, located.pos + located.node.nodeSize)
+                                );
+                            });
+
+                            retryBtn.addEventListener('click', function(e) {
+                                e.preventDefault();
+                                e.stopPropagation();
+                                startUpload();
+                            });
+
+                            render(node);
+                            startUpload();
+
+                            return {
+                                dom,
+                                update(updated) {
+                                    if (updated.type.name !== 'imageUploadPlaceholder') return false;
+                                    render(updated);
+                                    return true;
+                                },
+                                destroy() {
+                                    if (currentXhr) {
+                                        try { currentXhr.abort(); } catch (e) {}
+                                        currentXhr = null;
+                                    }
+                                    // Always clear the registry entry on
+                                    // destroy. Success path already deleted
+                                    // it; this is for cancel, editor teardown,
+                                    // and any future edge case.
+                                    const located = findSelf();
+                                    if (located) _uploadRegistry.delete(located.node.attrs.uploadId);
+                                },
+                                stopEvent(event) {
+                                    // Let clicks on our buttons be handled by
+                                    // us; don't let ProseMirror try to
+                                    // interpret them as selection.
+                                    return !!event.target.closest('.ff-upload-btn');
+                                },
+                                ignoreMutation() { return true; },
+                            };
+                        };
                     },
                 });
 
@@ -4555,6 +4863,7 @@ var MessengerModule = (function(Utils, EventBus) {
                         // added to the schema later.
                         const BLOCK_ATOM_NAMES = new Set([
                             'image', 'liteYouTube', 'liteVimeo', 'horizontalRule',
+                            'imageUploadPlaceholder',
                         ]);
 
                         const isBlockAtom = (node) => {
@@ -4653,7 +4962,7 @@ var MessengerModule = (function(Utils, EventBus) {
                                     const lastNode = newState.doc.lastChild;
                                     if (!lastNode) return null;
                                     const name = lastNode.type.name;
-                                    if (name !== 'liteYouTube' && name !== 'liteVimeo' && name !== 'image') {
+                                    if (name !== 'liteYouTube' && name !== 'liteVimeo' && name !== 'image' && name !== 'imageUploadPlaceholder') {
                                         return null;
                                     }
                                     const paragraph = newState.schema.nodes.paragraph.create();
@@ -4744,6 +5053,14 @@ var MessengerModule = (function(Utils, EventBus) {
 
                         Underline,
                         CustomImage,
+
+                        // v16: placeholder node for in-flight uploads.
+                        // Sits alongside CustomImage in the extension
+                        // list because they are the same kind of thing —
+                        // a block-level image-shaped node — and read as
+                        // a pair.
+                        ImageUploadPlaceholder,
+
                         Emoji,
                         CustomLink,
                         LiteYouTube,
