@@ -1835,6 +1835,12 @@
     color: var(--primary-light);
 }
 
+.ff-upload-placeholder .ff-upload-dropzone-hint {
+    font-size: var(--text-xs);
+    color: var(--text-tertiary);
+    opacity: 0.75;
+    margin-top: 2px;
+}
 /* The dismiss button sits at the top-right corner of the dropzone
    so it reads as a "close this" affordance, not as part of the
    primary click-to-upload surface. */
