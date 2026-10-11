@@ -1899,7 +1899,7 @@ var MessengerModule = (function(Utils, EventBus) {
             const secondLast = doc.child(doc.childCount - 2);
             if (last.type.name !== 'paragraph' || last.content.size !== 0) return;
             const atomName = secondLast.type.name;
-            if (atomName !== 'liteYouTube' && atomName !== 'liteVimeo' && atomName !== 'image' && atomName !== 'imageUploadPlaceholder') return;
+            if (atomName !== 'liteYouTube' && atomName !== 'liteVimeo' && atomName !== 'imageUploadPlaceholder') return;
             editor.chain().focus().setTextSelection(doc.content.size - 1).run();
         }
 
@@ -3525,8 +3525,8 @@ var MessengerModule = (function(Utils, EventBus) {
                 });
 
                 const CustomImage = BaseImage.extend({
-                    inline: false,
-                    group: 'block',
+                    inline: true,
+                    group: 'inline',
                     draggable: true,
                     selectable: true,
                     addAttributes() {
@@ -4821,7 +4821,7 @@ var MessengerModule = (function(Utils, EventBus) {
                     name: 'deleteAdjacentAtom',
                     addProseMirrorPlugins() {
                         const BLOCK_ATOM_NAMES = new Set([
-                            'image', 'liteYouTube', 'liteVimeo', 'horizontalRule',
+                            'liteYouTube', 'liteVimeo', 'horizontalRule',
                             'imageUploadPlaceholder',
                         ]);
 
@@ -4898,7 +4898,7 @@ var MessengerModule = (function(Utils, EventBus) {
                                     const lastNode = newState.doc.lastChild;
                                     if (!lastNode) return null;
                                     const name = lastNode.type.name;
-                                    if (name !== 'liteYouTube' && name !== 'liteVimeo' && name !== 'image' && name !== 'imageUploadPlaceholder') {
+                                    if (name !== 'liteYouTube' && name !== 'liteVimeo' && name !== 'imageUploadPlaceholder') {
                                         return null;
                                     }
                                     const paragraph = newState.schema.nodes.paragraph.create();
