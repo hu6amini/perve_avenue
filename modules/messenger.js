@@ -2808,42 +2808,42 @@ var MessengerModule = (function(Utils, EventBus) {
         }
 
         function showInputModal(title, placeholder, callback) {
-            var modalOverlay = document.createElement('div');
-            modalOverlay.className = 'modern-modal-overlay';
-            modalOverlay.style.cssText = 'position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.7);z-index:10000;display:flex;align-items:center;justify-content:center;';
-            var modalBox = document.createElement('div');
-            modalBox.className = 'modern-modal-box';
-            modalBox.style.cssText = 'background:var(--surface-color);border-radius:var(--radius-lg);padding:var(--space-lg);width:340px;max-width:90%;box-shadow:var(--shadow-lg);';
-            modalBox.innerHTML = ''
-                + '<h3 style="margin:0 0 var(--space-md) 0;">' + escapeHtml(title) + '</h3>'
-                + '<input type="text" id="modal-input" class="modern-input" placeholder="' + escapeHtml(placeholder) + '" style="width:100%;">'
-                + '<div style="display:flex;gap:var(--space-sm);margin-top:var(--space-md);justify-content:flex-end;">'
-                + '<button id="modal-cancel" class="modern-btn modern-btn-secondary">Cancel</button>'
-                + '<button id="modal-submit" class="modern-btn modern-btn-primary">Insert</button>'
-                + '</div>';
-            modalOverlay.appendChild(modalBox);
-            document.body.appendChild(modalOverlay);
-            var input = modalBox.querySelector('#modal-input');
-            input.focus();
+    var modalOverlay = document.createElement('div');
+    modalOverlay.className = 'modern-modal-overlay';
+    modalOverlay.style.cssText = 'position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.7);z-index:10000;display:flex;align-items:center;justify-content:center;';
+    var modalBox = document.createElement('div');
+    modalBox.className = 'modern-modal-box';
+    modalBox.style.cssText = 'background:var(--surface-color);border-radius:var(--radius-lg);padding:var(--space-lg);width:340px;max-width:90%;box-shadow:var(--shadow-lg);';
+    modalBox.innerHTML = ''
+        + '<h3 style="margin:0 0 var(--space-md) 0;"><i class="fa-regular fa-image" aria-hidden="true"></i> ' + escapeHtml(title) + '</h3>'
+        + '<input type="url" id="modal-input" class="modern-input" placeholder="' + escapeHtml(placeholder) + '" style="width:100%;">'
+        + '<div style="display:flex;gap:var(--space-sm);margin-top:var(--space-md);justify-content:flex-end;">'
+        + '<button id="modal-cancel" class="modern-btn modern-btn-secondary">Cancel</button>'
+        + '<button id="modal-submit" class="modern-btn modern-btn-primary">Insert</button>'
+        + '</div>';
+    modalOverlay.appendChild(modalBox);
+    document.body.appendChild(modalOverlay);
+    var input = modalBox.querySelector('#modal-input');
+    input.focus();
 
-            function close() {
-                modalOverlay.remove();
-                document.removeEventListener('keydown', onEscape);
-                if (editor) editor.commands.focus();
-            }
-            function onEscape(e) { if (e.key === 'Escape') { e.preventDefault(); close(); } }
+    function close() {
+        modalOverlay.remove();
+        document.removeEventListener('keydown', onEscape);
+        if (editor) editor.commands.focus();
+    }
+    function onEscape(e) { if (e.key === 'Escape') { e.preventDefault(); close(); } }
 
-            document.addEventListener('keydown', onEscape);
-            modalBox.querySelector('#modal-cancel').onclick = close;
-            modalBox.querySelector('#modal-submit').onclick = function() {
-                var val = input.value.trim();
-                if (val) callback(val);
-                close();
-            };
-            input.addEventListener('keypress', function(e) {
-                if (e.key === 'Enter') modalBox.querySelector('#modal-submit').click();
-            });
-        }
+    document.addEventListener('keydown', onEscape);
+    modalBox.querySelector('#modal-cancel').onclick = close;
+    modalBox.querySelector('#modal-submit').onclick = function() {
+        var val = input.value.trim();
+        if (val) callback(val);
+        close();
+    };
+    input.addEventListener('keypress', function(e) {
+        if (e.key === 'Enter') modalBox.querySelector('#modal-submit').click();
+    });
+}
 
         function showSpoilerTitleModal(initial, callback) {
             var modalOverlay = document.createElement('div');
