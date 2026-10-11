@@ -3699,40 +3699,51 @@ var MessengerModule = (function(Utils, EventBus) {
         _uploadRegistry.delete(located.node.attrs.uploadId);
     }
 
+    // The image is now an inline node (v18+), so it belongs inside a
+    // paragraph. Build that paragraph here rather than letting
+    // ProseMirror wrap the inline content implicitly — implicit
+    // wrapping has no opinion about what happens to the empty
+    // paragraphs around the block placeholder, and the resulting
+    // structure has several "start of line" positions competing for
+    // the caret. Building the paragraph explicitly gives us a single
+    // clean target for the selection.
     const imageNode = editor.schema.nodes.image.create(imageAttrs);
+    const paragraph = editor.schema.nodes.paragraph.create(null, imageNode);
+
     const tr = editor.state.tr.replaceWith(
         located.pos,
         located.pos + located.node.nodeSize,
-        imageNode
+        paragraph
     );
 
-    // Set the selection in the same transaction as the replacement,
-    // rather than deferring it to a setTimeout or a rAF. Deferring
-    // leaves a window between the commit and the fix during which
-    // the browser installs its own default caret at position 0 —
-    // and by the time the deferred callback runs, focus() restores
-    // THAT position rather than the one we meant to set.
-    //
-    // TrailingEmbedParagraph should have already inserted a
-    // paragraph after the image (appendTransaction fires on this
-    // same dispatch). If it hasn't for some reason — because the
-    // transaction wasn't considered "changed", or because the doc
-    // happened to be built in a way the plugin didn't catch — we
-    // add the paragraph ourselves so the selection always has a
-    // valid textblock to land in.
-    const afterPos = located.pos + imageNode.nodeSize;
-    const $after = tr.doc.resolve(afterPos);
-
-    if ($after.nodeAfter && $after.nodeAfter.isTextblock) {
-        tr.setSelection(TextSelection.near($after, 1));
-    } else {
-        const para = editor.schema.nodes.paragraph.create();
-        tr.insert(afterPos, para);
-        tr.setSelection(TextSelection.near(tr.doc.resolve(afterPos + 1), 1));
+    // Collapse any empty paragraphs immediately before the new one.
+    // The idle-placeholder flow tends to leave one or two behind
+    // (from the original textblock split, and from
+    // TrailingEmbedParagraph having fired on the placeholder before
+    // the replacement). They serve no purpose once the image is in
+    // place and they produce the phantom caret positions above the
+    // image that were the visible symptom.
+    let newPos = located.pos;
+    while (newPos > 0) {
+        const prev = tr.doc.resolve(newPos).nodeBefore;
+        if (prev && prev.type.name === 'paragraph' && prev.content.size === 0) {
+            tr.delete(newPos - prev.nodeSize, newPos);
+            newPos -= prev.nodeSize;
+        } else {
+            break;
+        }
     }
 
+    // Set the caret inside the new paragraph, right after the image.
+    // Paragraph content starts at newPos + 1; the image is a leaf with
+    // nodeSize 1, so the position immediately after it is newPos + 2.
+    // TextSelection.create is used (not .near) so the position is
+    // exact — .near can drift toward adjacent paragraphs.
+    const afterImage = newPos + 2;
+    tr.setSelection(TextSelection.create(tr.doc, afterImage));
+
     editor.view.dispatch(tr);
-    editor.commands.focus();
+    editor.view.focus();
 }
 
                             function render(n) {
