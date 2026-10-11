@@ -4847,51 +4847,85 @@ var MessengerModule = (function(Utils, EventBus) {
                                 key: new PluginKey('deleteAdjacentAtom'),
                                 props: {
                                     handleKeyDown(view, event) {
-                                        const key = event.key;
-                                        if (key !== 'Backspace' && key !== 'Delete') return false;
+    const key = event.key;
+    if (key !== 'Backspace' && key !== 'Delete') return false;
 
-                                        const { state } = view;
-                                        const { selection } = state;
+    const { state } = view;
+    const { selection } = state;
 
-                                        if (selection instanceof NodeSelection) {
-                                            view.dispatch(
-                                                state.tr.delete(selection.from, selection.to)
-                                            );
-                                            return true;
-                                        }
+    // ---- Range selection --------------------------------------------
+    // If the user has highlighted a range (e.g. dragged a selection
+    // across an inline image) and the range contains an inline atom,
+    // handle the delete ourselves rather than letting the browser do
+    // it natively. The browser's native delete on a contenteditable
+    // containing contenteditable="false" atoms is inconsistent across
+    // engines — it can leave the atom in the DOM while removing its
+    // siblings, which ProseMirror's DOM observer then re-syncs from,
+    // and the image reappears as though the delete never happened.
+    // Dispatching from state sidesteps the reconciliation loop.
+    //
+    // The set is deliberately narrow: image, emoji, linkPreview are
+    // the inline atoms in this schema. Block atoms like liteYouTube
+    // are handled by the NodeSelection branch below; if a future
+    // inline atom is added, add it here too.
+    if (!selection.empty) {
+        const INLINE_ATOM_NAMES = new Set(['image', 'emoji', 'linkPreview']);
+        let spansInlineAtom = false;
+        state.doc.nodesBetween(selection.from, selection.to, (node) => {
+            if (INLINE_ATOM_NAMES.has(node.type.name)) {
+                spansInlineAtom = true;
+                return false;
+            }
+            return true;
+        });
+        if (spansInlineAtom) {
+            view.dispatch(state.tr.deleteSelection());
+            return true;
+        }
+        return false;
+    }
 
-                                        if (!selection.empty) return false;
-                                        const $from = selection.$from;
+    // ---- NodeSelection on a block atom ------------------------------
+    // Clicking an image or lite embed produces a NodeSelection. TipTap
+    // 2.x does not install prosemirror-commands' baseKeymap, so nothing
+    // is bound to consume it — the delete must be dispatched here.
+    if (selection instanceof NodeSelection) {
+        view.dispatch(state.tr.delete(selection.from, selection.to));
+        return true;
+    }
 
-                                        if (key === 'Backspace') {
-                                            if ($from.parentOffset !== 0) return false;
-                                            if ($from.depth === 0) return false;
+    // ---- Empty selection at a textblock boundary --------------------
+    const $from = selection.$from;
 
-                                            const blockStart = $from.before($from.depth);
-                                            const nodeBefore = state.doc.resolve(blockStart).nodeBefore;
-                                            if (!isBlockAtom(nodeBefore)) return false;
+    if (key === 'Backspace') {
+        if ($from.parentOffset !== 0) return false;
+        if ($from.depth === 0) return false;
 
-                                            view.dispatch(
-                                                state.tr.delete(blockStart - nodeBefore.nodeSize, blockStart)
-                                            );
-                                            return true;
-                                        }
+        const blockStart = $from.before($from.depth);
+        const nodeBefore = state.doc.resolve(blockStart).nodeBefore;
+        if (!isBlockAtom(nodeBefore)) return false;
 
-                                        if (key === 'Delete') {
-                                            if ($from.parentOffset !== $from.parent.content.size) return false;
+        view.dispatch(
+            state.tr.delete(blockStart - nodeBefore.nodeSize, blockStart)
+        );
+        return true;
+    }
 
-                                            const blockEnd = $from.after($from.depth);
-                                            const nodeAfter = state.doc.resolve(blockEnd).nodeAfter;
-                                            if (!isBlockAtom(nodeAfter)) return false;
+    if (key === 'Delete') {
+        if ($from.parentOffset !== $from.parent.content.size) return false;
 
-                                            view.dispatch(
-                                                state.tr.delete(blockEnd, blockEnd + nodeAfter.nodeSize)
-                                            );
-                                            return true;
-                                        }
+        const blockEnd = $from.after($from.depth);
+        const nodeAfter = state.doc.resolve(blockEnd).nodeAfter;
+        if (!isBlockAtom(nodeAfter)) return false;
 
-                                        return false;
-                                    },
+        view.dispatch(
+            state.tr.delete(blockEnd, blockEnd + nodeAfter.nodeSize)
+        );
+        return true;
+    }
+
+    return false;
+},
                                 },
                             }),
                         ];
