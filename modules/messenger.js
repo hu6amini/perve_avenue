@@ -90,6 +90,25 @@
 //      uploaded, or dismissed) before the message can go out. The
 //      URL-modal path replaces the placeholder with a real image node
 //      and never touches the upload registry.
+// v18: image is now inline (inline: true, group: 'inline') rather than
+//      block-level. A block image could not present a caret position
+//      "next to" the image, only above or below it, which read as
+//      "the cursor is on the left" after every insert. Inline images
+//      live inside a paragraph, so a real text position exists on
+//      both sides. Three block-atom whitelists dropped 'image' as a
+//      consequence: TrailingEmbedParagraph, DeleteAdjacentAtom's
+//      BLOCK_ATOM_NAMES, and focusTrailingEmbedParagraph; the inline
+//      set in DeleteAdjacentAtom keeps it. That plugin also grew a
+//      range-selection branch that deletes atom-spanning selections
+//      from state, plus explicit branches for an inline atom
+//      immediately before or after the caret — the positions the
+//      default keymap leaves as no-ops. replaceWithImage now builds
+//      its target paragraph explicitly and sets the selection inside
+//      the same transaction, so the caret lands to the right of the
+//      image without a race against the browser's focus handling.
+//      A client-side size check rejects files past ImgBB's free-tier
+//      cap before any upload starts; MAX_UPLOAD_BYTES mirrors the
+//      hint text in the dropzone.
 var MessengerModule = (function(Utils, EventBus) {
     'use strict';
 
@@ -102,6 +121,10 @@ var MessengerModule = (function(Utils, EventBus) {
     var UPLOAD_WORKER_URL = 'https://imgbb-upload-proxy.nhristakiev.workers.dev/';
     var OG_WORKER_URL = 'https://og-worker.nhristakiev.workers.dev/?url=';
     var TWEMOJI_BASE = 'https://twemoji.maxcdn.com/v/latest/svg/';
+
+    // ImgBB's free-tier cap. Mirrored in the dropzone hint text; keep
+    // the two in sync if the tier changes.
+    var MAX_UPLOAD_BYTES = 32 * 1024 * 1024;
 
     // Live File objects for in-flight uploads, keyed by uploadId. A File
     // can't be a ProseMirror attribute (it wouldn't serialize and can't
@@ -2808,42 +2831,42 @@ var MessengerModule = (function(Utils, EventBus) {
         }
 
         function showInputModal(title, placeholder, callback) {
-    var modalOverlay = document.createElement('div');
-    modalOverlay.className = 'modern-modal-overlay';
-    modalOverlay.style.cssText = 'position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.7);z-index:10000;display:flex;align-items:center;justify-content:center;';
-    var modalBox = document.createElement('div');
-    modalBox.className = 'modern-modal-box';
-    modalBox.style.cssText = 'background:var(--surface-color);border-radius:var(--radius-lg);padding:var(--space-lg);width:340px;max-width:90%;box-shadow:var(--shadow-lg);';
-    modalBox.innerHTML = ''
-        + '<h3 style="margin:0 0 var(--space-md) 0;"><i class="fa-regular fa-image" aria-hidden="true"></i> ' + escapeHtml(title) + '</h3>'
-        + '<input type="url" id="modal-input" class="modern-input" placeholder="' + escapeHtml(placeholder) + '" style="width:100%;">'
-        + '<div style="display:flex;gap:var(--space-sm);margin-top:var(--space-md);justify-content:flex-end;">'
-        + '<button id="modal-cancel" class="modern-btn modern-btn-secondary">Cancel</button>'
-        + '<button id="modal-submit" class="modern-btn modern-btn-primary">Insert</button>'
-        + '</div>';
-    modalOverlay.appendChild(modalBox);
-    document.body.appendChild(modalOverlay);
-    var input = modalBox.querySelector('#modal-input');
-    input.focus();
+            var modalOverlay = document.createElement('div');
+            modalOverlay.className = 'modern-modal-overlay';
+            modalOverlay.style.cssText = 'position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.7);z-index:10000;display:flex;align-items:center;justify-content:center;';
+            var modalBox = document.createElement('div');
+            modalBox.className = 'modern-modal-box';
+            modalBox.style.cssText = 'background:var(--surface-color);border-radius:var(--radius-lg);padding:var(--space-lg);width:340px;max-width:90%;box-shadow:var(--shadow-lg);';
+            modalBox.innerHTML = ''
+                + '<h3 style="margin:0 0 var(--space-md) 0;"><i class="fa-regular fa-image" aria-hidden="true"></i> ' + escapeHtml(title) + '</h3>'
+                + '<input type="url" id="modal-input" class="modern-input" placeholder="' + escapeHtml(placeholder) + '" style="width:100%;">'
+                + '<div style="display:flex;gap:var(--space-sm);margin-top:var(--space-md);justify-content:flex-end;">'
+                + '<button id="modal-cancel" class="modern-btn modern-btn-secondary">Cancel</button>'
+                + '<button id="modal-submit" class="modern-btn modern-btn-primary">Insert</button>'
+                + '</div>';
+            modalOverlay.appendChild(modalBox);
+            document.body.appendChild(modalOverlay);
+            var input = modalBox.querySelector('#modal-input');
+            input.focus();
 
-    function close() {
-        modalOverlay.remove();
-        document.removeEventListener('keydown', onEscape);
-        if (editor) editor.commands.focus();
-    }
-    function onEscape(e) { if (e.key === 'Escape') { e.preventDefault(); close(); } }
+            function close() {
+                modalOverlay.remove();
+                document.removeEventListener('keydown', onEscape);
+                if (editor) editor.commands.focus();
+            }
+            function onEscape(e) { if (e.key === 'Escape') { e.preventDefault(); close(); } }
 
-    document.addEventListener('keydown', onEscape);
-    modalBox.querySelector('#modal-cancel').onclick = close;
-    modalBox.querySelector('#modal-submit').onclick = function() {
-        var val = input.value.trim();
-        if (val) callback(val);
-        close();
-    };
-    input.addEventListener('keypress', function(e) {
-        if (e.key === 'Enter') modalBox.querySelector('#modal-submit').click();
-    });
-}
+            document.addEventListener('keydown', onEscape);
+            modalBox.querySelector('#modal-cancel').onclick = close;
+            modalBox.querySelector('#modal-submit').onclick = function() {
+                var val = input.value.trim();
+                if (val) callback(val);
+                close();
+            };
+            input.addEventListener('keypress', function(e) {
+                if (e.key === 'Enter') modalBox.querySelector('#modal-submit').click();
+            });
+        }
 
         function showSpoilerTitleModal(initial, callback) {
             var modalOverlay = document.createElement('div');
@@ -3242,13 +3265,13 @@ var MessengerModule = (function(Utils, EventBus) {
             });
 
             editorInstance.on('transaction', function() {
-    if (!hoveredImg) return;
-    if (!document.body.contains(hoveredImg)) {
-        if (hideTimer) { clearTimeout(hideTimer); hideTimer = null; }
-        toolbarEl.style.display = 'none';
-        hoveredImg = null;
-    }
-});
+                if (!hoveredImg) return;
+                if (!document.body.contains(hoveredImg)) {
+                    if (hideTimer) { clearTimeout(hideTimer); hideTimer = null; }
+                    toolbarEl.style.display = 'none';
+                    hoveredImg = null;
+                }
+            });
 
             editorInstance.on('blur', function() {
                 toolbarEl.style.display = 'none';
@@ -3619,13 +3642,13 @@ var MessengerModule = (function(Utils, EventBus) {
                             const dropzoneView = document.createElement('div');
                             dropzoneView.className = 'ff-upload-dropzone';
                             dropzoneView.innerHTML = ''
-    + '<div class="ff-upload-dropzone-icon"><i class="fa-regular fa-cloud-arrow-up" aria-hidden="true"></i></div>'
-    + '<div class="ff-upload-dropzone-text">'
-    +   '<div class="ff-upload-dropzone-primary"><em>Click to upload</em> or drag and drop</div>'
-    +   '<div class="ff-upload-dropzone-secondary">or <button type="button" class="ff-upload-by-url">insert by URL</button></div>'
-    +   '<div class="ff-upload-dropzone-hint">Max 32 MB per image</div>'
-    + '</div>'
-    + '<button type="button" class="ff-upload-btn is-danger ff-upload-dismiss-btn" aria-label="Remove"><i class="fa-regular fa-xmark" aria-hidden="true"></i></button>';
+                                + '<div class="ff-upload-dropzone-icon"><i class="fa-regular fa-cloud-arrow-up" aria-hidden="true"></i></div>'
+                                + '<div class="ff-upload-dropzone-text">'
+                                +   '<div class="ff-upload-dropzone-primary"><em>Click to upload</em> or drag and drop</div>'
+                                +   '<div class="ff-upload-dropzone-secondary">or <button type="button" class="ff-upload-by-url">insert by URL</button></div>'
+                                +   '<div class="ff-upload-dropzone-hint">Max 32 MB per image</div>'
+                                + '</div>'
+                                + '<button type="button" class="ff-upload-btn is-danger ff-upload-dismiss-btn" aria-label="Remove"><i class="fa-regular fa-xmark" aria-hidden="true"></i></button>';
 
                             // ---------- uploading / failed ----------
                             const progressView = document.createElement('div');
@@ -3693,58 +3716,58 @@ var MessengerModule = (function(Utils, EventBus) {
                             }
 
                             function replaceWithImage(imageAttrs) {
-    const located = findSelf();
-    if (!located) return;
-    if (located.node.attrs.uploadId) {
-        _uploadRegistry.delete(located.node.attrs.uploadId);
-    }
+                                const located = findSelf();
+                                if (!located) return;
+                                if (located.node.attrs.uploadId) {
+                                    _uploadRegistry.delete(located.node.attrs.uploadId);
+                                }
 
-    // The image is now an inline node (v18+), so it belongs inside a
-    // paragraph. Build that paragraph here rather than letting
-    // ProseMirror wrap the inline content implicitly — implicit
-    // wrapping has no opinion about what happens to the empty
-    // paragraphs around the block placeholder, and the resulting
-    // structure has several "start of line" positions competing for
-    // the caret. Building the paragraph explicitly gives us a single
-    // clean target for the selection.
-    const imageNode = editor.schema.nodes.image.create(imageAttrs);
-    const paragraph = editor.schema.nodes.paragraph.create(null, imageNode);
+                                // The image is now an inline node (v18+), so it belongs inside a
+                                // paragraph. Build that paragraph here rather than letting
+                                // ProseMirror wrap the inline content implicitly — implicit
+                                // wrapping has no opinion about what happens to the empty
+                                // paragraphs around the block placeholder, and the resulting
+                                // structure has several "start of line" positions competing for
+                                // the caret. Building the paragraph explicitly gives us a single
+                                // clean target for the selection.
+                                const imageNode = editor.schema.nodes.image.create(imageAttrs);
+                                const paragraph = editor.schema.nodes.paragraph.create(null, imageNode);
 
-    const tr = editor.state.tr.replaceWith(
-        located.pos,
-        located.pos + located.node.nodeSize,
-        paragraph
-    );
+                                const tr = editor.state.tr.replaceWith(
+                                    located.pos,
+                                    located.pos + located.node.nodeSize,
+                                    paragraph
+                                );
 
-    // Collapse any empty paragraphs immediately before the new one.
-    // The idle-placeholder flow tends to leave one or two behind
-    // (from the original textblock split, and from
-    // TrailingEmbedParagraph having fired on the placeholder before
-    // the replacement). They serve no purpose once the image is in
-    // place and they produce the phantom caret positions above the
-    // image that were the visible symptom.
-    let newPos = located.pos;
-    while (newPos > 0) {
-        const prev = tr.doc.resolve(newPos).nodeBefore;
-        if (prev && prev.type.name === 'paragraph' && prev.content.size === 0) {
-            tr.delete(newPos - prev.nodeSize, newPos);
-            newPos -= prev.nodeSize;
-        } else {
-            break;
-        }
-    }
+                                // Collapse any empty paragraphs immediately before the new one.
+                                // The idle-placeholder flow tends to leave one or two behind
+                                // (from the original textblock split, and from
+                                // TrailingEmbedParagraph having fired on the placeholder before
+                                // the replacement). They serve no purpose once the image is in
+                                // place and they produce the phantom caret positions above the
+                                // image that were the visible symptom.
+                                let newPos = located.pos;
+                                while (newPos > 0) {
+                                    const prev = tr.doc.resolve(newPos).nodeBefore;
+                                    if (prev && prev.type.name === 'paragraph' && prev.content.size === 0) {
+                                        tr.delete(newPos - prev.nodeSize, newPos);
+                                        newPos -= prev.nodeSize;
+                                    } else {
+                                        break;
+                                    }
+                                }
 
-    // Set the caret inside the new paragraph, right after the image.
-    // Paragraph content starts at newPos + 1; the image is a leaf with
-    // nodeSize 1, so the position immediately after it is newPos + 2.
-    // TextSelection.create is used (not .near) so the position is
-    // exact — .near can drift toward adjacent paragraphs.
-    const afterImage = newPos + 2;
-    tr.setSelection(TextSelection.create(tr.doc, afterImage));
+                                // Set the caret inside the new paragraph, right after the image.
+                                // Paragraph content starts at newPos + 1; the image is a leaf with
+                                // nodeSize 1, so the position immediately after it is newPos + 2.
+                                // TextSelection.create is used (not .near) so the position is
+                                // exact — .near can drift toward adjacent paragraphs.
+                                const afterImage = newPos + 2;
+                                tr.setSelection(TextSelection.create(tr.doc, afterImage));
 
-    editor.view.dispatch(tr);
-    editor.view.focus();
-}
+                                editor.view.dispatch(tr);
+                                editor.view.focus();
+                            }
 
                             function render(n) {
                                 const isIdle = n.attrs.status === 'idle';
@@ -3762,7 +3785,7 @@ var MessengerModule = (function(Utils, EventBus) {
                                     : (formatBytes(n.attrs.filesize) + ' · Uploading…');
                                 percentEl.textContent = isFailed ? '!' : (n.attrs.progress + '%');
                                 fillEl.style.width = (isFailed ? 100 : n.attrs.progress) + '%';
-                                retryBtn.hidden = !isFailed;
+                                retryBtn.hidden = !isFailed || !n.attrs.uploadId;
                                 cancelIcon.className = isFailed
                                     ? 'fa-regular fa-trash-can'
                                     : 'fa-regular fa-xmark';
@@ -3835,6 +3858,21 @@ var MessengerModule = (function(Utils, EventBus) {
                             }
 
                             function handleFileChosen(file) {
+                                if (file.size > MAX_UPLOAD_BYTES) {
+                                    // Reject before touching the registry or the XHR. The
+                                    // placeholder flips to a failed state with a clear message;
+                                    // the retry button is hidden because there's nothing to
+                                    // retry — the file simply can't be accepted. The user
+                                    // dismisses with the trash icon and tries a smaller one.
+                                    patchAttrs({
+                                        status: 'failed',
+                                        filename: file.name || 'image',
+                                        filesize: file.size || 0,
+                                        progress: 0,
+                                        errorMessage: 'File exceeds 32 MB limit',
+                                    });
+                                    return;
+                                }
                                 const uploadId = 'up-' + Date.now() + '-' + Math.random().toString(36).slice(2, 9);
                                 _uploadRegistry.set(uploadId, { file: file });
                                 patchAttrs({
@@ -4831,10 +4869,19 @@ var MessengerModule = (function(Utils, EventBus) {
                 const DeleteAdjacentAtom = Extension.create({
                     name: 'deleteAdjacentAtom',
                     addProseMirrorPlugins() {
+                        // Both name sets live at plugin-factory scope rather than
+                        // inside handleKeyDown. handleKeyDown fires on every Backspace
+                        // and Delete press; allocating a fresh Set on each of those
+                        // calls is wasteful and inconsistent with how
+                        // BLOCK_ATOM_NAMES is already handled. Closing over the sets
+                        // here also means a future addition to either list is a
+                        // single-line change.
                         const BLOCK_ATOM_NAMES = new Set([
                             'liteYouTube', 'liteVimeo', 'horizontalRule',
                             'imageUploadPlaceholder',
                         ]);
+
+                        const INLINE_ATOM_NAMES = new Set(['image', 'emoji', 'linkPreview']);
 
                         const isBlockAtom = (node) => {
                             if (!node) return false;
@@ -4847,85 +4894,116 @@ var MessengerModule = (function(Utils, EventBus) {
                                 key: new PluginKey('deleteAdjacentAtom'),
                                 props: {
                                     handleKeyDown(view, event) {
-    const key = event.key;
-    if (key !== 'Backspace' && key !== 'Delete') return false;
+                                        const key = event.key;
+                                        if (key !== 'Backspace' && key !== 'Delete') return false;
 
-    const { state } = view;
-    const { selection } = state;
+                                        const { state } = view;
+                                        const { selection } = state;
 
-    // ---- Range selection --------------------------------------------
-    // If the user has highlighted a range (e.g. dragged a selection
-    // across an inline image) and the range contains an inline atom,
-    // handle the delete ourselves rather than letting the browser do
-    // it natively. The browser's native delete on a contenteditable
-    // containing contenteditable="false" atoms is inconsistent across
-    // engines — it can leave the atom in the DOM while removing its
-    // siblings, which ProseMirror's DOM observer then re-syncs from,
-    // and the image reappears as though the delete never happened.
-    // Dispatching from state sidesteps the reconciliation loop.
-    //
-    // The set is deliberately narrow: image, emoji, linkPreview are
-    // the inline atoms in this schema. Block atoms like liteYouTube
-    // are handled by the NodeSelection branch below; if a future
-    // inline atom is added, add it here too.
-    if (!selection.empty) {
-        const INLINE_ATOM_NAMES = new Set(['image', 'emoji', 'linkPreview']);
-        let spansInlineAtom = false;
-        state.doc.nodesBetween(selection.from, selection.to, (node) => {
-            if (INLINE_ATOM_NAMES.has(node.type.name)) {
-                spansInlineAtom = true;
-                return false;
-            }
-            return true;
-        });
-        if (spansInlineAtom) {
-            view.dispatch(state.tr.deleteSelection());
-            return true;
-        }
-        return false;
-    }
+                                        // ---- Range selection --------------------------------
+                                        // If the user has highlighted a range spanning an
+                                        // inline atom, delete it ourselves rather than
+                                        // letting the browser's native contenteditable
+                                        // delete run. The native path on
+                                        // contenteditable="false" atoms is inconsistent
+                                        // across engines — it can leave the atom in the
+                                        // DOM while removing siblings, and ProseMirror's
+                                        // observer then re-syncs from the partially-
+                                        // mutated DOM, restoring the image as though
+                                        // nothing happened.
+                                        if (!selection.empty) {
+                                            let spansInlineAtom = false;
+                                            state.doc.nodesBetween(selection.from, selection.to, (node) => {
+                                                if (INLINE_ATOM_NAMES.has(node.type.name)) {
+                                                    spansInlineAtom = true;
+                                                    return false;
+                                                }
+                                                return true;
+                                            });
+                                            if (spansInlineAtom) {
+                                                view.dispatch(state.tr.deleteSelection());
+                                                return true;
+                                            }
+                                            return false;
+                                        }
 
-    // ---- NodeSelection on a block atom ------------------------------
-    // Clicking an image or lite embed produces a NodeSelection. TipTap
-    // 2.x does not install prosemirror-commands' baseKeymap, so nothing
-    // is bound to consume it — the delete must be dispatched here.
-    if (selection instanceof NodeSelection) {
-        view.dispatch(state.tr.delete(selection.from, selection.to));
-        return true;
-    }
+                                        // ---- NodeSelection on a block atom -------------------
+                                        // Clicking a lite embed produces a NodeSelection.
+                                        // TipTap 2.x does not install prosemirror-commands'
+                                        // baseKeymap, so nothing else is bound to consume
+                                        // it.
+                                        if (selection instanceof NodeSelection) {
+                                            view.dispatch(state.tr.delete(selection.from, selection.to));
+                                            return true;
+                                        }
 
-    // ---- Empty selection at a textblock boundary --------------------
-    const $from = selection.$from;
+                                        // ---- Empty selection ---------------------------------
+                                        const $from = selection.$from;
 
-    if (key === 'Backspace') {
-        if ($from.parentOffset !== 0) return false;
-        if ($from.depth === 0) return false;
+                                        if (key === 'Backspace') {
+                                            // Inline atom immediately before the cursor.
+                                            // This is the position the caret lands in
+                                            // after an image insert, and ProseMirror's
+                                            // default handling doesn't cover it — the
+                                            // only built-in path is selectNodeBackward,
+                                            // which fires exclusively at position 0 of
+                                            // a textblock. From the just-inserted
+                                            // position parentOffset > 0, so nothing in
+                                            // the default keymap responds and the user
+                                            // sees a no-op.
+                                            if ($from.parentOffset > 0) {
+                                                const nodeBefore = $from.nodeBefore;
+                                                if (nodeBefore && INLINE_ATOM_NAMES.has(nodeBefore.type.name)) {
+                                                    view.dispatch(
+                                                        state.tr.delete($from.pos - nodeBefore.nodeSize, $from.pos)
+                                                    );
+                                                    return true;
+                                                }
+                                            }
 
-        const blockStart = $from.before($from.depth);
-        const nodeBefore = state.doc.resolve(blockStart).nodeBefore;
-        if (!isBlockAtom(nodeBefore)) return false;
+                                            // Block atom at the start of a textblock.
+                                            if ($from.parentOffset !== 0) return false;
+                                            if ($from.depth === 0) return false;
 
-        view.dispatch(
-            state.tr.delete(blockStart - nodeBefore.nodeSize, blockStart)
-        );
-        return true;
-    }
+                                            const blockStart = $from.before($from.depth);
+                                            const nodeBeforeBlock = state.doc.resolve(blockStart).nodeBefore;
+                                            if (!isBlockAtom(nodeBeforeBlock)) return false;
 
-    if (key === 'Delete') {
-        if ($from.parentOffset !== $from.parent.content.size) return false;
+                                            view.dispatch(
+                                                state.tr.delete(blockStart - nodeBeforeBlock.nodeSize, blockStart)
+                                            );
+                                            return true;
+                                        }
 
-        const blockEnd = $from.after($from.depth);
-        const nodeAfter = state.doc.resolve(blockEnd).nodeAfter;
-        if (!isBlockAtom(nodeAfter)) return false;
+                                        if (key === 'Delete') {
+                                            // Inline atom immediately after the cursor.
+                                            // Symmetric to the Backspace case above — same
+                                            // default-keymap gap.
+                                            if ($from.parentOffset < $from.parent.content.size) {
+                                                const nodeAfter = $from.nodeAfter;
+                                                if (nodeAfter && INLINE_ATOM_NAMES.has(nodeAfter.type.name)) {
+                                                    view.dispatch(
+                                                        state.tr.delete($from.pos, $from.pos + nodeAfter.nodeSize)
+                                                    );
+                                                    return true;
+                                                }
+                                            }
 
-        view.dispatch(
-            state.tr.delete(blockEnd, blockEnd + nodeAfter.nodeSize)
-        );
-        return true;
-    }
+                                            // Block atom at the end of a textblock.
+                                            if ($from.parentOffset !== $from.parent.content.size) return false;
 
-    return false;
-},
+                                            const blockEnd = $from.after($from.depth);
+                                            const nodeAfterBlock = state.doc.resolve(blockEnd).nodeAfter;
+                                            if (!isBlockAtom(nodeAfterBlock)) return false;
+
+                                            view.dispatch(
+                                                state.tr.delete(blockEnd, blockEnd + nodeAfterBlock.nodeSize)
+                                            );
+                                            return true;
+                                        }
+
+                                        return false;
+                                    },
                                 },
                             }),
                         ];
@@ -5162,39 +5240,38 @@ var MessengerModule = (function(Utils, EventBus) {
                         },
                     },
                     onCreate: function({ editor }) {
-    // The appendTransaction hook on TrailingEmbedParagraph does not
-    // fire on the initial setContent — ProseMirror builds the starting
-    // state directly via EditorState.create(), bypassing the
-    // transaction pipeline entirely. So when the editor is
-    // constructed with content that ends in a block atom (an image
-    // restored from a draft, or from a saved textarea value), there
-    // is no paragraph after it and the caret collapses to position 0
-    // — visually to the left of the image, with no valid slot to the
-    // right. Insert the paragraph here, once, before anything else
-    // touches the doc.
-    (function ensureTrailingParagraph() {
-        var doc = editor.state.doc;
-        var last = doc.lastChild;
-        if (!last) return;
-        var name = last.type.name;
-        if (name !== 'image' &&
-            name !== 'liteYouTube' &&
-            name !== 'liteVimeo' &&
-            name !== 'imageUploadPlaceholder') {
-            return;
-        }
-        var paragraph = editor.schema.nodes.paragraph.create();
-        var tr = editor.state.tr.insert(doc.content.size, paragraph);
-        var $pos = tr.doc.resolve(tr.doc.content.size - 1);
-        tr.setSelection(TextSelection.near($pos));
-        editor.view.dispatch(tr);
-    })();
+                        // The appendTransaction hook on TrailingEmbedParagraph does not
+                        // fire on the initial setContent — ProseMirror builds the starting
+                        // state directly via EditorState.create(), bypassing the
+                        // transaction pipeline entirely. So when the editor is
+                        // constructed with content that ends in a block atom (an image
+                        // restored from a draft, or from a saved textarea value), there
+                        // is no paragraph after it and the caret collapses to position 0
+                        // — visually to the left of the image, with no valid slot to the
+                        // right. Insert the paragraph here, once, before anything else
+                        // touches the doc.
+                        (function ensureTrailingParagraph() {
+                            var doc = editor.state.doc;
+                            var last = doc.lastChild;
+                            if (!last) return;
+                            var name = last.type.name;
+                            if (name !== 'liteYouTube' &&
+                                name !== 'liteVimeo' &&
+                                name !== 'imageUploadPlaceholder') {
+                                return;
+                            }
+                            var paragraph = editor.schema.nodes.paragraph.create();
+                            var tr = editor.state.tr.insert(doc.content.size, paragraph);
+                            var $pos = tr.doc.resolve(tr.doc.content.size - 1);
+                            tr.setSelection(TextSelection.near($pos));
+                            editor.view.dispatch(tr);
+                        })();
 
-    if (!window.matchMedia('(hover: hover) and (pointer: fine)').matches) return;
-    var active = document.activeElement;
-    if (active && active !== document.body && active !== document.documentElement) return;
-    editor.commands.focus('end');
-},
+                        if (!window.matchMedia('(hover: hover) and (pointer: fine)').matches) return;
+                        var active = document.activeElement;
+                        if (active && active !== document.body && active !== document.documentElement) return;
+                        editor.commands.focus('end');
+                    },
                     onUpdate: function({ editor }) {
                         var html = editor.getHTML();
 
