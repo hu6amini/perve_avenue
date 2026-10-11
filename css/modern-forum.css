@@ -1723,95 +1723,22 @@
 .editor-embed-copy-btn i,
 .editor-embed-delete-btn i { pointer-events: none; }
 /* ------------------------------------------------------------
-   Upload placeholder — in-flight image upload card.
+   Upload placeholder — idle dropzone and in-flight progress card.
    Rendered by the imageUploadPlaceholder node view, replaced by a
    real CustomImage node on success. Never serialized to the forum:
    htmlToLegacy strips the marker span the node renders, and Send is
-   disabled while any placeholder is in the uploading state.
+   disabled while any placeholder exists.
    ------------------------------------------------------------ */
+
+/* Outer wrapper — no visual weight, just spacing + selection guard.
+   The two inner views carry the actual styling. */
 .ff-upload-placeholder {
-    position: relative;
-    display: flex;
-    align-items: center;
-    gap: var(--space-md);
-    padding: var(--space-md) var(--pad-5);
-    padding-bottom: calc(var(--space-md) + 3px);
+    display: block;
     margin: var(--space-md) 0;
-    background: var(--bg-color);
-    border: 1px solid var(--border-color);
-    border-left: 3px solid var(--primary-color);
-    border-radius: var(--radius);
-    overflow: hidden;
     user-select: none;
 }
 
-.ff-upload-placeholder .ff-upload-progress-track {
-    position: absolute;
-    left: 0;
-    right: 0;
-    bottom: 0;
-    height: 3px;
-    background: var(--border-color);
-}
-
-.ff-upload-placeholder .ff-upload-progress-fill {
-    height: 100%;
-    background: var(--primary-color);
-    transition: width 0.15s ease-out;
-    width: 0;
-}
-
-.ff-upload-placeholder .ff-upload-icon {
-    flex-shrink: 0;
-    width: 32px;
-    height: 32px;
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    background: var(--surface-light);
-    border-radius: var(--radius-sm);
-    color: var(--primary-color);
-    font-size: 0.9rem;
-}
-
-.ff-upload-placeholder .ff-upload-info {
-    flex: 1;
-    min-width: 0;
-    display: flex;
-    flex-direction: column;
-    gap: 2px;
-}
-
-.ff-upload-placeholder .ff-upload-filename {
-    font-size: var(--text-sm);
-    font-weight: 500;
-    color: var(--text-primary);
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-}
-
-.ff-upload-placeholder .ff-upload-meta {
-    font-size: var(--text-xs);
-    color: var(--text-tertiary);
-}
-
-.ff-upload-placeholder .ff-upload-actions {
-    display: flex;
-    align-items: center;
-    gap: var(--space-xs);
-    flex-shrink: 0;
-}
-
-.ff-upload-placeholder .ff-upload-percent {
-    font-size: var(--text-xs);
-    font-weight: 600;
-    color: var(--primary-color);
-    min-width: 32px;
-    text-align: right;
-    font-variant-numeric: tabular-nums;
-}
-
+/* Shared button styling for both views. */
 .ff-upload-placeholder .ff-upload-btn {
     width: 26px;
     height: 26px;
@@ -1836,19 +1763,186 @@
     color: var(--danger-color);
 }
 
-/* Failed state — the card stays put, the border shifts to danger,
-   and the retry button becomes visible. */
-.ff-upload-placeholder.is-failed {
+/* ------------------------------------------------------------
+   Idle state — the dashed dropzone
+   ------------------------------------------------------------ */
+.ff-upload-dropzone {
+    position: relative;
+    display: flex;
+    align-items: center;
+    gap: var(--space-md);
+    padding: var(--space-lg) var(--pad-5);
+    border: 2px dashed var(--border-color);
+    border-radius: var(--radius);
+    background: var(--bg-color);
+    cursor: pointer;
+    transition: border-color 0.2s, background 0.2s;
+}
+
+.ff-upload-dropzone:hover,
+.ff-upload-dropzone.is-dragover {
+    border-color: var(--primary-color);
+    background: var(--hover-color);
+}
+
+.ff-upload-dropzone-icon {
+    flex-shrink: 0;
+    width: 44px;
+    height: 44px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--primary-color);
+    font-size: 1.4rem;
+}
+
+.ff-upload-dropzone-text {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    text-align: left;
+}
+
+.ff-upload-dropzone-primary {
+    font-size: var(--text-sm);
+    color: var(--text-primary);
+}
+
+.ff-upload-dropzone-primary em {
+    font-style: normal;
+    font-weight: 600;
+    color: var(--primary-color);
+}
+
+.ff-upload-dropzone-secondary {
+    font-size: var(--text-xs);
+    color: var(--text-tertiary);
+}
+
+.ff-upload-by-url {
+    background: none;
+    border: none;
+    padding: 0;
+    cursor: pointer;
+    font: inherit;
+    color: var(--primary-color);
+    text-decoration: underline;
+}
+
+.ff-upload-by-url:hover {
+    color: var(--primary-light);
+}
+
+/* The dismiss button sits at the top-right corner of the dropzone
+   so it reads as a "close this" affordance, not as part of the
+   primary click-to-upload surface. */
+.ff-upload-dropzone .ff-upload-dismiss-btn {
+    position: absolute;
+    top: 6px;
+    right: 6px;
+    width: 24px;
+    height: 24px;
+    font-size: 0.75rem;
+}
+
+/* ------------------------------------------------------------
+   Uploading / failed state — the progress card
+   ------------------------------------------------------------ */
+.ff-upload-progress {
+    position: relative;
+    display: flex;
+    align-items: center;
+    gap: var(--space-md);
+    padding: var(--space-md) var(--pad-5);
+    padding-bottom: calc(var(--space-md) + 3px);
+    background: var(--bg-color);
+    border: 1px solid var(--border-color);
+    border-left: 3px solid var(--primary-color);
+    border-radius: var(--radius);
+    overflow: hidden;
+}
+
+.ff-upload-progress .ff-upload-progress-track {
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    height: 3px;
+    background: var(--border-color);
+}
+
+.ff-upload-progress .ff-upload-progress-fill {
+    height: 100%;
+    background: var(--primary-color);
+    transition: width 0.15s ease-out;
+    width: 0;
+}
+
+.ff-upload-progress .ff-upload-icon {
+    flex-shrink: 0;
+    width: 32px;
+    height: 32px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    background: var(--surface-light);
+    border-radius: var(--radius-sm);
+    color: var(--primary-color);
+    font-size: 0.9rem;
+}
+
+.ff-upload-progress .ff-upload-info {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.ff-upload-progress .ff-upload-filename {
+    font-size: var(--text-sm);
+    font-weight: 500;
+    color: var(--text-primary);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.ff-upload-progress .ff-upload-meta {
+    font-size: var(--text-xs);
+    color: var(--text-tertiary);
+}
+
+.ff-upload-progress .ff-upload-actions {
+    display: flex;
+    align-items: center;
+    gap: var(--space-xs);
+    flex-shrink: 0;
+}
+
+.ff-upload-progress .ff-upload-percent {
+    font-size: var(--text-xs);
+    font-weight: 600;
+    color: var(--primary-color);
+    min-width: 32px;
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+}
+
+/* Failed state — the card shifts to danger and shows retry. */
+.ff-upload-placeholder.is-failed .ff-upload-progress {
     border-left-color: var(--danger-color);
 }
-.ff-upload-placeholder.is-failed .ff-upload-icon {
+.ff-upload-placeholder.is-failed .ff-upload-progress .ff-upload-icon {
     color: var(--danger-color);
 }
-.ff-upload-placeholder.is-failed .ff-upload-meta,
-.ff-upload-placeholder.is-failed .ff-upload-percent {
+.ff-upload-placeholder.is-failed .ff-upload-progress .ff-upload-meta,
+.ff-upload-placeholder.is-failed .ff-upload-progress .ff-upload-percent {
     color: var(--danger-color);
 }
-.ff-upload-placeholder.is-failed .ff-upload-progress-fill {
+.ff-upload-placeholder.is-failed .ff-upload-progress .ff-upload-progress-fill {
     background: var(--danger-color);
 }
 
