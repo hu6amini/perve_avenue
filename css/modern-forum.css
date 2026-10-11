@@ -3409,7 +3409,8 @@ section.modern-stats { flex-direction: column; width: 100%; }
 }
 .modern-board-list .modern-last-post { flex-direction: column; }
 .modern-last-post--empty { font-style: italic; }
-.last-post-topic { text-align: left; }
+.last-post-topic,
+.modern-modal-box h3 { text-align: left; }
 .last-post-topic a { font-weight: 600; color: var(--text-primary); }
 .last-post-topic a:hover { color: var(--primary-light); }
 
