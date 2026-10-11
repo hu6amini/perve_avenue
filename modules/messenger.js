@@ -3241,6 +3241,15 @@ var MessengerModule = (function(Utils, EventBus) {
                 if (hoveredImg && toolbarEl.style.display === 'flex') positionToolbar(hoveredImg);
             });
 
+            editorInstance.on('transaction', function() {
+    if (!hoveredImg) return;
+    if (!document.body.contains(hoveredImg)) {
+        if (hideTimer) { clearTimeout(hideTimer); hideTimer = null; }
+        toolbarEl.style.display = 'none';
+        hoveredImg = null;
+    }
+});
+
             editorInstance.on('blur', function() {
                 toolbarEl.style.display = 'none';
                 hoveredImg = null;
