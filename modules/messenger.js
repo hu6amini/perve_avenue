@@ -5086,11 +5086,39 @@ var MessengerModule = (function(Utils, EventBus) {
                         },
                     },
                     onCreate: function({ editor }) {
-                        if (!window.matchMedia('(hover: hover) and (pointer: fine)').matches) return;
-                        var active = document.activeElement;
-                        if (active && active !== document.body && active !== document.documentElement) return;
-                        editor.commands.focus('end');
-                    },
+    // The appendTransaction hook on TrailingEmbedParagraph does not
+    // fire on the initial setContent — ProseMirror builds the starting
+    // state directly via EditorState.create(), bypassing the
+    // transaction pipeline entirely. So when the editor is
+    // constructed with content that ends in a block atom (an image
+    // restored from a draft, or from a saved textarea value), there
+    // is no paragraph after it and the caret collapses to position 0
+    // — visually to the left of the image, with no valid slot to the
+    // right. Insert the paragraph here, once, before anything else
+    // touches the doc.
+    (function ensureTrailingParagraph() {
+        var doc = editor.state.doc;
+        var last = doc.lastChild;
+        if (!last) return;
+        var name = last.type.name;
+        if (name !== 'image' &&
+            name !== 'liteYouTube' &&
+            name !== 'liteVimeo' &&
+            name !== 'imageUploadPlaceholder') {
+            return;
+        }
+        var paragraph = editor.schema.nodes.paragraph.create();
+        var tr = editor.state.tr.insert(doc.content.size, paragraph);
+        var $pos = tr.doc.resolve(tr.doc.content.size - 1);
+        tr.setSelection(TextSelection.near($pos));
+        editor.view.dispatch(tr);
+    })();
+
+    if (!window.matchMedia('(hover: hover) and (pointer: fine)').matches) return;
+    var active = document.activeElement;
+    if (active && active !== document.body && active !== document.documentElement) return;
+    editor.commands.focus('end');
+},
                     onUpdate: function({ editor }) {
                         var html = editor.getHTML();
 
