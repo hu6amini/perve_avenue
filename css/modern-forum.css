@@ -4122,16 +4122,20 @@ section.modern-stats { flex-direction: column; width: 100%; }
     margin-bottom: 0;
 }
 
-.ProseMirror img:not(.link-preview-image, .link-preview-favicon, .simple-favicon, img[src*="twemoji"]) {
-  height: auto;
-  display: inline-block;
-  user-select: all;
-  padding: 3px;
-  caret-color: var(--text-primary);
-  max-width: calc(100% - var(--pad-4));
-  border-left: var(--space-micro) solid transparent;
-  border-right: var(--space-micro) solid transparent;
-  border-radius: var(--radius);
+.ProseMirror img:not(:where(
+    .link-preview-image,
+    .link-preview-favicon,
+    .simple-favicon,
+    img[src*="twemoji"]
+)) {
+    height: auto;
+    display: inline-block;
+    user-select: all;
+    padding: 3px;
+    caret-color: var(--text-primary);
+    border-radius: var(--radius);
+    box-sizing: border-box;
+    max-width: calc(100% - 20px);
 }
 
 /* Editor image sizes */
