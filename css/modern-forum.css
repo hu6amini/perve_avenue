@@ -3926,6 +3926,17 @@ section.modern-stats { flex-direction: column; width: 100%; }
   border-radius: var(--radius);
   transition: all 0.2s ease;
   padding: 0;
+  scrollbar-width: thin;
+  scrollbar-color: var(--surface-light) transparent;
+}
+.modern-wysiwyg::-webkit-scrollbar { width: 6px; }
+.modern-wysiwyg::-webkit-scrollbar-track { background: transparent; }
+.modern-wysiwyg::-webkit-scrollbar-thumb {
+  background: var(--surface-light);
+  border-radius: 3px;
+}
+.modern-wysiwyg::-webkit-scrollbar-thumb:hover {
+  background: var(--border-color);
 }
 .modern-wysiwyg:focus-within {
   border-color: var(--primary-color);
