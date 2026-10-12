@@ -746,6 +746,18 @@
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+/* Editor-only override. The reader side does not need the inset —
+   there is no caret to accommodate — so the base .link-preview-card
+   keeps its full width. Inside the TipTap editor, the 20px reserve
+   gives the typing cursor room to sit to the right of the card
+   without wrapping. The border-left / border-right from the base
+   rule are dropped here so the width arithmetic stays clean. */
+.modern-wysiwyg .ProseMirror .link-preview-card {
+    max-width: calc(100% - 20px);
+    box-sizing: border-box;
+    border-left: 0;
+    border-right: 0;
+}
 
 .link-preview-card--loading { padding: var(--pad-5); }
 .link-preview-skeleton { display: flex; flex-direction: column; gap: var(--space-sm); width: 100%; }
