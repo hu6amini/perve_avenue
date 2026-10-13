@@ -3070,214 +3070,239 @@ var MessengerModule = (function(Utils, EventBus) {
         }
 
         function setupImageNsfwOverlay(editorRoot, editorInstance) {
-            if (!editorRoot || !editorInstance) return;
+    if (!editorRoot || !editorInstance) return;
 
-            var toolbarEl = document.createElement('div');
-            toolbarEl.className = 'editor-image-toolbar';
+    var toolbarEl = document.createElement('div');
+    toolbarEl.className = 'editor-image-toolbar';
+    toolbarEl.style.display = 'none';
+
+    var nsfwBtn = document.createElement('button');
+    nsfwBtn.type = 'button';
+    nsfwBtn.className = 'editor-image-nsfw-btn';
+    nsfwBtn.innerHTML = '<i class="fa-regular fa-eye-slash" aria-hidden="true"></i>';
+    nsfwBtn.title = 'Mark as NSFW (hide on reader side)';
+    nsfwBtn.setAttribute('aria-label', 'Toggle NSFW for this image');
+
+    var editBtn = document.createElement('button');
+    editBtn.type = 'button';
+    editBtn.className = 'editor-image-edit-btn';
+    editBtn.innerHTML = '<i class="fa-regular fa-pen" aria-hidden="true"></i>';
+    editBtn.title = 'Edit image (alt text, size)';
+    editBtn.setAttribute('aria-label', 'Edit image');
+
+    var deleteBtn = document.createElement('button');
+    deleteBtn.type = 'button';
+    deleteBtn.className = 'editor-image-delete-btn';
+    deleteBtn.innerHTML = '<i class="fa-regular fa-trash-can" aria-hidden="true"></i>';
+    deleteBtn.title = 'Delete image';
+    deleteBtn.setAttribute('aria-label', 'Delete image');
+
+    toolbarEl.appendChild(nsfwBtn);
+    toolbarEl.appendChild(editBtn);
+    toolbarEl.appendChild(deleteBtn);
+    document.body.appendChild(toolbarEl);
+
+    // Keep editor focus when a toolbar button is pressed. The default
+    // action of mousedown on a <button> is to move focus to it, which
+    // fires blur on the editor — and the editor's blur handler clears
+    // hoveredImg, so the click handler that follows sees null and
+    // bails. That is why the buttons work with a mouse but not on a
+    // touch device: on desktop the editor is often not focused at
+    // all when hovering the image, so there is no blur to lose;
+    // tapping inside a contenteditable on mobile always focuses it,
+    // so the subsequent button tap always triggers the blur. Calling
+    // preventDefault on mousedown cancels the focus move without
+    // affecting the click itself; the buttons still fire, and the
+    // editor keeps focus so typing can continue immediately after.
+    [nsfwBtn, editBtn, deleteBtn].forEach(function (btn) {
+        btn.addEventListener('mousedown', function (e) {
+            e.preventDefault();
+        });
+    });
+
+    var hoveredImg = null;
+    var hideTimer = null;
+
+    function updateButtonState(img) {
+        if (!img) return;
+        var isNsfw = img.getAttribute('data-nsfw') === 'true';
+        nsfwBtn.classList.toggle('is-active', isNsfw);
+        var label = isNsfw
+            ? 'Unmark NSFW (make visible on reader side)'
+            : 'Mark as NSFW (hide on reader side)';
+        nsfwBtn.title = label;
+        nsfwBtn.setAttribute('aria-label', label);
+    }
+
+    function positionToolbar(img) {
+        var rect = img.getBoundingClientRect();
+        var INSET = 8;
+        toolbarEl.style.top = (rect.top + window.pageYOffset + 6) + 'px';
+        toolbarEl.style.left = (rect.right + window.pageXOffset - INSET) + 'px';
+        toolbarEl.style.transform = 'translateX(-100%)';
+    }
+
+    function showToolbar(img) {
+        if (hideTimer) { clearTimeout(hideTimer); hideTimer = null; }
+        hoveredImg = img;
+        updateButtonState(img);
+        positionToolbar(img);
+        toolbarEl.style.display = 'flex';
+    }
+
+    function hideToolbarDelayed() {
+        if (hideTimer) clearTimeout(hideTimer);
+        hideTimer = setTimeout(function() {
             toolbarEl.style.display = 'none';
+            hoveredImg = null;
+        }, 120);
+    }
 
-            var nsfwBtn = document.createElement('button');
-            nsfwBtn.type = 'button';
-            nsfwBtn.className = 'editor-image-nsfw-btn';
-            nsfwBtn.innerHTML = '<i class="fa-regular fa-eye-slash" aria-hidden="true"></i>';
-            nsfwBtn.title = 'Mark as NSFW (hide on reader side)';
-            nsfwBtn.setAttribute('aria-label', 'Toggle NSFW for this image');
+    function isNsfwEligible(img) {
+        if (!img) return false;
+        if (img.classList.contains('twemoji')) return false;
+        var alt = img.getAttribute('alt') || '';
+        if (alt.startsWith(':') && alt.endsWith(':')) return false;
+        if (img.closest('.link-preview-card, .simple-link, .modern-embedded-link')) return false;
+        if (img.closest('.ff-upload-placeholder')) return false;
+        return true;
+    }
 
-            var editBtn = document.createElement('button');
-            editBtn.type = 'button';
-            editBtn.className = 'editor-image-edit-btn';
-            editBtn.innerHTML = '<i class="fa-regular fa-pen" aria-hidden="true"></i>';
-            editBtn.title = 'Edit image (alt text, size)';
-            editBtn.setAttribute('aria-label', 'Edit image');
+    editorRoot.addEventListener('mouseover', function(e) {
+        var img = e.target.closest('img');
+        if (!isNsfwEligible(img)) return;
+        showToolbar(img);
+    });
 
-            var deleteBtn = document.createElement('button');
-            deleteBtn.type = 'button';
-            deleteBtn.className = 'editor-image-delete-btn';
-            deleteBtn.innerHTML = '<i class="fa-regular fa-trash-can" aria-hidden="true"></i>';
-            deleteBtn.title = 'Delete image';
-            deleteBtn.setAttribute('aria-label', 'Delete image');
-
-            toolbarEl.appendChild(nsfwBtn);
-            toolbarEl.appendChild(editBtn);
-            toolbarEl.appendChild(deleteBtn);
-            document.body.appendChild(toolbarEl);
-
-            var hoveredImg = null;
-            var hideTimer = null;
-
-            function updateButtonState(img) {
-                if (!img) return;
-                var isNsfw = img.getAttribute('data-nsfw') === 'true';
-                nsfwBtn.classList.toggle('is-active', isNsfw);
-                var label = isNsfw
-                    ? 'Unmark NSFW (make visible on reader side)'
-                    : 'Mark as NSFW (hide on reader side)';
-                nsfwBtn.title = label;
-                nsfwBtn.setAttribute('aria-label', label);
-            }
-
-            function positionToolbar(img) {
-                var rect = img.getBoundingClientRect();
-                var INSET = 8;
-                toolbarEl.style.top = (rect.top + window.pageYOffset + 6) + 'px';
-                toolbarEl.style.left = (rect.right + window.pageXOffset - INSET) + 'px';
-                toolbarEl.style.transform = 'translateX(-100%)';
-            }
-
-            function showToolbar(img) {
-                if (hideTimer) { clearTimeout(hideTimer); hideTimer = null; }
-                hoveredImg = img;
-                updateButtonState(img);
-                positionToolbar(img);
-                toolbarEl.style.display = 'flex';
-            }
-
-            function hideToolbarDelayed() {
-                if (hideTimer) clearTimeout(hideTimer);
-                hideTimer = setTimeout(function() {
-                    toolbarEl.style.display = 'none';
-                    hoveredImg = null;
-                }, 120);
-            }
-
-            function isNsfwEligible(img) {
-                if (!img) return false;
-                if (img.classList.contains('twemoji')) return false;
-                var alt = img.getAttribute('alt') || '';
-                if (alt.startsWith(':') && alt.endsWith(':')) return false;
-                if (img.closest('.link-preview-card, .simple-link, .modern-embedded-link')) return false;
-                if (img.closest('.ff-upload-placeholder')) return false;
-                return true;
-            }
-
-            editorRoot.addEventListener('mouseover', function(e) {
-                var img = e.target.closest('img');
-                if (!isNsfwEligible(img)) return;
-                showToolbar(img);
-            });
-
-            editorRoot.addEventListener('click', function(e) {
-                var img = e.target.closest('img');
-                if (!isNsfwEligible(img)) return;
-                showToolbar(img);
-                if (hideTimer) clearTimeout(hideTimer);
-                hideTimer = setTimeout(function() {
-                    if (!toolbarEl.matches(':hover')) {
-                        toolbarEl.style.display = 'none';
-                        hoveredImg = null;
-                    }
-                }, 4000);
-            });
-
-            editorRoot.addEventListener('mouseout', function(e) {
-                var img = e.target.closest('img');
-                if (!img || img !== hoveredImg) return;
-                if (toolbarEl.contains(e.relatedTarget)) return;
-                var nextImg = e.relatedTarget && e.relatedTarget.closest && e.relatedTarget.closest('img');
-                if (nextImg === img) return;
-                hideToolbarDelayed();
-            });
-
-            toolbarEl.addEventListener('mouseenter', function() {
-                if (hideTimer) { clearTimeout(hideTimer); hideTimer = null; }
-            });
-            toolbarEl.addEventListener('mouseleave', function() {
-                if (!hoveredImg) return;
-                hideToolbarDelayed();
-            });
-
-            function resolveImageNode(img) {
-                if (!img) return null;
-                var view = editorInstance.view;
-                var pos;
-                try { pos = view.posAtDOM(img, 0); } catch (e) { return null; }
-                var $pos = view.state.doc.resolve(pos);
-                if ($pos.nodeAfter && $pos.nodeAfter.type.name === 'image') {
-                    return { node: $pos.nodeAfter, pos: pos };
-                }
-                if ($pos.nodeBefore && $pos.nodeBefore.type.name === 'image') {
-                    return { node: $pos.nodeBefore, pos: pos - $pos.nodeBefore.nodeSize };
-                }
-                return null;
-            }
-
-            nsfwBtn.addEventListener('click', function(e) {
-                e.preventDefault();
-                e.stopPropagation();
-                if (!hoveredImg) return;
-                var resolved = resolveImageNode(hoveredImg);
-                if (!resolved) return;
-                var newAttrs = Object.assign({}, resolved.node.attrs, {
-                    nsfw: !resolved.node.attrs.nsfw
-                });
-                editorInstance.view.dispatch(
-                    editorInstance.view.state.tr.setNodeMarkup(resolved.pos, undefined, newAttrs)
-                );
+    editorRoot.addEventListener('click', function(e) {
+        var img = e.target.closest('img');
+        if (!isNsfwEligible(img)) return;
+        showToolbar(img);
+        if (hideTimer) clearTimeout(hideTimer);
+        hideTimer = setTimeout(function() {
+            if (!toolbarEl.matches(':hover')) {
                 toolbarEl.style.display = 'none';
                 hoveredImg = null;
-            });
+            }
+        }, 4000);
+    });
 
-            editBtn.addEventListener('click', function(e) {
-                e.preventDefault();
-                e.stopPropagation();
-                if (!hoveredImg) return;
-                var resolved = resolveImageNode(hoveredImg);
-                if (!resolved) return;
+    editorRoot.addEventListener('mouseout', function(e) {
+        var img = e.target.closest('img');
+        if (!img || img !== hoveredImg) return;
+        if (toolbarEl.contains(e.relatedTarget)) return;
+        var nextImg = e.relatedTarget && e.relatedTarget.closest && e.relatedTarget.closest('img');
+        if (nextImg === img) return;
+        hideToolbarDelayed();
+    });
 
-                var currentAlt = resolved.node.attrs.alt || '';
-                var currentSize = resolved.node.attrs.size || null;
+    toolbarEl.addEventListener('mouseenter', function() {
+        if (hideTimer) { clearTimeout(hideTimer); hideTimer = null; }
+    });
+    toolbarEl.addEventListener('mouseleave', function() {
+        if (!hoveredImg) return;
+        hideToolbarDelayed();
+    });
 
-                showImageEditModal(currentAlt, currentSize, function(newAlt, newSize) {
-                    var newAttrs = Object.assign({}, resolved.node.attrs, {
-                        alt: newAlt || 'image',
-                        size: newSize
-                    });
-                    editorInstance.view.dispatch(
-                        editorInstance.view.state.tr.setNodeMarkup(resolved.pos, undefined, newAttrs)
-                    );
-                });
-
-                toolbarEl.style.display = 'none';
-                hoveredImg = null;
-            });
-
-            deleteBtn.addEventListener('click', function(e) {
-                e.preventDefault();
-                e.stopPropagation();
-                if (!hoveredImg) return;
-                var resolved = resolveImageNode(hoveredImg);
-                if (!resolved) return;
-                editorInstance.view.dispatch(
-                    editorInstance.view.state.tr.delete(
-                        resolved.pos,
-                        resolved.pos + resolved.node.nodeSize
-                    )
-                );
-                toolbarEl.style.display = 'none';
-                hoveredImg = null;
-            });
-
-            window.addEventListener('scroll', function() {
-                if (hoveredImg && toolbarEl.style.display === 'flex') positionToolbar(hoveredImg);
-            }, true);
-            window.addEventListener('resize', function() {
-                if (hoveredImg && toolbarEl.style.display === 'flex') positionToolbar(hoveredImg);
-            });
-
-            editorInstance.on('transaction', function() {
-                if (!hoveredImg) return;
-                if (!document.body.contains(hoveredImg)) {
-                    if (hideTimer) { clearTimeout(hideTimer); hideTimer = null; }
-                    toolbarEl.style.display = 'none';
-                    hoveredImg = null;
-                }
-            });
-
-            editorInstance.on('blur', function() {
-                toolbarEl.style.display = 'none';
-                hoveredImg = null;
-            });
+    function resolveImageNode(img) {
+        if (!img) return null;
+        var view = editorInstance.view;
+        var pos;
+        try { pos = view.posAtDOM(img, 0); } catch (e) { return null; }
+        var $pos = view.state.doc.resolve(pos);
+        if ($pos.nodeAfter && $pos.nodeAfter.type.name === 'image') {
+            return { node: $pos.nodeAfter, pos: pos };
         }
+        if ($pos.nodeBefore && $pos.nodeBefore.type.name === 'image') {
+            return { node: $pos.nodeBefore, pos: pos - $pos.nodeBefore.nodeSize };
+        }
+        return null;
+    }
+
+    nsfwBtn.addEventListener('click', function(e) {
+        e.preventDefault();
+        e.stopPropagation();
+        if (!hoveredImg) return;
+        var resolved = resolveImageNode(hoveredImg);
+        if (!resolved) return;
+        var newAttrs = Object.assign({}, resolved.node.attrs, {
+            nsfw: !resolved.node.attrs.nsfw
+        });
+        editorInstance.view.dispatch(
+            editorInstance.view.state.tr.setNodeMarkup(resolved.pos, undefined, newAttrs)
+        );
+        toolbarEl.style.display = 'none';
+        hoveredImg = null;
+    });
+
+    editBtn.addEventListener('click', function(e) {
+        e.preventDefault();
+        e.stopPropagation();
+        if (!hoveredImg) return;
+        var resolved = resolveImageNode(hoveredImg);
+        if (!resolved) return;
+
+        var currentAlt = resolved.node.attrs.alt || '';
+        var currentSize = resolved.node.attrs.size || null;
+
+        showImageEditModal(currentAlt, currentSize, function(newAlt, newSize) {
+            var newAttrs = Object.assign({}, resolved.node.attrs, {
+                alt: newAlt || 'image',
+                size: newSize
+            });
+            editorInstance.view.dispatch(
+                editorInstance.view.state.tr.setNodeMarkup(resolved.pos, undefined, newAttrs)
+            );
+        });
+
+        toolbarEl.style.display = 'none';
+        hoveredImg = null;
+    });
+
+    deleteBtn.addEventListener('click', function(e) {
+        e.preventDefault();
+        e.stopPropagation();
+        if (!hoveredImg) return;
+        var resolved = resolveImageNode(hoveredImg);
+        if (!resolved) return;
+        editorInstance.view.dispatch(
+            editorInstance.view.state.tr.delete(
+                resolved.pos,
+                resolved.pos + resolved.node.nodeSize
+            )
+        );
+        toolbarEl.style.display = 'none';
+        hoveredImg = null;
+    });
+
+    window.addEventListener('scroll', function() {
+        if (hoveredImg && toolbarEl.style.display === 'flex') positionToolbar(hoveredImg);
+    }, true);
+    window.addEventListener('resize', function() {
+        if (hoveredImg && toolbarEl.style.display === 'flex') positionToolbar(hoveredImg);
+    });
+
+    // Hide immediately when the hovered image leaves the document.
+    // Deleting an image — via the toolbar button, keyboard, or a
+    // programmatic delete — detaches the DOM node without firing a
+    // reliable mouseout, because the pointer never crossed a boundary.
+    // Nothing would otherwise hide the toolbar until the next mousemove
+    // or the editor blur. A transaction listener catches every removal
+    // path in one place.
+    editorInstance.on('transaction', function() {
+        if (!hoveredImg) return;
+        if (!document.body.contains(hoveredImg)) {
+            if (hideTimer) { clearTimeout(hideTimer); hideTimer = null; }
+            toolbarEl.style.display = 'none';
+            hoveredImg = null;
+        }
+    });
+
+    editorInstance.on('blur', function() {
+        toolbarEl.style.display = 'none';
+        hoveredImg = null;
+    });
+}
 
         function setupEmoticonAutocomplete(editorInstance, editorRoot) {
             if (!editorInstance || !editorRoot) return;
