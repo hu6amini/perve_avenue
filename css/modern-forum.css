@@ -3986,7 +3986,12 @@ section.modern-stats { flex-direction: column; width: 100%; }
 .ProseMirror s,
 .ProseMirror del { text-decoration: line-through; }
 .ProseMirror ul,
-.ProseMirror ol { margin: var(--space-sm) 0; padding-left: var(--space-lg); }
+.ProseMirror ol, 
+.post-message ul,
+.post-message ol, 
+.post-card ul,
+.post-card ol { 
+  margin: var(--space-sm) 0; padding-left: var(--space-lg); }
 .ProseMirror blockquote {
   border-left: 3px solid var(--primary-color);
   margin: var(--space-sm) 0;
