@@ -4517,7 +4517,16 @@ lite-vimeo.lite-activated > .lite-embed-playbtn {
 }
 .modern-preview .preview-content img { max-width: 100%; height: auto; border-radius: var(--radius-sm); }
 
-/* ------------------------------------------------------------------
+/* --------/* Link preview thumbnails need to fill their container even in the
+   preview, where the general image rule forces height: auto on
+   everything inside .preview-content. Higher specificity than
+   .modern-preview .preview-content img, so the crop-to-fill
+   behaviour from section 4 is preserved. */
+.modern-preview .preview-content .link-preview-image {
+    height: 100%;
+    object-fit: cover;
+}
+---------------------------------------------------------
    Messages section
    ------------------------------------------------------------------ */
 .messages-folder-row {
