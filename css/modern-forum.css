@@ -777,9 +777,19 @@
 
 @media (max-width: 640px) {
   .link-preview-card { display: block; width: 100%; }
-  .link-preview-content { flex-direction: column; align-items: flex-start; }
-  .embedded-link-image { width: 100%; height: auto; max-height: 160px; }
-  .link-preview-image { width: 100%; height: auto; max-height: 160px; object-fit: cover; }
+    .link-preview-card .link-preview-content { flex-direction: column; align-items: flex-start; }
+    .link-preview-card .embedded-link-image {
+        flex: none;
+        width: 100%;
+        height: auto;
+        max-height: 160px;
+    }
+    .link-preview-card .link-preview-image {
+        width: 100%;
+        height: auto;
+        max-height: 160px;
+        object-fit: cover;
+    }
 }
 
 /* ------------------------------------------------------------
