@@ -1288,7 +1288,7 @@ function convertLegacySpoiler(codeTopElem, codeBodyElem, title) {
         const spoilerId = 'spoiler-' + Date.now() + '-' + Math.floor(Math.random() * 10000);
         const spoilerHtml = `<div class="modern-spoiler">
             <div class="spoiler-header" role="button" tabindex="0" aria-expanded="false">
-                <div class="spoiler-icon"><i class="fa-regular fa-eye-slash"></i></div>
+                <div class="spoiler-icon"><i class="fa-regular fa-square-caret-down"></i></div>
                 <div class="spoiler-info"><span class="spoiler-title">${escapeHtml(spoilerTitle)}</span></div>
                 <button class="spoiler-toggle" type="button" aria-expanded="false" aria-controls="${spoilerId}">
                     <i class="fa-regular fa-angle-down"></i>
