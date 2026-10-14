@@ -255,6 +255,7 @@
 .fa-undo::before {content: "\f0e2"; }
 .fa-redo::before {content: "\f01e"; }
 .fa-circle-check::before {content: "\f058"; }
+.fa-square-caret-down::before {content: "\f150"; }
 
 :root, :host {
   --fa-font-regular: normal 400 1em/1 "Font Awesome 6 Pro";
