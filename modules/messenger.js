@@ -1416,7 +1416,7 @@ var MessengerModule = (function(Utils, EventBus) {
             var modernHtml =
                 '<div class="modern-spoiler">' +
                     '<div class="spoiler-header" role="button" tabindex="0" aria-expanded="false">' +
-                        '<div class="spoiler-icon"><i class="fa-regular fa-eye-slash" aria-hidden="true"></i></div>' +
+                        '<div class="spoiler-icon"><i class="fa-regular fa-square-caret-down" aria-hidden="true"></i></div>' +
                         '<div class="spoiler-info"><span class="spoiler-title">' + escapeHtml(title) + '</span></div>' +
                         '<button class="spoiler-toggle" type="button" aria-expanded="false" aria-controls="' + spoilerId + '">' +
                             '<i class="fa-regular fa-angle-down" aria-hidden="true"></i>' +
@@ -2750,8 +2750,8 @@ var MessengerModule = (function(Utils, EventBus) {
         var imageBtn = makeToolbarButton('fa-regular fa-image', 'Insert image');
 
         addSeparator();
-        var spoilerBtn = makeToolbarButton('fa-regular fa-eye-slash', 'Spoiler', { shortcut: 'Control+Shift+S' });
-        var nsfwBtn = makeToolbarButton('fa-regular fa-eye-low-vision', 'NSFW (hidden content)', { shortcut: 'Control+Shift+N' });
+        var spoilerBtn = makeToolbarButton('fa-regular fa-square-caret-down', 'Spoiler', { shortcut: 'Control+Shift+S' });
+        var nsfwBtn = makeToolbarButton('fa-regular fa-eye-slash', 'NSFW (hidden content)', { shortcut: 'Control+Shift+N' });
 
         document.addEventListener('click', function() {
             document.querySelectorAll('.modern-dropdown-menu').forEach(function(m) { m.style.display = 'none'; });
