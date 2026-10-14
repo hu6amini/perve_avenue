@@ -2751,7 +2751,7 @@ var MessengerModule = (function(Utils, EventBus) {
 
         addSeparator();
         var spoilerBtn = makeToolbarButton('fa-regular fa-eye-slash', 'Spoiler', { shortcut: 'Control+Shift+S' });
-        var nsfwBtn = makeToolbarButton('fa-regular fa-fire', 'NSFW (hidden content)', { shortcut: 'Control+Shift+N' });
+        var nsfwBtn = makeToolbarButton('fa-regular fa-eye-low-vision', 'NSFW (hidden content)', { shortcut: 'Control+Shift+N' });
 
         document.addEventListener('click', function() {
             document.querySelectorAll('.modern-dropdown-menu').forEach(function(m) { m.style.display = 'none'; });
