@@ -30,6 +30,7 @@
             'slick-carousel': true,
             boards: true,               // ← new
             navigation: false,
+            tagboard: true,
             sidebar: false,
             footer: false
         }
@@ -307,6 +308,13 @@ if (typeof ThemeModule !== 'undefined') {
             log('ForumBoardsModule not found, boards enhancement disabled', 'warn');
             ENHANCER_CONFIG.modules.boards = false;
         }
+        // --- TAGBOARD MODULE ---
+if (typeof TagboardModule !== 'undefined') {
+    registerModule('tagboard', TagboardModule, ['forumObserver', 'domUtils', 'eventBus']);
+} else {
+    log('TagboardModule not found, chat disabled', 'warn');
+    ENHANCER_CONFIG.modules.tagboard = false;
+}
     }
     
     // ============================================================================
