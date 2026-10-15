@@ -4114,7 +4114,7 @@ section.modern-stats { flex-direction: column; width: 100%; }
 }
 
 .modern-wysiwyg .ProseMirror div.spoiler::before {
-    content: "\f070";
+    content: "\f150";
     position: absolute;
     top: calc(var(--pad-3) + 2px);
     left: var(--pad-5);
