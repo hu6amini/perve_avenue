@@ -13,6 +13,7 @@
       "media-optimizer.min.js",
       "event-bus.min.js",
       "forum-enhancer.min.js",
+      "tagboard.min.js",
       "modern-forum.min.css",
       "all.min.css"
     ],
