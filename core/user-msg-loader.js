@@ -19,7 +19,7 @@ whenBodyReady(() => {
     const IS_MSG_PAGE = document.body.id === 'msg';
 
     // ============================================================================
-    // TIPTAP MODULEPRELOAD (msg page only)
+    // TIPTAP MODULEPRELOAD (compose section only)
     // ============================================================================
     // Fire these at parse time so the browser begins fetching the TipTap
     // import graph while Phases A–C below are still resolving. messenger.js
@@ -28,7 +28,19 @@ whenBodyReady(() => {
     // by then these should be in the module map or in-flight. Without this
     // the CDN waterfall begins only after the wrapper exists, which is one
     // of the two dominant sources of the draft-appearance delay.
-    if (IS_MSG_PAGE) {
+    //
+    // Scoped to compose only. Messages and contacts share the msg body id
+    // but never construct the editor — messenger.js builds their UI from
+    // the existing forum DOM. Firing thirteen modulepreloads on those pages
+    // ties up connection slots with requests the page will never consume.
+    // Mirror messenger.js's own section detection exactly: CODE=01 is
+    // messages, CODE=02 is contacts, everything else defaults to compose.
+    const url = window.location.href;
+    const IS_COMPOSE_SECTION = IS_MSG_PAGE &&
+        url.indexOf('CODE=01') === -1 &&
+        url.indexOf('CODE=02') === -1;
+
+    if (IS_COMPOSE_SECTION) {
         [
             'https://esm.sh/@tiptap/core@2.5.2',
             'https://esm.sh/@tiptap/starter-kit@2.5.2',
@@ -228,9 +240,10 @@ whenBodyReady(() => {
             // its wrapper observer on load and waits for forum-enhancer
             // (Phase E) to build #modern-forum-wrapper and call
             // MessengerModule.initialize(). Loading it earlier means the
-            // import graph for TipTap — already being preloaded above —
-            // can start the moment initialize() runs, instead of after
-            // the slowest of six unrelated enhancement modules settles.
+            // import graph for TipTap — already being preloaded above on
+            // the compose section — can start the moment initialize()
+            // runs, instead of after the slowest of six unrelated
+            // enhancement modules settles.
             const phaseCStart = performance.now();
             const resultsC = await Promise.allSettled([
                 loadScript("https://cdn.jsdelivr.net/npm/twemoji@14.0.2/dist/twemoji.min.js"),
