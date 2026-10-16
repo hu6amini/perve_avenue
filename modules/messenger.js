@@ -130,33 +130,85 @@ var MessengerModule = (function(Utils, EventBus) {
     var observerCallbacks = [];
     var _originalEmoticon = null;
 
-    var MAX_MESSAGE_LENGTH = 0;
-    var OG_FETCH_TIMEOUT = 8000;
-    var UPLOAD_WORKER_URL = 'https://imgbb-upload-proxy.nhristakiev.workers.dev/';
-    var OG_WORKER_URL = 'https://og-worker.nhristakiev.workers.dev/?url=';
-    var TWEMOJI_BASE = 'https://twemoji.maxcdn.com/v/latest/svg/';
+    // Per-section cleanup state. Populated when buildComposeSection
+    // creates resources that outlive the function scope — the TipTap
+    // Editor instance and any document- or window-level event
+    // listeners. reset() drains these so the module can be torn down
+    // and rebuilt without accumulating handlers or leaking the editor.
+    // Element-level listeners attached to DOM nodes owned by the
+    // module do not need tracking, because removing the DOM removes
+    // the listener with it.
+    var _editorInstance = null;
+    var _boundHandlers = [];
 
-    // ImgBB's free-tier cap. Mirrored in the dropzone hint text; keep
-    // the two in sync if the tier changes.
-    var MAX_UPLOAD_BYTES = 32 * 1024 * 1024;
+    function addGlobalListener(el, type, handler, opts) {
+        el.addEventListener(type, handler, opts);
+        _boundHandlers.push({ el: el, type: type, handler: handler, opts: opts });
+    }
 
-    // v19: image URL detection for the paste handler. Extension check
-    // first (fast, matches the common case), hostname check second
-    // (catches image hosts that serve URLs without an extension in the
-    // path — Discord CDN is the motivating example). Both lists are
-    // deliberately flat so they're easy to extend as new hosts and
-    // formats appear in the wild.
-    var IMAGE_URL_EXTENSIONS = /\.(?:jpe?g|png|gif|webp|svg|bmp|avif|ico)(?:[?#]|$)/i;
-    var IMAGE_URL_HOSTS = [
-        'i.imgur.com',
-        'i.ibb.co',
-        'i.postimg.cc',
-        'cdn.discordapp.com',
-        'media.discordapp.net',
-        'pbs.twimg.com',
-        'i.redd.it',
-        'lh3.googleusercontent.com'
-    ];
+    // Centralised configuration. A site dropping this module in can
+    // adjust every tunable here without hunting through the body. The
+    // alias vars below exist so the rest of the file reads without
+    // CONFIG. prefixes.
+    var CONFIG = {
+        // Maximum message length in characters. 0 disables the limit.
+        MAX_MESSAGE_LENGTH: 0,
+
+        // Timeout for the OG worker fetch that powers link previews
+        // and lite-embed captions.
+        OG_FETCH_TIMEOUT: 8000,
+
+        // Worker endpoints. The upload worker proxies multipart
+        // uploads to ImgBB; the OG worker fetches link metadata.
+        UPLOAD_WORKER_URL: 'https://imgbb-upload-proxy.nhristakiev.workers.dev/',
+        OG_WORKER_URL: 'https://og-worker.nhristakiev.workers.dev/?url=',
+
+        // Twemoji SVG host. Swap this if you self-host the assets.
+        TWEMOJI_BASE: 'https://twemoji.maxcdn.com/v/latest/svg/',
+
+        // ImgBB free-tier cap. Mirrored in the dropzone hint text;
+        // keep the two in sync if the tier changes.
+        MAX_UPLOAD_BYTES: 32 * 1024 * 1024,
+
+        // Image URL detection for the paste handler. Extension check
+        // first (fast, matches the common case), hostname check second
+        // (catches image hosts that serve URLs without an extension in
+        // the path — Discord CDN is the motivating example). Both lists
+        // are deliberately flat so they're easy to extend as new hosts
+        // and formats appear in the wild.
+        IMAGE_URL_EXTENSIONS: /\.(?:jpe?g|png|gif|webp|svg|bmp|avif|ico)(?:[?#]|$)/i,
+        IMAGE_URL_HOSTS: [
+            'i.imgur.com',
+            'i.ibb.co',
+            'i.postimg.cc',
+            'cdn.discordapp.com',
+            'media.discordapp.net',
+            'pbs.twimg.com',
+            'i.redd.it',
+            'lh3.googleusercontent.com'
+        ]
+    };
+
+    // Aliases so the rest of the file reads without CONFIG. prefixes.
+    var MAX_MESSAGE_LENGTH   = CONFIG.MAX_MESSAGE_LENGTH;
+    var OG_FETCH_TIMEOUT     = CONFIG.OG_FETCH_TIMEOUT;
+    var UPLOAD_WORKER_URL    = CONFIG.UPLOAD_WORKER_URL;
+    var OG_WORKER_URL        = CONFIG.OG_WORKER_URL;
+    var TWEMOJI_BASE         = CONFIG.TWEMOJI_BASE;
+    var MAX_UPLOAD_BYTES     = CONFIG.MAX_UPLOAD_BYTES;
+    var IMAGE_URL_EXTENSIONS = CONFIG.IMAGE_URL_EXTENSIONS;
+    var IMAGE_URL_HOSTS      = CONFIG.IMAGE_URL_HOSTS;
+
+    // Consistent fetch timeout helper. Creates its own AbortController,
+    // wires it to a timer, and clears the timer on both success and
+    // failure. Replaces the ad-hoc pattern that was inlined in two
+    // places and gives callers a uniform way to bound network waits.
+    function fetchWithTimeout(url, opts, timeoutMs) {
+        var controller = new AbortController();
+        var timer = setTimeout(function() { controller.abort(); }, timeoutMs);
+        var merged = Object.assign({}, opts || {}, { signal: controller.signal });
+        return fetch(url, merged).finally(function() { clearTimeout(timer); });
+    }
 
     function isImageUrl(url) {
         if (!url || typeof url !== 'string') return false;
@@ -345,6 +397,8 @@ var MessengerModule = (function(Utils, EventBus) {
         'True','true','try','typeof','var','void','while','with','yield'
     ].join('|');
 
+    var CODE_KEYWORD_REGEX = new RegExp('\\b(' + CODE_HIGHLIGHT_KEYWORDS + ')\\b', 'g');
+
     function highlightCode(codeText) {
         if (codeText == null) return '';
         var html = String(codeText)
@@ -378,7 +432,7 @@ var MessengerModule = (function(Utils, EventBus) {
 
         html = html.replace(/\b\d+(?:\.\d+)?\b/g, '<span class="code-number">$&</span>');
 
-        html = html.replace(new RegExp('\\b(' + CODE_HIGHLIGHT_KEYWORDS + ')\\b', 'g'), '<span class="code-keyword">$1</span>');
+        html = html.replace(CODE_KEYWORD_REGEX, '<span class="code-keyword">$1</span>');
 
         html = html.replace(/\uE000A([0-9a-z]+)Z\uE001/g, function(m, idx) {
             return stash[parseInt(idx, 36)];
@@ -640,6 +694,7 @@ var MessengerModule = (function(Utils, EventBus) {
                     tryBuild();
                 }
             });
+            if (wrapperObserverId != null) observerCallbacks.push(wrapperObserverId);
 
             var targetSelector = '';
             if (currentSection === 'messages') {
@@ -660,6 +715,7 @@ var MessengerModule = (function(Utils, EventBus) {
                     tryBuild();
                 }
             });
+            if (targetObserverId != null) observerCallbacks.push(targetObserverId);
 
             setTimeout(function() {
                 if (!wrapperReady) wrapperReady = true;
@@ -671,16 +727,43 @@ var MessengerModule = (function(Utils, EventBus) {
 
     function reset() {
         isInitialized = false;
+
         if (_originalEmoticon !== null) {
             window.emoticon = _originalEmoticon;
             _originalEmoticon = null;
         }
+
+        // Unregister any observers that never fired their own
+        // self-cleanup — e.g. when the module is reset before the
+        // target element appeared on the page.
         observerCallbacks.forEach(function(id) {
             if (globalThis.forumObserver && typeof globalThis.forumObserver.unregister === 'function') {
-                globalThis.forumObserver.unregister(id);
+                try { globalThis.forumObserver.unregister(id); } catch (e) {}
             }
         });
         observerCallbacks = [];
+
+        // Remove every listener registered through addGlobalListener.
+        // Reverse iteration so a callback that (indirectly) causes
+        // another registration can't extend the array mid-loop.
+        for (var i = _boundHandlers.length - 1; i >= 0; i--) {
+            var h = _boundHandlers[i];
+            try { h.el.removeEventListener(h.type, h.handler, h.opts); } catch (e) {}
+        }
+        _boundHandlers = [];
+
+        // Tear down the editor. Its extensions, node views, and
+        // ProseMirror plugins all register their own listeners and
+        // timers; destroy() is the only path that releases them.
+        if (_editorInstance) {
+            try {
+                if (typeof _editorInstance.destroy === 'function') {
+                    _editorInstance.destroy();
+                }
+            } catch (e) {}
+            _editorInstance = null;
+        }
+
         _uploadRegistry.clear();
     }
 
@@ -1977,7 +2060,7 @@ var MessengerModule = (function(Utils, EventBus) {
                 ? 'https://www.youtube.com/watch?v=' + encodeURIComponent(videoid)
                 : 'https://vimeo.com/' + encodeURIComponent(videoid);
 
-            fetch(OG_WORKER_URL + encodeURIComponent(canonicalUrl))
+            fetchWithTimeout(OG_WORKER_URL + encodeURIComponent(canonicalUrl), {}, OG_FETCH_TIMEOUT)
                 .then(function(r) { return r.ok ? r.json() : null; })
                 .then(function(data) {
                     if (!data || data.error || !data.title) return;
@@ -2088,8 +2171,8 @@ var MessengerModule = (function(Utils, EventBus) {
             updateCharCounter();
         }
 
-        window.addEventListener('beforeunload', flushPendingDraft);
-        document.addEventListener('visibilitychange', function() {
+        addGlobalListener(window, 'beforeunload', flushPendingDraft);
+        addGlobalListener(document, 'visibilitychange', function() {
             if (document.visibilityState === 'hidden') flushPendingDraft();
         });
 
@@ -2753,12 +2836,12 @@ var MessengerModule = (function(Utils, EventBus) {
         var spoilerBtn = makeToolbarButton('fa-regular fa-square-caret-down', 'Spoiler', { shortcut: 'Control+Shift+S' });
         var nsfwBtn = makeToolbarButton('fa-regular fa-eye-slash', 'NSFW (hidden content)', { shortcut: 'Control+Shift+N' });
 
-        document.addEventListener('click', function() {
+        addGlobalListener(document, 'click', function() {
             document.querySelectorAll('.modern-dropdown-menu').forEach(function(m) { m.style.display = 'none'; });
             document.querySelectorAll('.modern-editor-btn[aria-haspopup="menu"]').forEach(function(b) { b.setAttribute('aria-expanded', 'false'); });
         });
 
-        document.addEventListener('keydown', function(e) {
+        addGlobalListener(document, 'keydown', function(e) {
             if (e.key === 'Escape') {
                 var openMenu = document.querySelector('.modern-dropdown-menu[style*="display: block"]');
                 if (openMenu) {
@@ -2851,7 +2934,7 @@ var MessengerModule = (function(Utils, EventBus) {
             }
         };
 
-        document.addEventListener('click', function(e) {
+        addGlobalListener(document, 'click', function(e) {
             if (emojiPickerPanel && emojiPickerPanel.style.display === 'grid' && !emojiPickerPanel.contains(e.target) && e.target !== emojiBtn && !emojiBtn.contains(e.target)) {
                 emojiPickerPanel.style.display = 'none';
             }
@@ -3322,10 +3405,10 @@ var MessengerModule = (function(Utils, EventBus) {
                 hoveredImg = null;
             });
 
-            window.addEventListener('scroll', function() {
+            addGlobalListener(window, 'scroll', function() {
                 if (hoveredImg && toolbarEl.style.display === 'flex') positionToolbar(hoveredImg);
             }, true);
-            window.addEventListener('resize', function() {
+            addGlobalListener(window, 'resize', function() {
                 if (hoveredImg && toolbarEl.style.display === 'flex') positionToolbar(hoveredImg);
             });
 
@@ -4853,12 +4936,8 @@ var MessengerModule = (function(Utils, EventBus) {
                                 view.dispatch(trPlain);
                             }
 
-                            var controller = new AbortController();
-                            var timeoutId = setTimeout(function() { controller.abort(); }, OG_FETCH_TIMEOUT);
-
-                            fetch(OG_WORKER_URL + encodeURIComponent(url), { signal: controller.signal })
+                            fetchWithTimeout(OG_WORKER_URL + encodeURIComponent(url), {}, OG_FETCH_TIMEOUT)
                                 .then(function(res) {
-                                    clearTimeout(timeoutId);
                                     return res.json();
                                 })
                                 .then(function(data) {
@@ -4892,7 +4971,6 @@ var MessengerModule = (function(Utils, EventBus) {
                                     view.dispatch(tr2);
                                 })
                                 .catch(function(err) {
-                                    clearTimeout(timeoutId);
                                     if (err && err.name === 'AbortError') {
                                         replaceSkeletonWithText();
                                         return;
@@ -5404,6 +5482,12 @@ var MessengerModule = (function(Utils, EventBus) {
                         scheduleLivePreviewRefresh();
                     }
                 });
+
+                // Store the instance at module scope so reset() can
+                // call destroy() on it. Without this the editor keeps
+                // its own listeners and ProseMirror plugins alive after
+                // the messenger section is torn down.
+                _editorInstance = editor;
 
                 modernSubmitBtnRef = container.querySelector('#modern-submit');
                 modernPreviewBtnRef = container.querySelector('#modern-preview');
