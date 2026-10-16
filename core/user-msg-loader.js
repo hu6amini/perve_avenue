@@ -16,29 +16,62 @@ whenBodyReady(() => {
         return;
     }
 
+    const IS_MSG_PAGE = document.body.id === 'msg';
+
+    // ============================================================================
+    // TIPTAP MODULEPRELOAD (msg page only)
+    // ============================================================================
+    // Fire these at parse time so the browser begins fetching the TipTap
+    // import graph while Phases A–C below are still resolving. messenger.js
+    // does not reach its `await import(...)` calls until forum-enhancer has
+    // built #modern-forum-wrapper and called MessengerModule.initialize();
+    // by then these should be in the module map or in-flight. Without this
+    // the CDN waterfall begins only after the wrapper exists, which is one
+    // of the two dominant sources of the draft-appearance delay.
+    if (IS_MSG_PAGE) {
+        [
+            'https://esm.sh/@tiptap/core@2.5.2',
+            'https://esm.sh/@tiptap/starter-kit@2.5.2',
+            'https://esm.sh/@tiptap/extension-placeholder@2.5.2',
+            'https://esm.sh/@tiptap/extension-underline@2.5.2',
+            'https://esm.sh/@tiptap/extension-image@2.5.2',
+            'https://esm.sh/@tiptap/extension-link@2.5.2',
+            'https://esm.sh/@tiptap/extension-mention@2.5.2',
+            'https://esm.sh/@tiptap/extension-code-block-lowlight@2.5.2',
+            'https://esm.sh/@tiptap/extension-character-count@2.5.2',
+            'https://esm.sh/@tiptap/extension-typography@2.5.2',
+            'https://esm.sh/prosemirror-state@1.4.3',
+            'https://esm.sh/prosemirror-view@1.33.0',
+            'https://esm.sh/lowlight@3'
+        ].forEach(href => {
+            const link = document.createElement('link');
+            link.rel = 'modulepreload';
+            link.href = href;
+            link.crossOrigin = 'anonymous';
+            document.head.appendChild(link);
+        });
+    }
+
     // ============================================================================
     // CONSTANTS
     // ============================================================================
-    const CONTENT_PAGE_IDS = Object.freeze(['topic', 'send', 'search', 'blog']); // kept for reference, but lightgallery condition is separate
+    const CONTENT_PAGE_IDS = Object.freeze(['topic', 'send', 'search', 'blog']);
 
     const STYLESHEETS = Object.freeze([
         "https://cdnjs.cloudflare.com/ajax/libs/slick-carousel/1.9.0/slick.min.css"
     ]);
 
-    const IDLE_TIMEOUT_SLICK = 500;
-    const IDLE_TIMEOUT_ENHANCEMENTS = 800;
-
     // ============================================================================
     // 1. STYLESHEETS (global – no lightgallery)
     // ============================================================================
     STYLESHEETS.forEach(url => {
-    const n = document.createElement("link");
-    Object.assign(n, { rel: "preload", as: "style", href: url });
-    const t = document.createElement("link");
-    Object.assign(t, { rel: "stylesheet", href: url, media: "print" });
-    t.onload = () => { t.media = "all"; };
-    document.head.append(n, t);
-});
+        const n = document.createElement("link");
+        Object.assign(n, { rel: "preload", as: "style", href: url });
+        const t = document.createElement("link");
+        Object.assign(t, { rel: "stylesheet", href: url, media: "print" });
+        t.onload = () => { t.media = "all"; };
+        document.head.append(n, t);
+    });
 
     // ============================================================================
     // 2. SCRIPT LOADER ENGINE
@@ -174,7 +207,7 @@ whenBodyReady(() => {
             injectCriticalCSS();
             preloadLCPImage();
 
-            // PHASE B: Visual core (Slick, DOM utils, Forum Observer)
+            // PHASE B: Visual core (Slick, DOM utils, Forum Observer, Theme)
             const phaseBStart = performance.now();
             const resultsB = await Promise.allSettled([
                 loadScript("https://cdnjs.cloudflare.com/ajax/libs/slick-carousel/1.9.0/slick.min.js"),
@@ -188,11 +221,22 @@ whenBodyReady(() => {
             }
             console.debug(`[Boot] Phase B completed in ${(performance.now() - phaseBStart).toFixed(2)}ms`);
 
-            // PHASE C: Third‑party libraries (twemoji, lite-embed)
+            // PHASE C: Third-party libs + carousel + messenger.
+            // messenger.js has no dependency on the enhancement modules
+            // (posts, boards, modals, breadcrumbs, media-dimensions), so
+            // it rides here instead of in the batch below. It registers
+            // its wrapper observer on load and waits for forum-enhancer
+            // (Phase E) to build #modern-forum-wrapper and call
+            // MessengerModule.initialize(). Loading it earlier means the
+            // import graph for TipTap — already being preloaded above —
+            // can start the moment initialize() runs, instead of after
+            // the slowest of six unrelated enhancement modules settles.
             const phaseCStart = performance.now();
             const resultsC = await Promise.allSettled([
                 loadScript("https://cdn.jsdelivr.net/npm/twemoji@14.0.2/dist/twemoji.min.js"),
-                loadScript("https://cdn.jsdelivr.net/gh/hu6amini/perve_avenue@9cdcc6c87d99bfce1f64f07fb1523b8b28f5a516/modules/lite-embed.js")
+                loadScript("https://cdn.jsdelivr.net/gh/hu6amini/perve_avenue@9cdcc6c87d99bfce1f64f07fb1523b8b28f5a516/modules/lite-embed.js"),
+                loadScript("https://cdn.jsdelivr.net/gh/hu6amini/perve_avenue@aa4b053757399bdc7d19ad6e9ae0892b30922b2c/modules/slick-carousel.min.js"),
+                loadScript("https://cdn.jsdelivr.net/gh/hu6amini/perve_avenue@57808c5785b6accbd3ef92bd3410d22439b95e29/modules/messenger.js")
             ]);
             const failedC = resultsC.filter(r => r.status === 'rejected');
             if (failedC.length > 0) {
@@ -200,54 +244,46 @@ whenBodyReady(() => {
             }
             console.debug(`[Boot] Phase C completed in ${(performance.now() - phaseCStart).toFixed(2)}ms`);
 
-            // PHASE D: Essential module – carousel handling
-            const phaseDStart = performance.now();
-            try {
-                await loadScript("https://cdn.jsdelivr.net/gh/hu6amini/perve_avenue@aa4b053757399bdc7d19ad6e9ae0892b30922b2c/modules/slick-carousel.min.js");
-                console.debug(`[Boot] Phase D completed in ${(performance.now() - phaseDStart).toFixed(2)}ms`);
-            } catch (err) {
-                console.error('[Boot] Phase D critical failure:', err);
+            // Initialise Slick carousel. No idle deferral — the page shell
+            // is already painted by the time Phases A–C have settled, and
+            // the carousel module is loaded. Deferring this previously
+            // added up to 500 ms of delay on an already-idle main thread.
+            if (window.SlickCarouselModule && typeof window.SlickCarouselModule.initialize === 'function') {
+                window.SlickCarouselModule.initialize();
+                console.debug('[Boot] Slick carousel initialized');
             }
 
-            // Initialise Slick carousel after a short idle delay
-            const initSlick = () => {
-                if (window.SlickCarouselModule && typeof window.SlickCarouselModule.initialize === 'function') {
-                    window.SlickCarouselModule.initialize();
-                    console.debug('[Boot] Slick carousel initialized');
-                }
-            };
-            scheduleWork(initSlick, IDLE_TIMEOUT_SLICK);
+            // PHASE D: Enhancement modules. These are loaded in parallel
+            // and the batch settles when the slowest one does. No
+            // scheduleWork wrapper — the previous 800 ms requestIdleCallback
+            // gate was the largest artificial delay in the chain.
+            const phaseDStart = performance.now();
+            const resultsD = await Promise.allSettled([
+                loadScript("https://cdn.jsdelivr.net/gh/hu6amini/perve_avenue@11588f18d3c85bfe9998aea25a0ad1412492c188/modules/media-dimensions.min.js"),
+                loadScript("https://cdn.jsdelivr.net/gh/hu6amini/perve_avenue@3051b903c91564b713f0963e1553a1fde0921e81/modules/breadcrumbs.js"),
+                loadScript("https://cdn.jsdelivr.net/gh/hu6amini/perve_avenue@a88198b93bbc0093b0d0d64be88d2e2472e79a89/modules/twemoji.min.js"),
+                loadScript("https://cdn.jsdelivr.net/gh/hu6amini/perve_avenue@542dedb572fef90b64ec5ea91274ead2e347680d/modules/boards.js"),
+                loadScript("https://cdn.jsdelivr.net/gh/hu6amini/perve_avenue@2b602423f2eafe3c242b36282625d427988caa15/modules/posts.min.js"),
+                loadScript("https://cdn.jsdelivr.net/gh/hu6amini/perve_avenue@403484e8351e4fd2b9f757b5c340979cf7d452b8/modules/modals.min.js")
+            ]);
+            const failedD = resultsD.filter(r => r.status === 'rejected');
+            if (failedD.length > 0) {
+                console.warn('[Boot] Phase D had failures:', failedD);
+            }
+            console.debug(`[Boot] Phase D completed in ${(performance.now() - phaseDStart).toFixed(2)}ms`);
 
-            // ============================================================
-            // IDLE LOAD: All remaining enhancement modules (including messenger)
-            // Messenger will load TipTap dynamically via ES modules.
-            // ============================================================
-            const loadEnhancements = async () => {
-                const enhStart = performance.now();
-
-                const results = await Promise.allSettled([
-                    loadScript("https://cdn.jsdelivr.net/gh/hu6amini/perve_avenue@11588f18d3c85bfe9998aea25a0ad1412492c188/modules/media-dimensions.min.js"),
-                    loadScript("https://cdn.jsdelivr.net/gh/hu6amini/perve_avenue@3051b903c91564b713f0963e1553a1fde0921e81/modules/breadcrumbs.js"),
-                    loadScript("https://cdn.jsdelivr.net/gh/hu6amini/perve_avenue@a88198b93bbc0093b0d0d64be88d2e2472e79a89/modules/twemoji.min.js"),
-                    loadScript("https://cdn.jsdelivr.net/gh/hu6amini/perve_avenue@542dedb572fef90b64ec5ea91274ead2e347680d/modules/boards.js"),
-                    loadScript("https://cdn.jsdelivr.net/gh/hu6amini/perve_avenue@2b602423f2eafe3c242b36282625d427988caa15/modules/posts.min.js"),
-                    loadScript("https://cdn.jsdelivr.net/gh/hu6amini/perve_avenue@403484e8351e4fd2b9f757b5c340979cf7d452b8/modules/modals.min.js"),
-                    loadScript("https://cdn.jsdelivr.net/gh/hu6amini/perve_avenue@57808c5785b6accbd3ef92bd3410d22439b95e29/modules/messenger.js")
-                ]);
-
-                const failed = results.filter(r => r.status === 'rejected');
-                if (failed.length > 0) {
-                    console.warn('[Boot] Enhancement load had failures:', failed);
-                }
-                console.debug(`[Boot] Enhancements loaded in ${(performance.now() - enhStart).toFixed(2)}ms`);
-
-                // Finally, load the Forum Enhancer which registers everything
-                loadScript("https://cdn.jsdelivr.net/gh/hu6amini/perve_avenue@a890d3be9285db71503d2412074ae25fe128a6fb/core/forum-enhancer.min.js")
-                    .then(() => console.log('[Boot] System Fully Enhanced'))
-                    .catch(err => console.warn('[Boot] Forum enhancer failed to load:', err));
-            };
-
-            scheduleWork(loadEnhancements, IDLE_TIMEOUT_ENHANCEMENTS);
+            // PHASE E: Orchestrator. forum-enhancer registers every module
+            // above and builds #modern-forum-wrapper, which unblocks
+            // messenger's wrapper observer and triggers
+            // MessengerModule.initialize().
+            const phaseEStart = performance.now();
+            try {
+                await loadScript("https://cdn.jsdelivr.net/gh/hu6amini/perve_avenue@a890d3be9285db71503d2412074ae25fe128a6fb/core/forum-enhancer.min.js");
+                console.debug(`[Boot] Phase E completed in ${(performance.now() - phaseEStart).toFixed(2)}ms`);
+                console.log('[Boot] System Fully Enhanced');
+            } catch (err) {
+                console.warn('[Boot] Forum enhancer failed to load:', err);
+            }
 
             // ============================================================
             // LAZY LOAD: Social widgets (Twitter/Instagram) when they become visible
@@ -286,9 +322,8 @@ whenBodyReady(() => {
                 instagramObserver.observe(instagramEl);
             }
 
-            // Load LightGallery only on content pages (topic, send, search, blog)
-            // But since we are already restricted to msg/user, lightgallery will only load if the body id matches those content pages.
-            // However, msg/user pages are not in CONTENT_PAGE_IDS by default. Adjust if needed.
+            // LightGallery is only relevant on content pages. On msg/user
+            // pages neither id is in CONTENT_PAGE_IDS, so this is a no-op.
             const checkAndLoadLightGallery = () => {
                 const id = document.body?.id;
                 if (CONTENT_PAGE_IDS.includes(id)) {
