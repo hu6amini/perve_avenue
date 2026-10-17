@@ -140,6 +140,7 @@ var MessengerModule = (function(Utils, EventBus) {
     // the listener with it.
     var _editorInstance = null;
     var _boundHandlers = [];
+    var _dropdownBackdrop = null;
 
     function addGlobalListener(el, type, handler, opts) {
         el.addEventListener(type, handler, opts);
@@ -763,6 +764,15 @@ var MessengerModule = (function(Utils, EventBus) {
             } catch (e) {}
             _editorInstance = null;
         }
+
+        // The dropdown backdrop is appended to document.body, so it
+        // survives the removal of #modern-messenger. Tear it down here
+        // so a reset() + initialize() cycle doesn't leave an orphan
+        // overlay sitting on top of the page.
+        if (_dropdownBackdrop && _dropdownBackdrop.parentNode) {
+            _dropdownBackdrop.parentNode.removeChild(_dropdownBackdrop);
+        }
+        _dropdownBackdrop = null;
 
         _uploadRegistry.clear();
     }
@@ -2657,21 +2667,137 @@ var MessengerModule = (function(Utils, EventBus) {
         colorDropdownContainer.appendChild(colorDropdownMenu);
         toolbar.appendChild(colorDropdownContainer);
 
-        function openDropdown(btn, menu) {
-            menu.style.display = 'block';
-            btn.setAttribute('aria-expanded', 'true');
+        // --- Mobile-aware dropdown helpers -----------------------------
+        // On desktop the menus anchor to their trigger and the JS positioner
+        // flips them above the button or right-aligns them if there's no room.
+        // On mobile (≤680px) they render as bottom sheets with a backdrop,
+        // matching the platform picker that Discord, Slack, and Notion use.
+        var _lastMobileMode = isMobileSheetMode();
+
+        function isMobileSheetMode() {
+            return window.matchMedia('(max-width: 680px)').matches;
         }
+
+        function ensureDropdownBackdrop() {
+            if (!_dropdownBackdrop) {
+                _dropdownBackdrop = document.createElement('div');
+                _dropdownBackdrop.className = 'modern-dropdown-backdrop';
+                _dropdownBackdrop.addEventListener('click', function() {
+                    closeAllEditorPopovers();
+                });
+                document.body.appendChild(_dropdownBackdrop);
+            }
+            return _dropdownBackdrop;
+        }
+
+        function positionDropdownMenu(btn, menu) {
+            menu.style.left = '';
+            menu.style.right = '';
+            menu.style.top = '';
+            menu.style.bottom = '';
+            menu.style.maxWidth = '';
+            menu.style.maxHeight = '';
+            menu.style.overflowY = '';
+
+            var btnRect = btn.getBoundingClientRect();
+            var menuRect = menu.getBoundingClientRect();
+            var vw = window.innerWidth;
+            var vh = window.innerHeight;
+            var margin = 8;
+
+            // Horizontal — prefer left-aligned; fall back to right-aligned;
+            // fall back to clamping the width to the available space.
+            var spaceRight = vw - btnRect.left - margin;
+            var spaceLeft = btnRect.right - margin;
+            if (menuRect.width <= spaceRight) {
+                menu.style.left = '0';
+                menu.style.right = 'auto';
+            } else if (menuRect.width <= spaceLeft) {
+                menu.style.left = 'auto';
+                menu.style.right = '0';
+            } else {
+                menu.style.left = '0';
+                menu.style.right = 'auto';
+                menu.style.maxWidth = Math.max(120, spaceRight) + 'px';
+            }
+
+            // Vertical — prefer below; flip above if no room; else cap height.
+            var spaceBelow = vh - btnRect.bottom - margin;
+            var spaceAbove = btnRect.top - margin;
+            if (menuRect.height <= spaceBelow) {
+                menu.style.top = '100%';
+                menu.style.bottom = 'auto';
+            } else if (menuRect.height <= spaceAbove) {
+                menu.style.top = 'auto';
+                menu.style.bottom = '100%';
+            } else {
+                menu.style.top = '100%';
+                menu.style.bottom = 'auto';
+                menu.style.maxHeight = Math.max(120, spaceBelow) + 'px';
+                menu.style.overflowY = 'auto';
+            }
+        }
+
+        function openDropdown(btn, menu) {
+            if (isMobileSheetMode()) {
+                menu.classList.add('is-open', 'is-sheet');
+                menu.style.display = 'block';
+                if (btn) btn.setAttribute('aria-expanded', 'true');
+                ensureDropdownBackdrop().classList.add('is-active');
+                document.body.classList.add('dropdown-sheet-open');
+                return;
+            }
+            menu.classList.remove('is-sheet');
+            menu.classList.add('is-open');
+            menu.style.display = 'block';
+            if (btn) btn.setAttribute('aria-expanded', 'true');
+            positionDropdownMenu(btn, menu);
+        }
+
         function closeDropdown(btn, menu) {
+            if (!menu) return;
+            menu.classList.remove('is-open', 'is-sheet');
             menu.style.display = 'none';
-            btn.setAttribute('aria-expanded', 'false');
+            menu.style.left = '';
+            menu.style.right = '';
+            menu.style.top = '';
+            menu.style.bottom = '';
+            menu.style.maxWidth = '';
+            menu.style.maxHeight = '';
+            menu.style.overflowY = '';
+            if (btn) btn.setAttribute('aria-expanded', 'false');
+            if (_dropdownBackdrop) _dropdownBackdrop.classList.remove('is-active');
+            document.body.classList.remove('dropdown-sheet-open');
+        }
+
+        function closeAllEditorPopovers() {
+            document.querySelectorAll('.modern-dropdown-menu').forEach(function(m) {
+                m.classList.remove('is-open', 'is-sheet');
+                m.style.display = 'none';
+                m.style.left = '';
+                m.style.right = '';
+                m.style.top = '';
+                m.style.bottom = '';
+                m.style.maxWidth = '';
+                m.style.maxHeight = '';
+                m.style.overflowY = '';
+            });
+            document.querySelectorAll('.modern-editor-btn[aria-haspopup="menu"]').forEach(function(b) {
+                b.setAttribute('aria-expanded', 'false');
+            });
+            if (emojiPickerPanel) {
+                emojiPickerPanel.classList.remove('is-open', 'is-sheet');
+                emojiPickerPanel.style.display = 'none';
+            }
+            if (_dropdownBackdrop) _dropdownBackdrop.classList.remove('is-active');
+            document.body.classList.remove('dropdown-sheet-open');
         }
 
         colorDropdownBtn.onclick = function(e) {
             e.stopPropagation();
-            var isOpen = colorDropdownMenu.style.display === 'block';
-            document.querySelectorAll('.modern-dropdown-menu').forEach(function(m) { m.style.display = 'none'; });
-            document.querySelectorAll('.modern-editor-btn[aria-haspopup="menu"]').forEach(function(b) { b.setAttribute('aria-expanded', 'false'); });
-            if (!isOpen) openDropdown(colorDropdownBtn, colorDropdownMenu);
+            var wasOpen = colorDropdownMenu.classList.contains('is-open');
+            closeAllEditorPopovers();
+            if (!wasOpen) openDropdown(colorDropdownBtn, colorDropdownMenu);
         };
         colorDropdownMenu.addEventListener('click', function(e) { e.stopPropagation(); });
 
@@ -2715,10 +2841,9 @@ var MessengerModule = (function(Utils, EventBus) {
         toolbar.appendChild(headingDropdownContainer);
         headingDropdownBtn.onclick = function(e) {
             e.stopPropagation();
-            var isOpen = headingDropdownMenu.style.display === 'block';
-            document.querySelectorAll('.modern-dropdown-menu').forEach(function(m) { m.style.display = 'none'; });
-            document.querySelectorAll('.modern-editor-btn[aria-haspopup="menu"]').forEach(function(b) { b.setAttribute('aria-expanded', 'false'); });
-            if (!isOpen) openDropdown(headingDropdownBtn, headingDropdownMenu);
+            var wasOpen = headingDropdownMenu.classList.contains('is-open');
+            closeAllEditorPopovers();
+            if (!wasOpen) openDropdown(headingDropdownBtn, headingDropdownMenu);
         };
         headingDropdownMenu.addEventListener('click', function(e) { e.stopPropagation(); });
 
@@ -2751,10 +2876,9 @@ var MessengerModule = (function(Utils, EventBus) {
         toolbar.appendChild(listDropdownContainer);
         listDropdownBtn.onclick = function(e) {
             e.stopPropagation();
-            var isOpen = listDropdownMenu.style.display === 'block';
-            document.querySelectorAll('.modern-dropdown-menu').forEach(function(m) { m.style.display = 'none'; });
-            document.querySelectorAll('.modern-editor-btn[aria-haspopup="menu"]').forEach(function(b) { b.setAttribute('aria-expanded', 'false'); });
-            if (!isOpen) openDropdown(listDropdownBtn, listDropdownMenu);
+            var wasOpen = listDropdownMenu.classList.contains('is-open');
+            closeAllEditorPopovers();
+            if (!wasOpen) openDropdown(listDropdownBtn, listDropdownMenu);
         };
         listDropdownMenu.addEventListener('click', function(e) { e.stopPropagation(); });
 
@@ -2784,10 +2908,9 @@ var MessengerModule = (function(Utils, EventBus) {
 
         codeDropdownBtn.onclick = function(e) {
             e.stopPropagation();
-            var isOpen = codeDropdownMenu.style.display === 'block';
-            document.querySelectorAll('.modern-dropdown-menu').forEach(function(m) { m.style.display = 'none'; });
-            document.querySelectorAll('.modern-editor-btn[aria-haspopup="menu"]').forEach(function(b) { b.setAttribute('aria-expanded', 'false'); });
-            if (!isOpen) openDropdown(codeDropdownBtn, codeDropdownMenu);
+            var wasOpen = codeDropdownMenu.classList.contains('is-open');
+            closeAllEditorPopovers();
+            if (!wasOpen) openDropdown(codeDropdownBtn, codeDropdownMenu);
         };
         codeDropdownMenu.addEventListener('click', function(e) { e.stopPropagation(); });
 
@@ -2837,17 +2960,24 @@ var MessengerModule = (function(Utils, EventBus) {
         var nsfwBtn = makeToolbarButton('fa-regular fa-eye-slash', 'NSFW (hidden content)', { shortcut: 'Control+Shift+N' });
 
         addGlobalListener(document, 'click', function() {
-            document.querySelectorAll('.modern-dropdown-menu').forEach(function(m) { m.style.display = 'none'; });
-            document.querySelectorAll('.modern-editor-btn[aria-haspopup="menu"]').forEach(function(b) { b.setAttribute('aria-expanded', 'false'); });
+            closeAllEditorPopovers();
         });
 
         addGlobalListener(document, 'keydown', function(e) {
             if (e.key === 'Escape') {
-                var openMenu = document.querySelector('.modern-dropdown-menu[style*="display: block"]');
-                if (openMenu) {
-                    document.querySelectorAll('.modern-dropdown-menu').forEach(function(m) { m.style.display = 'none'; });
-                    document.querySelectorAll('.modern-editor-btn[aria-haspopup="menu"]').forEach(function(b) { b.setAttribute('aria-expanded', 'false'); });
-                }
+                closeAllEditorPopovers();
+            }
+        });
+
+        // Close any open dropdown when the viewport crosses the mobile
+        // breakpoint — the positioning model flips between anchored menu
+        // and bottom sheet, so a mid-open transition would leave a stale
+        // layout behind.
+        addGlobalListener(window, 'resize', function() {
+            var nowMobile = isMobileSheetMode();
+            if (nowMobile !== _lastMobileMode) {
+                _lastMobileMode = nowMobile;
+                closeAllEditorPopovers();
             }
         });
 
@@ -2916,7 +3046,7 @@ var MessengerModule = (function(Utils, EventBus) {
                             }).run();
                             pushEmojiRecent(emojiChar);
                         }
-                        emojiPickerPanel.style.display = 'none';
+                        closeAllEditorPopovers();
                     };
                     emojiPickerPanel.appendChild(emojiItem);
                 });
@@ -2925,19 +3055,28 @@ var MessengerModule = (function(Utils, EventBus) {
 
         emojiBtn.onclick = function(e) {
             e.stopPropagation();
-            var isVisible = emojiPickerPanel.style.display === 'grid';
-            if (!isVisible) {
-                renderEmojiPicker();
+            var wasOpen = emojiPickerPanel.classList.contains('is-open');
+            closeAllEditorPopovers();
+            if (wasOpen) return;
+
+            renderEmojiPicker();
+
+            if (isMobileSheetMode()) {
+                emojiPickerPanel.classList.add('is-open', 'is-sheet');
                 emojiPickerPanel.style.display = 'grid';
+                ensureDropdownBackdrop().classList.add('is-active');
+                document.body.classList.add('dropdown-sheet-open');
             } else {
-                emojiPickerPanel.style.display = 'none';
+                emojiPickerPanel.classList.add('is-open');
+                emojiPickerPanel.style.display = 'grid';
             }
         };
 
-        addGlobalListener(document, 'click', function(e) {
-            if (emojiPickerPanel && emojiPickerPanel.style.display === 'grid' && !emojiPickerPanel.contains(e.target) && e.target !== emojiBtn && !emojiBtn.contains(e.target)) {
-                emojiPickerPanel.style.display = 'none';
-            }
+        // Clicks inside the panel background (labels, spacing, group
+        // separators) must not bubble out to the document handler,
+        // otherwise the panel closes on its own content.
+        emojiPickerPanel.addEventListener('click', function(e) {
+            e.stopPropagation();
         });
 
         function uploadImageToWorker(file, editorInstance) {
@@ -3267,17 +3406,34 @@ var MessengerModule = (function(Utils, EventBus) {
             function positionToolbar(img) {
                 var rect = img.getBoundingClientRect();
                 var INSET = 8;
-                toolbarEl.style.top = (rect.top + window.pageYOffset + 6) + 'px';
-                toolbarEl.style.left = (rect.right + window.pageXOffset - INSET) + 'px';
-                toolbarEl.style.transform = 'translateX(-100%)';
+                var toolbarWidth = toolbarEl.offsetWidth || 108;
+                var toolbarHeight = toolbarEl.offsetHeight || 32;
+                var vw = window.innerWidth;
+                var vh = window.innerHeight;
+
+                var desiredLeft = rect.right - INSET - toolbarWidth;
+                if (desiredLeft < 4) desiredLeft = 4;
+                if (desiredLeft + toolbarWidth > vw - 4) {
+                    desiredLeft = vw - toolbarWidth - 4;
+                }
+
+                var desiredTop = rect.top + 6;
+                if (desiredTop < 4) desiredTop = 4;
+                if (desiredTop + toolbarHeight > vh - 4) {
+                    desiredTop = vh - toolbarHeight - 4;
+                }
+
+                toolbarEl.style.top = (desiredTop + window.pageYOffset) + 'px';
+                toolbarEl.style.left = (desiredLeft + window.pageXOffset) + 'px';
+                toolbarEl.style.transform = 'none';
             }
 
             function showToolbar(img) {
                 if (hideTimer) { clearTimeout(hideTimer); hideTimer = null; }
                 hoveredImg = img;
                 updateButtonState(img);
-                positionToolbar(img);
                 toolbarEl.style.display = 'flex';
+                positionToolbar(img);
             }
 
             function hideToolbarDelayed() {
