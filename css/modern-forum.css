@@ -4540,9 +4540,9 @@ lite-vimeo.lite-activated > .lite-embed-playbtn {
     height: 100%;
     object-fit: cover;
 }
----------------------------------------------------------
+/* ------------------------------------------------------------
    Messages section
-   ------------------------------------------------------------------ */
+   ------------------------------------------------------------ */c
 .messages-folder-row {
   display: flex;
   justify-content: space-between;
@@ -4598,10 +4598,17 @@ lite-vimeo.lite-activated > .lite-embed-playbtn {
 .modern-select-sm {
   background: var(--surface-color);
   border: 1px solid var(--border-color);
-  border-radius: var(--radius-sm);
-  padding: var(--pad-2) var(--pad-3);
-  font-size: var(--text-xs);
-  color: var(--text-primary);
+    border-radius: var(--radius);
+    padding: var(--pad-3) var(--pad-4);
+    font-family: var(--font-primary);
+    font-size: var(--text-sm);
+    color: var(--text-primary);
+    appearance: none;
+    background-image: url(data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 384 512'%3E%3Cpath fill='%236B7280' d='M360.5 217.5l-152 143.1C203.9 365.8 197.9 368 192 368s-11.88-2.188-16.5-6.562L23.5 217.5C13.87 208.3 13.47 193.1 22.56 183.5C31.69 173.8 46.94 173.5 56.5 182.6L192 310.9l135.5-128.4c9.562-9.094 24.75-8.75 33.94 .9375C370.5 193.1 370.1 208.3 360.5 217.5z'/%3E%3C/svg%3E);
+    background-repeat: no-repeat;
+    background-position: right var(--pad-2) center;
+    background-size: auto 0.75rem;
+    padding-right: var(--space-md);
 }
 .modern-btn.danger { background: transparent; border-color: var(--danger-color); color: var(--danger-color); }
 .modern-btn.danger:hover { background: rgba(220, 38, 38, 0.1); border-color: var(--danger-color); color: var(--danger-color); }
