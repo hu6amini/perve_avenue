@@ -1,4 +1,20 @@
 // Messenger Module – TipTap based, modern preview, relies solely on forumObserver
+// Legacy bindings — messenger.js will break if any of these change:
+//   input[name="entered_name"]           compose: recipient value
+//   select[name="from_contact"]          compose: recipient picker
+//   input[name="msg_title"]              compose: subject
+//   textarea#Post                        compose: body
+//   input[name="sub_mit"]                compose: submit fallback
+//   input#add_sent, input#add_tracking   compose: options
+//   window.REPLIER                       compose: form element
+//   select[name="VID"]                   messages: folder switch
+//   form[name="inbox"]                   messages: bulk actions
+//   .big_list .row-mp                    messages: row source
+//   .main_list dl dd                     messages: folder stats
+//   textarea[name="can_contact"]         contacts: friends
+//   textarea[name="cannot_contact"]      contacts: blocked
+//   select[name="nobody_can_contact"]    contacts: privacy
+//   input[value="Update Contact list"]   contacts: save
 // v2: preview area renders quotes / spoilers / code blocks using the same
 //     .modern-quote / .modern-spoiler / .modern-code structures the posts
 //     module uses on the reader side.
