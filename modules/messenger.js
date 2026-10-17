@@ -6297,7 +6297,8 @@ var MessengerModule = (function(Utils, EventBus) {
             img.loading = 'lazy';
             img.decoding = 'async';
             avatarEl.innerHTML = '';
-            avatarEl.appendChild(img);
+avatarEl.style.backgroundColor = '';
+avatarEl.appendChild(img);
             if (result.group) {
                 avatarEl.classList.add('group-' + result.group);
             }
