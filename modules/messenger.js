@@ -5349,26 +5349,52 @@ var MessengerModule = (function(Utils, EventBus) {
                             // once loaded, and the CSS max-width rules keep it
                             // inside the paragraph.
                             if (view.state.selection.empty) {
-                                var imageUrlText = event.clipboardData
-                                    ? event.clipboardData.getData('text/plain')
-                                    : '';
-                                if (imageUrlText) {
-                                    var imageUrl = imageUrlText.trim();
-                                    if (/^https?:\/\/\S+$/.test(imageUrl) && isImageUrl(imageUrl)) {
-                                        event.preventDefault();
-                                        editor.chain().focus().insertContent({
-                                            type: 'image',
-                                            attrs: {
-                                                src: imageUrl,
-                                                alt: 'image',
-                                                loading: 'lazy',
-                                                decoding: 'async'
-                                            }
-                                        }).run();
-                                        return true;
-                                    }
-                                }
-                            }
+    var imageUrlText = event.clipboardData
+        ? event.clipboardData.getData('text/plain')
+        : '';
+    if (imageUrlText) {
+        var imageUrl = imageUrlText.trim();
+        if (/^https?:\/\/\S+$/.test(imageUrl) && isImageUrl(imageUrl)) {
+            event.preventDefault();
+
+            // Resolve natural dimensions before inserting. Without
+            // width/height the reader-side post renders the image
+            // at zero height, then jumps to its real size once it
+            // decodes — a CLS spike that the resize reservation
+            // would otherwise prevent. Same pattern the URL-modal
+            // path uses. If the fetch fails, fall through with the
+            // image inserted sans dimensions; better to show it at
+            // whatever size the browser lays out than to drop it.
+            var img = new Image();
+            img.onload = function () {
+                editor.chain().focus().insertContent({
+                    type: 'image',
+                    attrs: {
+                        src: imageUrl,
+                        alt: 'image',
+                        loading: 'lazy',
+                        decoding: 'async',
+                        width: this.naturalWidth,
+                        height: this.naturalHeight
+                    }
+                }).run();
+            };
+            img.onerror = function () {
+                editor.chain().focus().insertContent({
+                    type: 'image',
+                    attrs: {
+                        src: imageUrl,
+                        alt: 'image',
+                        loading: 'lazy',
+                        decoding: 'async'
+                    }
+                }).run();
+            };
+            img.src = imageUrl;
+            return true;
+        }
+    }
+}
 
                             // 5. Lite embeds
                             var clipboard = event.clipboardData;
