@@ -4549,8 +4549,8 @@ lite-vimeo.lite-activated > .lite-embed-playbtn {
   align-items: center;
   flex-wrap: wrap;
   gap: var(--space-md);
-  padding: var(--space-md) var(--space-md) 0 var(--space-md);
-  margin-bottom: var(--space-md);
+  padding: var(--space-md) var(--pad-4);
+  margin-bottom: var(--space-sm);
 }
 .messages-stats { display: flex; gap: var(--space-lg); font-size: var(--text-sm); color: var(--text-secondary); }
 .messages-stats i { margin-right: var(--space-xs); color: var(--primary-light); }
@@ -4584,6 +4584,50 @@ lite-vimeo.lite-activated > .lite-embed-playbtn {
 .msg-sender a:hover { color: var(--primary-light); }
 .msg-date { width: 120px; font-size: var(--text-xs); color: var(--text-tertiary); text-align: left; }
 .msg-select { width: 40px; text-align: center; }
+
+.msg-sender-link {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-xs);
+  text-decoration: none;
+  color: var(--text-secondary);
+  min-width: 0;
+  max-width: 100%;
+}
+
+.msg-sender-link:hover {
+  color: var(--primary-light);
+  text-decoration: none;
+}
+
+.msg-sender-avatar {
+  flex-shrink: 0;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: #fff;
+  font-size: 10px;
+  font-weight: 600;
+  line-height: 1;
+  overflow: hidden;
+}
+
+.msg-sender-avatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.msg-sender-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+}
 
 .messages-action-bar {
   display: flex;
@@ -4631,16 +4675,99 @@ lite-vimeo.lite-activated > .lite-embed-playbtn {
   gap: var(--space-xs);
   color: var(--text-primary);
 }
-.modern-textarea-contacts {
+/* ------------------------------------------------------------
+   Contacts — chip input
+   Replaces the legacy newline-separated textarea. Each name is a
+   removable pill; adding uses the same autocomplete the compose
+   recipient field uses. The hidden textarea stays as the form
+   field the server submits, kept in sync on every add/remove.
+   ------------------------------------------------------------ */
+.contacts-chip-input {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-xs);
   width: 100%;
+  min-height: 3rem;
+  max-height: 16rem;
+  overflow-y: auto;
+  padding: var(--pad-3);
   background: var(--bg-color);
   border: 1px solid var(--border-color);
   border-radius: var(--radius);
-  padding: var(--pad-3);
-  color: var(--text-primary);
-  font-family: var(--font-mono);
+  transition: border-color 0.15s, box-shadow 0.15s;
+  cursor: text;
+}
+
+.contacts-chip-input:focus-within {
+  border-color: var(--primary-color);
+  box-shadow: 0 0 0 2px var(--focus-ring);
+}
+
+/* display: contents lets the chips and the add-input share the
+   parent's flex layout without an extra nesting level of flex items. */
+.contacts-chips {
+  display: contents;
+}
+
+.contacts-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 4px 2px 10px;
+  background: var(--hover-color);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-full);
   font-size: var(--text-sm);
-  resize: vertical;
+  font-weight: 500;
+  color: var(--text-primary);
+  line-height: 1.4;
+  max-width: 100%;
+}
+
+.contacts-chip-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+}
+
+.contacts-chip-remove {
+  background: transparent;
+  border: none;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  color: var(--text-tertiary);
+  font-size: 0.7rem;
+  padding: 0;
+  flex-shrink: 0;
+  transition: background 0.15s, color 0.15s;
+}
+
+.contacts-chip-remove:hover {
+  background: var(--surface-light);
+  color: var(--text-primary);
+}
+
+.contacts-chip-add {
+  flex: 1 1 140px;
+  min-width: 140px;
+  border: none;
+  outline: none;
+  background: transparent;
+  font-family: var(--font-primary);
+  font-size: var(--text-sm);
+  color: var(--text-primary);
+  padding: var(--pad-1) var(--pad-2);
+}
+
+.contacts-chip-add::placeholder {
+  color: var(--text-tertiary);
 }
 .contacts-help { font-size: var(--text-xs); color: var(--text-tertiary); margin: var(--space-xs) 0 0 0; }
 .privacy-option { display: flex; gap: var(--space-lg); flex-wrap: wrap; margin-top: var(--space-sm); }
