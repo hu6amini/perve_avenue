@@ -4644,6 +4644,7 @@ lite-vimeo.lite-activated > .lite-embed-playbtn {
   gap: var(--space-md);
   padding: var(--pad-4);
   border-top: 1px solid var(--border-color);
+  border-bottom-right-radius: var(--radius-lg);
   background: var(--bg-color);
   margin-top: var(--space-sm);
 }
