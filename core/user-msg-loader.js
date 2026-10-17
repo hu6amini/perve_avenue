@@ -249,7 +249,7 @@ whenBodyReady(() => {
                 loadScript("https://cdn.jsdelivr.net/npm/twemoji@14.0.2/dist/twemoji.min.js"),
                 loadScript("https://cdn.jsdelivr.net/gh/hu6amini/perve_avenue@9cdcc6c87d99bfce1f64f07fb1523b8b28f5a516/modules/lite-embed.js"),
                 loadScript("https://cdn.jsdelivr.net/gh/hu6amini/perve_avenue@aa4b053757399bdc7d19ad6e9ae0892b30922b2c/modules/slick-carousel.min.js"),
-                loadScript("https://cdn.jsdelivr.net/gh/hu6amini/perve_avenue@57808c5785b6accbd3ef92bd3410d22439b95e29/modules/messenger.js")
+                loadScript("https://cdn.jsdelivr.net/gh/hu6amini/perve_avenue@603ee93ce25b95cb78f6d533dc9e2d4a2d8bdd99/modules/messenger.js")
             ]);
             const failedC = resultsC.filter(r => r.status === 'rejected');
             if (failedC.length > 0) {
