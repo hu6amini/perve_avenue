@@ -1024,22 +1024,29 @@ var MessengerModule = (function(Utils, EventBus) {
     // Cached per-MID so a page with many messages from the same
     // handful of senders fires one fetch each.
     function fetchSenderAvatar(mid) {
-        if (!mid) return Promise.resolve(null);
-        if (_senderAvatarCache.has(mid)) return Promise.resolve(_senderAvatarCache.get(mid));
-        return fetch('/api.php?mid=' + encodeURIComponent(mid))
-            .then(function(r) { return r.ok ? r.json() : null; })
-            .then(function(data) {
-                if (!data) return null;
-                var user = data['m' + mid] || data.info;
-                var avatar = (user && typeof user.avatar === 'string' && user.avatar) ? user.avatar : null;
-                _senderAvatarCache.set(mid, avatar);
-                return avatar;
-            })
-            .catch(function() {
-                _senderAvatarCache.set(mid, null);
-                return null;
-            });
-    }
+    if (!mid) return Promise.resolve(null);
+    if (_senderAvatarCache.has(mid)) return Promise.resolve(_senderAvatarCache.get(mid));
+    return fetch('/api.php?mid=' + encodeURIComponent(mid))
+        .then(function(r) { return r.ok ? r.json() : null; })
+        .then(function(data) {
+            if (!data) return null;
+            var user = data['m' + mid] || data.info;
+            var result = {
+                avatar: (user && typeof user.avatar === 'string' && user.avatar) ? user.avatar : null,
+                // Field name is unconfirmed — inspect the JSON shape of
+                // /api.php?mid=X once to find out what the group is
+                // called. Common candidates: user.group, user.role,
+                // user.userGroup, user.user_group, user.position.
+                group: (user && typeof user.group === 'string') ? user.group : null
+            };
+            _senderAvatarCache.set(mid, result);
+            return result;
+        })
+        .catch(function() {
+            _senderAvatarCache.set(mid, null);
+            return null;
+        });
+}
 
     // ------------------------------------------------------------------------
     // MENTION SEARCH
@@ -6278,22 +6285,25 @@ var MessengerModule = (function(Utils, EventBus) {
                 // Swap the colored initial for the real avatar once
                 // /api.php?mid=X resolves. Failures keep the initial.
                 if (senderMid) {
-                    (function(rowEl, mid) {
-                        fetchSenderAvatar(mid).then(function(avatarUrl) {
-                            if (!avatarUrl) return;
-                            if (shouldUseInitialAvatar(avatarUrl)) return;
-                            var avatarEl = rowEl.querySelector('.msg-sender-avatar');
-                            if (!avatarEl) return;
-                            var img = document.createElement('img');
-                            img.src = optimizeAvatarUrl(avatarUrl, 48, 48) || avatarUrl;
-                            img.alt = '';
-                            img.loading = 'lazy';
-                            img.decoding = 'async';
-                            avatarEl.innerHTML = '';
-                            avatarEl.appendChild(img);
-                        }).catch(function() {});
-                    })(msgRow, senderMid);
-                }
+    (function(rowEl, mid) {
+        fetchSenderAvatar(mid).then(function(result) {
+            if (!result || !result.avatar) return;
+            if (shouldUseInitialAvatar(result.avatar)) return;
+            var avatarEl = rowEl.querySelector('.msg-sender-avatar');
+            if (!avatarEl) return;
+            var img = document.createElement('img');
+            img.src = optimizeAvatarUrl(result.avatar, 48, 48) || result.avatar;
+            img.alt = '';
+            img.loading = 'lazy';
+            img.decoding = 'async';
+            avatarEl.innerHTML = '';
+            avatarEl.appendChild(img);
+            if (result.group) {
+                avatarEl.classList.add('group-' + result.group);
+            }
+        }).catch(function() {});
+    })(msgRow, senderMid);
+}
             }
             container.appendChild(listContainer);
 
