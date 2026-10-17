@@ -4613,7 +4613,16 @@ lite-vimeo.lite-activated > .lite-embed-playbtn {
   font-weight: 600;
   line-height: 1;
   overflow: hidden;
+  border: 2px solid var(--primary-color);
+  box-sizing: border-box;
 }
+
+.msg-sender-avatar.group-founder          { border-color: #f59e0b; }
+.msg-sender-avatar.group-administrator    { border-color: #dc2626; }
+.msg-sender-avatar.group-global-moderator { border-color: #06b6d4; }
+.msg-sender-avatar.group-game-dev         { border-color: #3b82f6; }
+.msg-sender-avatar.group-fan              { border-color: #ec4899; }
+.msg-sender-avatar.group-member           { border-color: var(--primary-color); }
 
 .msg-sender-avatar img {
   width: 100%;
