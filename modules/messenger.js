@@ -123,6 +123,13 @@
 //      neither an extension nor a recognised host fall through to
 //      the link preview. IMAGE_URL_EXTENSIONS and IMAGE_URL_HOSTS
 //      are the two extension points.
+// v20: mobile-friendly dropdowns + sheet mode for the toolbar menus
+//      and emoji picker; image hover toolbar clamped to viewport;
+//      contacts friends/blocked are now chip inputs (per-name
+//      add/remove, autocomplete against the mention search API)
+//      instead of newline-separated textareas; messages list gains
+//      per-row sender avatars (colored initial immediately, real
+//      avatar swapped in when /api.php?mid=X resolves).
 var MessengerModule = (function(Utils, EventBus) {
     'use strict';
 
@@ -141,6 +148,11 @@ var MessengerModule = (function(Utils, EventBus) {
     var _editorInstance = null;
     var _boundHandlers = [];
     var _dropdownBackdrop = null;
+
+    // Sender avatar cache for the messages list. Keyed by MID. Lives
+    // at module scope so a page with many messages from the same
+    // handful of senders only fetches each sender's data once.
+    var _senderAvatarCache = new Map();
 
     function addGlobalListener(el, type, handler, opts) {
         el.addEventListener(type, handler, opts);
@@ -991,6 +1003,29 @@ var MessengerModule = (function(Utils, EventBus) {
     }
 
     // ------------------------------------------------------------------------
+    // SENDER AVATAR RESOLUTION (messages list)
+    // ------------------------------------------------------------------------
+    // Cached per-MID so a page with many messages from the same
+    // handful of senders fires one fetch each.
+    function fetchSenderAvatar(mid) {
+        if (!mid) return Promise.resolve(null);
+        if (_senderAvatarCache.has(mid)) return Promise.resolve(_senderAvatarCache.get(mid));
+        return fetch('/api.php?mid=' + encodeURIComponent(mid))
+            .then(function(r) { return r.ok ? r.json() : null; })
+            .then(function(data) {
+                if (!data) return null;
+                var user = data['m' + mid] || data.info;
+                var avatar = (user && typeof user.avatar === 'string' && user.avatar) ? user.avatar : null;
+                _senderAvatarCache.set(mid, avatar);
+                return avatar;
+            })
+            .catch(function() {
+                _senderAvatarCache.set(mid, null);
+                return null;
+            });
+    }
+
+    // ------------------------------------------------------------------------
     // MENTION SEARCH
     // ------------------------------------------------------------------------
     var _mentionSearchAbort = null;
@@ -1248,6 +1283,126 @@ var MessengerModule = (function(Utils, EventBus) {
         inputEl.addEventListener('blur', function() {
             blurCloseTimer = setTimeout(closePopup, 150);
         });
+    }
+
+    // ------------------------------------------------------------------------
+    // CONTACTS CHIP INPUT
+    // ------------------------------------------------------------------------
+    // Replaces the newline-separated <textarea> that the legacy contacts
+    // page uses for the friends list and the blocked users list. Each
+    // name is a removable pill; adding uses the same autocomplete the
+    // compose recipient field uses. The hidden textarea stays as the
+    // form field the server submits, kept in sync on every add/remove.
+    function buildContactsChipInput(hiddenTextarea, placeholder) {
+        var container = document.createElement('div');
+        container.className = 'contacts-chip-input';
+
+        var chipList = document.createElement('div');
+        chipList.className = 'contacts-chips';
+        container.appendChild(chipList);
+
+        var addInput = document.createElement('input');
+        addInput.type = 'text';
+        addInput.className = 'contacts-chip-add';
+        addInput.placeholder = placeholder;
+        addInput.setAttribute('autocomplete', 'off');
+        addInput.setAttribute('spellcheck', 'false');
+        container.appendChild(addInput);
+
+        // Seed from the existing textarea value. Trim, filter, and
+        // dedupe case-insensitively while preserving first-seen case.
+        var names = (hiddenTextarea && hiddenTextarea.value || '')
+            .split(/\n+/)
+            .map(function(s) { return s.trim(); })
+            .filter(Boolean);
+        var seenKeys = {};
+        names = names.filter(function(n) {
+            var k = n.toLowerCase();
+            if (seenKeys[k]) return false;
+            seenKeys[k] = true;
+            return true;
+        });
+
+        function syncToTextarea() {
+            if (hiddenTextarea) hiddenTextarea.value = names.join('\n');
+        }
+
+        function renderChips() {
+            chipList.innerHTML = '';
+            chipList.style.display = names.length === 0 ? 'none' : '';
+            names.forEach(function(name, idx) {
+                var chip = document.createElement('span');
+                chip.className = 'contacts-chip';
+
+                var label = document.createElement('span');
+                label.className = 'contacts-chip-label';
+                label.textContent = name;
+                chip.appendChild(label);
+
+                var btn = document.createElement('button');
+                btn.type = 'button';
+                btn.className = 'contacts-chip-remove';
+                btn.setAttribute('aria-label', 'Remove ' + name);
+                btn.innerHTML = '<i class="fa-regular fa-xmark" aria-hidden="true"></i>';
+                btn.addEventListener('click', function(e) {
+                    e.stopPropagation();
+                    names.splice(idx, 1);
+                    renderChips();
+                    syncToTextarea();
+                });
+                chip.appendChild(btn);
+
+                chipList.appendChild(chip);
+            });
+        }
+
+        function addName(rawName) {
+            var name = String(rawName || '').trim();
+            if (!name) return;
+            var lower = name.toLowerCase();
+            if (names.some(function(n) { return n.toLowerCase() === lower; })) {
+                addInput.value = '';
+                return;
+            }
+            names.push(name);
+            renderChips();
+            syncToTextarea();
+            addInput.value = '';
+        }
+
+        // Reuse the recipient autocomplete for search + free-text commit.
+        attachRecipientAutocomplete(addInput, function(user) {
+            if (user && user.name) addName(user.name);
+        });
+
+        // Extra keyboard: Backspace on empty removes the last chip (Gmail
+        // pattern); comma commits the typed text as a chip.
+        addInput.addEventListener('keydown', function(e) {
+            if (e.key === 'Backspace' && !addInput.value && names.length > 0) {
+                e.preventDefault();
+                names.pop();
+                renderChips();
+                syncToTextarea();
+                return;
+            }
+            if (e.key === ',') {
+                e.preventDefault();
+                addName(addInput.value);
+                return;
+            }
+        });
+
+        // Clicking anywhere inside the chip container that isn't a
+        // chip-remove button focuses the add input — standard chip-input
+        // behaviour for Gmail/Notion-style controls.
+        container.addEventListener('click', function(e) {
+            if (e.target.closest('.contacts-chip-remove')) return;
+            addInput.focus();
+        });
+
+        renderChips();
+        syncToTextarea();
+        return container;
     }
 
     // ------------------------------------------------------------------------
@@ -6040,6 +6195,7 @@ var MessengerModule = (function(Utils, EventBus) {
             var dlItems       = document.querySelectorAll('.main_list dl dd');
             var totalMessages = dlItems.length >= 1 ? dlItems[0].innerText.trim() : '0';
             var spaceLeft     = dlItems.length >= 2 ? dlItems[1].innerText.trim() : '0';
+
             var folderRow = document.createElement('div');
             folderRow.className = 'messages-folder-row';
             folderRow.innerHTML = ''
@@ -6054,6 +6210,7 @@ var MessengerModule = (function(Utils, EventBus) {
                 + '</select>'
                 + '</div>';
             container.appendChild(folderRow);
+
             var listHeader = document.createElement('div');
             listHeader.className = 'messages-list-header';
             listHeader.innerHTML = ''
@@ -6063,6 +6220,7 @@ var MessengerModule = (function(Utils, EventBus) {
                 + '<div class="msg-date">Date</div>'
                 + '<div class="msg-select"><input type="checkbox" id="select-all-msgs" class="modern-checkbox-input" aria-label="Select all messages"></div>';
             container.appendChild(listHeader);
+
             var listContainer = document.createElement('div');
             listContainer.className = 'messages-list';
             for (var i = 0; i < messageRows.length; i++) {
@@ -6074,17 +6232,55 @@ var MessengerModule = (function(Utils, EventBus) {
                 var date       = dateSpan ? (dateSpan.getAttribute('title') || dateSpan.textContent) : '';
                 var origCheckbox = row.querySelector('input[type="checkbox"]');
                 var msgName = origCheckbox ? origCheckbox.name : '';
+
+                var senderName = senderLink ? senderLink.textContent.trim() : 'Unknown';
+                var senderHref = senderLink ? senderLink.getAttribute('href') : '#';
+                var senderMid = null;
+                if (senderHref) {
+                    var midMatch = senderHref.match(/[?&]MID=(\d+)/);
+                    if (midMatch) senderMid = midMatch[1];
+                }
+
+                var initial = getInitialFromName(senderName);
+                var bgColor = getColorFromNickname(senderName, senderMid);
+
                 var msgRow = document.createElement('div');
                 msgRow.className = 'message-row' + (isUnread ? ' unread' : ' read');
                 msgRow.innerHTML = ''
                     + '<div class="msg-status"><i class="fa-regular ' + (isUnread ? 'fa-envelope' : 'fa-envelope-open') + '"></i></div>'
                     + '<div class="msg-title"><a href="' + escapeHtml(titleLink ? titleLink.getAttribute('href') : '#') + '">' + escapeHtml(titleLink ? titleLink.textContent.trim() : '(no title)') + '</a></div>'
-                    + '<div class="msg-sender"><a href="' + escapeHtml(senderLink ? senderLink.getAttribute('href') : '#') + '">' + escapeHtml(senderLink ? senderLink.textContent.trim() : 'Unknown') + '</a></div>'
+                    + '<div class="msg-sender">'
+                    +   '<a href="' + escapeHtml(senderHref) + '" class="msg-sender-link">'
+                    +     '<span class="msg-sender-avatar" style="background-color:#' + bgColor + ';">' + escapeHtml(initial) + '</span>'
+                    +     '<span class="msg-sender-name">' + escapeHtml(senderName) + '</span>'
+                    +   '</a>'
+                    + '</div>'
                     + '<div class="msg-date">' + escapeHtml(formatDate(date)) + '</div>'
                     + '<div class="msg-select"><input type="checkbox" class="modern-checkbox-input" name="' + escapeHtml(msgName) + '" id="msg-' + i + '" aria-label="Select message"></div>';
                 listContainer.appendChild(msgRow);
+
+                // Swap the colored initial for the real avatar once
+                // /api.php?mid=X resolves. Failures keep the initial.
+                if (senderMid) {
+                    (function(rowEl, mid) {
+                        fetchSenderAvatar(mid).then(function(avatarUrl) {
+                            if (!avatarUrl) return;
+                            if (shouldUseInitialAvatar(avatarUrl)) return;
+                            var avatarEl = rowEl.querySelector('.msg-sender-avatar');
+                            if (!avatarEl) return;
+                            var img = document.createElement('img');
+                            img.src = optimizeAvatarUrl(avatarUrl, 48, 48) || avatarUrl;
+                            img.alt = '';
+                            img.loading = 'lazy';
+                            img.decoding = 'async';
+                            avatarEl.innerHTML = '';
+                            avatarEl.appendChild(img);
+                        }).catch(function() {});
+                    })(msgRow, senderMid);
+                }
             }
             container.appendChild(listContainer);
+
             var actionBar = document.createElement('div');
             actionBar.className = 'messages-action-bar';
             actionBar.innerHTML = ''
@@ -6096,6 +6292,7 @@ var MessengerModule = (function(Utils, EventBus) {
                 + '<button class="modern-btn modern-btn-secondary danger" id="delete-messages"><i class="fa-regular fa-trash-can"></i> Delete selected</button>'
                 + '</div>';
             container.appendChild(actionBar);
+
             var folderForm   = folderSelect ? folderSelect.form : null;
             var inboxForm    = document.querySelector('form[name="inbox"]');
             var modernFolder = container.querySelector('#modern-folder-select');
@@ -6105,6 +6302,7 @@ var MessengerModule = (function(Utils, EventBus) {
                     folderForm.submit();
                 });
             }
+
             var selectAll = container.querySelector('#select-all-msgs');
             if (selectAll) {
                 selectAll.addEventListener('change', function() {
@@ -6113,6 +6311,7 @@ var MessengerModule = (function(Utils, EventBus) {
                     });
                 });
             }
+
             function syncCheckboxesToForm() {
                 if (!inboxForm) return;
                 container.querySelectorAll('.message-row .modern-checkbox-input').forEach(function(cb) {
@@ -6120,6 +6319,7 @@ var MessengerModule = (function(Utils, EventBus) {
                     if (hidden) hidden.checked = cb.checked;
                 });
             }
+
             var deleteBtn = container.querySelector('#delete-messages');
             if (deleteBtn && inboxForm) {
                 deleteBtn.addEventListener('click', function() {
@@ -6129,6 +6329,7 @@ var MessengerModule = (function(Utils, EventBus) {
                     if (delBtn) delBtn.click(); else inboxForm.submit();
                 });
             }
+
             var moveBtn = container.querySelector('#move-messages');
             if (moveBtn && inboxForm) {
                 moveBtn.addEventListener('click', function() {
@@ -6162,25 +6363,52 @@ var MessengerModule = (function(Utils, EventBus) {
         var container = document.createElement('div');
         container.className = 'modern-messenger-section';
         container.id = 'contacts-section';
+
         try {
             var friendsTextarea = document.querySelector('textarea[name="can_contact"]');
             var blockedTextarea = document.querySelector('textarea[name="cannot_contact"]');
             var privacySelect   = document.querySelector('select[name="nobody_can_contact"]');
             var updateButton    = document.querySelector('input[value="Update Contact list"]');
+
+            // Friends card — chips
             var friendsCard = document.createElement('div');
             friendsCard.className = 'contacts-card';
-            friendsCard.innerHTML = ''
-                + '<h3 class="contacts-card-title"><i class="fa-regular fa-user-group"></i> Friends list</h3>'
-                + '<textarea id="modern-friends-list" class="modern-textarea-contacts" rows="8" placeholder="One username per line" aria-label="Friends list">' + escapeHtml(friendsTextarea ? friendsTextarea.value : '') + '</textarea>'
-                + '<p class="contacts-help">Users you allow to message you when privacy mode is on.</p>';
+
+            var friendsTitle = document.createElement('h3');
+            friendsTitle.className = 'contacts-card-title';
+            friendsTitle.innerHTML = '<i class="fa-regular fa-user-group"></i> Friends list';
+            friendsCard.appendChild(friendsTitle);
+
+            friendsCard.appendChild(
+                buildContactsChipInput(friendsTextarea, 'Add a friend by name…')
+            );
+
+            var friendsHelp = document.createElement('p');
+            friendsHelp.className = 'contacts-help';
+            friendsHelp.textContent = 'Users you allow to message you when privacy mode is on.';
+            friendsCard.appendChild(friendsHelp);
             container.appendChild(friendsCard);
+
+            // Blocked card — chips
             var blockedCard = document.createElement('div');
             blockedCard.className = 'contacts-card';
-            blockedCard.innerHTML = ''
-                + '<h3 class="contacts-card-title"><i class="fa-regular fa-ban"></i> Blocked users</h3>'
-                + '<textarea id="modern-blocked-list" class="modern-textarea-contacts" rows="5" placeholder="One username per line" aria-label="Blocked users">' + escapeHtml(blockedTextarea ? blockedTextarea.value : '') + '</textarea>'
-                + '<p class="contacts-help">These users cannot send you messages or mention you.</p>';
+
+            var blockedTitle = document.createElement('h3');
+            blockedTitle.className = 'contacts-card-title';
+            blockedTitle.innerHTML = '<i class="fa-regular fa-ban"></i> Blocked users';
+            blockedCard.appendChild(blockedTitle);
+
+            blockedCard.appendChild(
+                buildContactsChipInput(blockedTextarea, 'Add a blocked user by name…')
+            );
+
+            var blockedHelp = document.createElement('p');
+            blockedHelp.className = 'contacts-help';
+            blockedHelp.textContent = 'These users cannot send you messages or mention you.';
+            blockedCard.appendChild(blockedHelp);
             container.appendChild(blockedCard);
+
+            // Privacy card — unchanged
             var privacyVal = privacySelect ? privacySelect.value : '0';
             var privacyCard = document.createElement('div');
             privacyCard.className = 'contacts-card';
@@ -6191,15 +6419,19 @@ var MessengerModule = (function(Utils, EventBus) {
                 + '<label class="modern-radio"><input type="radio" name="privacy" value="0" ' + (privacyVal === '0' ? 'checked' : '') + '> <span>No — everyone can message me (except blocked users)</span></label>'
                 + '</div>';
             container.appendChild(privacyCard);
+
+            // Actions
             var actionsDiv = document.createElement('div');
             actionsDiv.className = 'contacts-actions';
             actionsDiv.innerHTML = '<button class="modern-btn modern-btn-primary" id="update-contacts"><i class="fa-regular fa-floppy-disk"></i> Update contact list</button>';
             container.appendChild(actionsDiv);
+
             var updateContactsBtn = container.querySelector('#update-contacts');
             if (updateContactsBtn && updateButton) {
                 updateContactsBtn.addEventListener('click', function() {
-                    if (friendsTextarea) friendsTextarea.value = container.querySelector('#modern-friends-list').value;
-                    if (blockedTextarea) blockedTextarea.value = container.querySelector('#modern-blocked-list').value;
+                    // The chip inputs already keep their hidden textareas
+                    // in sync on every add/remove, so only the privacy
+                    // radio needs an explicit copy across.
                     var checkedPrivacy = container.querySelector('input[name="privacy"]:checked');
                     if (privacySelect && checkedPrivacy) privacySelect.value = checkedPrivacy.value;
                     updateButton.click();
