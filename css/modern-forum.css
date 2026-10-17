@@ -4613,7 +4613,7 @@ lite-vimeo.lite-activated > .lite-embed-playbtn {
   font-weight: 600;
   line-height: 1;
   overflow: hidden;
-  border: 2px solid var(--primary-color);
+  border: 1px solid var(--primary-color);
   box-sizing: border-box;
 }
 
