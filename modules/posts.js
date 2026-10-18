@@ -2570,8 +2570,8 @@ if (data.availableActions?.delete) actionsHtml += '<button class="action-icon de
             let messageActionsHtml = '';
             if (data.isMessage && (data.availableActions?.friend || data.availableActions?.block)) {
                 messageActionsHtml = '<div class="post-message-actions">';
-                if (data.availableActions.friend) messageActionsHtml += '<button class="action-icon" title="Add as Friend" aria-label="Add as Friend" data-action="friend" data-pid="' + data.postId + '"><i class="fa-regular fa-user-plus"></i></button>';
-                if (data.availableActions.block) messageActionsHtml += '<button class="action-icon" title="Block User" aria-label="Block User" data-action="block" data-pid="' + data.postId + '"><i class="fa-regular fa-ban"></i></button>';
+                if (data.availableActions.friend) messageActionsHtml += '<button class="action-icon" title="Add as friend" aria-label="Add as Friend" data-action="friend" data-pid="' + data.postId + '"><i class="fa-regular fa-user-plus"></i></button>';
+                if (data.availableActions.block) messageActionsHtml += '<button class="action-icon" title="Block user" aria-label="Block User" data-action="block" data-pid="' + data.postId + '"><i class="fa-regular fa-ban"></i></button>';
                 messageActionsHtml += '</div>';
             }
             footerHtml = '<footer class="post-footer"><div class="post-reactions">' + likeButton + reactionsHtml + '</div>' + memberActionsHtml + messageActionsHtml + ipHtml + '</footer>';
