@@ -1,14 +1,27 @@
-// Forum Modernizer - Posts Module v2.6
+// Forum Modernizer - Posts Module v2.7
 //   + paragraphization: legacy content wrapped in <p>, top-level <br> removed
 //   + metadata <br> cleanup (bottomborder adjacency ordering fixed)
 //   + trailing-<br> / whitespace net
 // v2.5: lite embeds now backed by the self-hosted lite-embed.js module.
 //       transformLiteEmbeds and hydrateLiteEmbeds unchanged — they operate
 //       on the wrapper / marker level, not the custom element internals.
+// v2.7: read-receipt posts are restructured. Two independent signals
+//       are required — the ".mback .mtitle" header starting with
+//       "Read Receipt:" and the post body ending with a lone <b>
+//       containing "<name> has read this message" — before the
+//       transform fires. Either alone produces false positives; both
+//       together are unambiguous. On match, the original message is
+//       wrapped in .modern-quote.long-quote.read-receipt-original
+//       (so long originals collapse exactly like any other quote)
+//       and the "has read" line becomes a .read-receipt-notice
+//       banner. The article picks up .is-read-receipt so the styles
+//       stay scoped. Disagreements between the two signals log a
+//       warning and skip the transform — user prose that happens to
+//       end with "has read this message" no longer restructures.
 'use strict';
 
 const ForumPostsModule = (function () {
-    console.log('🔥 ForumPostsModule v2.6 loaded');
+    console.log('🔥 ForumPostsModule v2.7 loaded');
 
     // ===== USER TIMING: mark script start =====
     if (typeof performance !== 'undefined' && performance.mark) {
@@ -791,9 +804,195 @@ function parseDateFromTitle(title) {
         const dd = $post.querySelector('.u_joined dd');
         return dd ? dd.textContent.trim() : 'Unknown';
     }
+
+    // ------------------------------------------------------------------------
+    // READ RECEIPT DETECTION
+    //
+    // Two independent signals combine to identify a read receipt:
+    //
+    //   1. Structural — the .mback .mtitle header immediately preceding
+    //      the message body starts with "Read Receipt:". The title is a
+    //      sibling of the post's ancestor chain (both under .skin_tbl),
+    //      so it isn't reachable from $post.querySelector; it needs to
+    //      be located via $post.closest('.skin_tbl').
+    //
+    //   2. Content — the post body's last block is a lone <b> element
+    //      (or <strong>, depending on forum version) whose text matches
+    //      "<name> has read this message". The <b> marker is where the
+    //      original message ends and the system notification begins,
+    //      so it defines the split point.
+    //
+    // Both must be present. Either alone produces false positives:
+    //   - Title alone can't tell us where to split the body.
+    //   - Body alone matches user prose that happens to end with the
+    //     same sentence.
+    // The decision matrix and skip+warn behaviour for disagreements
+    // live in extractReceipt below.
+    // ------------------------------------------------------------------------
+
+    var RECEIPT_LINE_RE = /^(.+?)\s+has read (?:this|the|your)?\s*message\.?\s*$/i;
+    var RECEIPT_TITLE_RE = /^Read Receipt:/i;
+
+    function detectReceiptTitle($post) {
+        if (!$post) return null;
+        // Title sits under .skin_tbl, alongside the .mainbg that wraps
+        // the post. Fall back to parentElement if .skin_tbl is missing
+        // (defensive against future markup shifts).
+        var scope = $post.closest('.skin_tbl') || $post.parentElement;
+        if (!scope) return null;
+        var titleEl = scope.querySelector('.mback .mtitle');
+        if (!titleEl) return null;
+        var text = (titleEl.textContent || '').trim();
+        if (!RECEIPT_TITLE_RE.test(text)) return null;
+        return { titleText: text };
+    }
+
+    function detectReceiptBody(html) {
+        if (!html || typeof html !== 'string') {
+            return { bodyMatch: null };
+        }
+        var tempDiv = document.createElement('div');
+        tempDiv.innerHTML = html;
+
+        var lastP = tempDiv.lastElementChild;
+        if (!lastP || lastP.tagName !== 'P') {
+            return { bodyMatch: null };
+        }
+
+        // The last paragraph must contain exactly one element child (a
+        // <b> or <strong>) and nothing else meaningful — no surrounding
+        // text, no inline siblings. This rejects replies whose body is
+        // just a quote of a receipt: the "has read" line lives inside
+        // the .modern-quote wrapper, so the outer message's last <p>
+        // is the reply text, not the marker.
+        var meaningful = Array.from(lastP.childNodes).filter(function (n) {
+            if (n.nodeType === 1) return true;
+            if (n.nodeType === 3 && n.nodeValue.trim()) return true;
+            return false;
+        });
+        if (meaningful.length !== 1) return { bodyMatch: null };
+
+        var firstEl = meaningful[0];
+        if (firstEl.nodeType !== 1) return { bodyMatch: null };
+        if (firstEl.tagName !== 'B' && firstEl.tagName !== 'STRONG') {
+            return { bodyMatch: null };
+        }
+
+        var boldText = firstEl.textContent.trim();
+        var m = boldText.match(RECEIPT_LINE_RE);
+        if (!m) return { bodyMatch: null };
+
+        return {
+            bodyMatch: {
+                readerName: m[1].trim(),
+                lastP: lastP
+            }
+        };
+    }
+
+    function extractReceipt(html, $post) {
+        var titleSignal = detectReceiptTitle($post);
+        var bodySignal = detectReceiptBody(html);
+        var titleMatches = titleSignal !== null;
+        var bodyMatch = bodySignal.bodyMatch;
+        var bodyMatches = bodyMatch !== null;
+
+        // Neither — the common case. Skip silently.
+        if (!titleMatches && !bodyMatches) {
+            return { html: html, isReadReceipt: false };
+        }
+
+        // Title says receipt, body doesn't match. Two explanations:
+        // (a) user edited the receipt and removed the bold line, or
+        // (b) the forum changed its body marker format. We can't
+        //     split reliably, so skip. Log so the maintainer sees it.
+        if (titleMatches && !bodyMatches) {
+            console.warn(
+                '[PostsModule] Read Receipt title found but body marker missing — ' +
+                'skipping transform. Title:', titleSignal.titleText
+            );
+            return { html: html, isReadReceipt: false };
+        }
+
+        // Body says receipt, title doesn't. Most likely a user wrote
+        // "Alice has read this message" in a normal post. Skip rather
+        // than restructure unrelated content. Log so we notice if the
+        // title format ever changes.
+        if (!titleMatches && bodyMatches) {
+            console.warn(
+                '[PostsModule] Receipt body marker found but no Read Receipt title — ' +
+                'assuming user prose, skipping transform. Reader name was:',
+                bodyMatch.readerName
+            );
+            return { html: html, isReadReceipt: false };
+        }
+
+        // Both matched — build the quote + notice structure.
+        try {
+            var tempDiv = document.createElement('div');
+            tempDiv.innerHTML = html;
+            var lastP = tempDiv.lastElementChild;
+            if (!lastP || lastP.tagName !== 'P') {
+                return { html: html, isReadReceipt: false };
+            }
+
+            // Move everything before the receipt line into the quote.
+            var quote = document.createElement('div');
+            quote.className = 'modern-quote long-quote read-receipt-original';
+            quote.innerHTML =
+                '<div class="quote-header">' +
+                    '<div class="quote-meta">' +
+                        '<div class="quote-icon"><i class="fa-regular fa-message" aria-hidden="true"></i></div>' +
+                        '<div class="quote-info"><span class="quote-author">Original message</span></div>' +
+                    '</div>' +
+                '</div>';
+
+            var content = document.createElement('div');
+            content.className = 'quote-content';
+            while (tempDiv.firstElementChild && tempDiv.firstElementChild !== lastP) {
+                content.appendChild(tempDiv.firstElementChild);
+            }
+
+            // Empty original — happens when the receipt was generated
+            // against a body that was already empty, or when the user
+            // opens a receipt whose original they've since deleted.
+            // Skip the quote entirely and render only the notice.
+            var hasContent = Array.from(content.childNodes).some(function (n) {
+                if (n.nodeType === 1) return true;
+                if (n.nodeType === 3 && n.nodeValue.trim()) return true;
+                return false;
+            });
+
+            if (hasContent) {
+                quote.appendChild(content);
+                quote.insertAdjacentHTML(
+                    'beforeend',
+                    '<button class="quote-expand-btn" type="button" aria-expanded="false" aria-label="Show full quote">' +
+                        '<i class="fa-regular fa-angle-down" aria-hidden="true"></i> <span class="expand-text">Show more</span>' +
+                    '</button>'
+                );
+            }
+
+            var notice = document.createElement('p');
+            notice.className = 'read-receipt-notice';
+            notice.innerHTML =
+                '<i class="fa-regular fa-circle-check" aria-hidden="true"></i>' +
+                '<span><strong>' + escapeHtml(bodyMatch.readerName) + '</strong> has read this message</span>';
+
+            tempDiv.innerHTML = '';
+            if (hasContent) tempDiv.appendChild(quote);
+            tempDiv.appendChild(notice);
+
+            return { html: tempDiv.innerHTML, isReadReceipt: true };
+        } catch (e) {
+            console.warn('[PostsModule] Receipt transform failed:', e);
+            return { html: html, isReadReceipt: false };
+        }
+    }
+
     function getMessageContent($post) {
         const contentTable = $post.querySelector('td.right.Item table.color');
-        if (!contentTable) return '';
+        if (!contentTable) return { html: '', isReadReceipt: false };
         const clone = contentTable.cloneNode(true);
         const allBolds = clone.querySelectorAll('b');
         for (const bold of allBolds) {
@@ -816,7 +1015,7 @@ function parseDateFromTitle(title) {
         html = transformUserTags(html);
         html = transformNSFWTags(html);
         html = paragraphizeHtml(html);
-        return html;
+        return extractReceipt(html, $post);
     }
     function getMessagePostDate($post) {
         const whenSpan = $post.querySelector('.when');
@@ -2378,7 +2577,8 @@ function attemptWrapImage(img) {
             footerHtml = '<footer class="post-footer"><div class="post-reactions">' + likeButton + reactionsHtml + '</div>' + memberActionsHtml + messageActionsHtml + ipHtml + '</footer>';
         }
 
-        return '<article id="entry' + data.postId + '" class="post-card ' + groupCssClass + '" data-original-id="' + (data.originalIdPrefix || CONFIG.POST_ID_PREFIX) + data.postId + '" data-post-id="' + data.postId + '" aria-labelledby="post-title-' + data.postId + '">' +
+        const receiptClass = data.isReadReceipt ? ' is-read-receipt' : '';
+        return '<article id="entry' + data.postId + '" class="post-card ' + groupCssClass + receiptClass + '" data-original-id="' + (data.originalIdPrefix || CONFIG.POST_ID_PREFIX) + data.postId + '" data-post-id="' + data.postId + '" aria-labelledby="post-title-' + data.postId + '">' +
             '<header class="post-card-header"><div class="post-meta"><div class="post-number"><i class="fa-regular fa-hashtag" aria-hidden="true"></i> ' + data.postNumber + '</div>' + postTimeHtml + '</div>' + headerActionsHtml + '</header>' +
             '<div class="post-card-body"><div class="avatar-modern">' + avatarHtml + '</div>' +
             '<div class="post-user-info"><div class="user-name"><a href="' + profileUrl + '" class="user-profile-link">' + escapeHtml(username) + '</a></div>' +
@@ -3746,10 +3946,13 @@ function attachPollHandlers(modernPoll, legacyPoll, pollData) {
                 mids.push(mid);
                 const postDate = getMessagePostDate($post);
                 const relativeTime = postDate ? getRelativeTimeString(postDate) : 'Recently';
+                const contentResult = getMessageContent($post);
                 postsData.push({
                     postId: msid, mid, originalPost: $post, username: getMessageUsername($post),
                     groupText: getMessageGroup($post), postCount: getMessagePostCount($post),
-                    joinDate: getMessageJoinDate($post), contentHtml: getMessageContent($post),
+                    joinDate: getMessageJoinDate($post),
+                    contentHtml: contentResult.html,
+                    isReadReceipt: contentResult.isReadReceipt,
                     relativeTime, postDate, isMessage: true, hideFooter: false, hideActions: false,
                     availableActions: { reply: true, delete: true, friend: true, block: true },
                     postNumber: i + 1
