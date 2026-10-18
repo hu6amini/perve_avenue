@@ -2546,7 +2546,9 @@ function attemptWrapImage(img) {
 if (data.availableActions?.edit) actionsHtml += '<button class="action-icon" title="Edit" aria-label="Edit this post" data-action="edit" data-pid="' + data.postId + '"><i class="fa-regular fa-pen-to-square"></i></button>';
 if (data.availableActions?.share) actionsHtml += '<button class="action-icon" title="Share" aria-label="Share this post" data-action="share" data-pid="' + data.postId + '"><i class="fa-regular fa-share-nodes"></i></button>';
 if (data.availableActions?.report) actionsHtml += '<button class="action-icon report-action" title="Report" aria-label="Report this post" data-action="report" data-pid="' + data.postId + '"><i class="fa-regular fa-circle-exclamation"></i></button>';
-if (data.isMessage && data.availableActions?.reply) actionsHtml += '<button class="action-icon" title="Reply" aria-label="Reply" data-action="reply" data-pid="' + data.postId + '"><i class="fa-regular fa-reply"></i></button>';
+            if (data.isMessage && data.availableActions?.reply && data.replyHref) {
+                actionsHtml += '<a href="' + escapeHtml(data.replyHref) + '" class="action-icon" title="Reply" aria-label="Reply"><i class="fa-regular fa-reply"></i></a>';
+            }
 if (data.availableActions?.delete) actionsHtml += '<button class="action-icon delete-action" title="Delete" aria-label="Delete this post" data-action="delete" data-pid="' + data.postId + '"><i class="fa-regular fa-trash-can"></i></button>';
         }
 
@@ -2677,22 +2679,67 @@ if (data.availableActions?.delete) actionsHtml += '<button class="action-icon de
         const editLink = originalPost.querySelector('a[href*="CODE=08"]');
         if (editLink) window.location.href = editLink.getAttribute('href');
     }
-    function handleDelete(pid) {
+    function showConfirmDialog(opts) {
+    var overlay = document.createElement('div');
+    overlay.className = 'modern-modal-overlay';
+
+    var box = document.createElement('div');
+    box.className = 'modern-modal-box modern-confirm-dialog';
+    box.innerHTML =
+        '<h3 class="modern-confirm-title">' + escapeHtml(opts.title || 'Confirm') + '</h3>' +
+        '<p class="modern-confirm-message">' + escapeHtml(opts.message || '') + '</p>' +
+        '<div class="modern-confirm-actions">' +
+            '<button type="button" class="modern-btn modern-btn-secondary" data-action="cancel">' +
+                escapeHtml(opts.cancelText || 'Cancel') +
+            '</button>' +
+            '<button type="button" class="modern-btn modern-btn-danger" data-action="confirm">' +
+                escapeHtml(opts.confirmText || 'Confirm') +
+            '</button>' +
+        '</div>';
+
+    overlay.appendChild(box);
+    document.body.appendChild(overlay);
+
+    var prevFocus = document.activeElement;
+    var confirmBtn = box.querySelector('[data-action="confirm"]');
+    confirmBtn.focus();
+
+    function close() {
+        overlay.remove();
+        document.removeEventListener('keydown', onKey);
+        if (prevFocus && typeof prevFocus.focus === 'function') prevFocus.focus();
+    }
+    function onKey(e) {
+        if (e.key === 'Escape') { e.preventDefault(); close(); }
+        else if (e.key === 'Enter') { e.preventDefault(); close(); if (opts.onConfirm) opts.onConfirm(); }
+    }
+
+    document.addEventListener('keydown', onKey);
+    box.querySelector('[data-action="cancel"]').onclick = close;
+    confirmBtn.onclick = function() { close(); if (opts.onConfirm) opts.onConfirm(); };
+    overlay.addEventListener('click', function(e) { if (e.target === overlay) close(); });
+}
+        function handleDelete(pid) {
         if (document.body.id === 'msg') {
             handleMessageDelete(pid);
             return;
         }
-        if (confirm('Are you sure you want to delete this post?')) {
-            if (typeof window.delete_post === 'function') {
-                window.delete_post(pid);
-            } else {
-                const originalPost = document.getElementById(CONFIG.POST_ID_PREFIX + pid);
-                if (originalPost) {
-                    const deleteLink = originalPost.querySelector('a[onclick*="delete_post"], .deletepost, a[href*="CODE=09"]');
-                    if (deleteLink) deleteLink.click();
+        showConfirmDialog({
+            title: 'Delete post?',
+            message: 'This post will be permanently deleted. This action cannot be undone.',
+            confirmText: 'Delete',
+            onConfirm: function() {
+                if (typeof window.delete_post === 'function') {
+                    window.delete_post(pid);
+                } else {
+                    const originalPost = document.getElementById(CONFIG.POST_ID_PREFIX + pid);
+                    if (originalPost) {
+                        const deleteLink = originalPost.querySelector('a[onclick*="delete_post"], .deletepost, a[href*="CODE=09"]');
+                        if (deleteLink) deleteLink.click();
+                    }
                 }
             }
-        }
+        });
     }
     function handleShare(pid, buttonElement) {
         const url = window.location.href.split('#')[0] + '#entry' + pid;
@@ -2763,17 +2810,23 @@ if (data.availableActions?.delete) actionsHtml += '<button class="action-icon de
         const replyLink = originalPost.querySelector('a[href*="CODE=04"]');
         if (replyLink) window.location.href = replyLink.getAttribute('href');
     }
-    function handleMessageDelete(msid) {
-        if (!confirm('Are you sure you want to delete this message?')) return;
-        const originalPost = findOriginalMessagePost(msid);
-        if (!originalPost) return;
-        const deleteLink = originalPost.querySelector('a[onclick*="CODE=05"]');
-        if (deleteLink) {
-            const onclick = deleteLink.getAttribute('onclick');
-            const match = onclick.match(/window\.location='([^']+)'/);
-            if (match) window.location.href = match[1];
-            else deleteLink.click();
-        }
+        function handleMessageDelete(msid) {
+        showConfirmDialog({
+            title: 'Delete message?',
+            message: 'This message will be permanently deleted. This action cannot be undone.',
+            confirmText: 'Delete',
+            onConfirm: function() {
+                const originalPost = findOriginalMessagePost(msid);
+                if (!originalPost) return;
+                const deleteLink = originalPost.querySelector('a[onclick*="CODE=05"]');
+                if (deleteLink) {
+                    const onclick = deleteLink.getAttribute('onclick');
+                    const match = onclick.match(/window\.location='([^']+)'/);
+                    if (match) window.location.href = match[1];
+                    else deleteLink.click();
+                }
+            }
+        });
     }
     function handleMessageFriend(msid) {
         const originalPost = findOriginalMessagePost(msid);
@@ -3946,13 +3999,16 @@ function attachPollHandlers(modernPoll, legacyPoll, pollData) {
                 mids.push(mid);
                 const postDate = getMessagePostDate($post);
                 const relativeTime = postDate ? getRelativeTimeString(postDate) : 'Recently';
-                const contentResult = getMessageContent($post);
+                                const contentResult = getMessageContent($post);
+                const replyLink = $post.querySelector('a[href*="CODE=04"]');
+                const replyHref = replyLink ? replyLink.getAttribute('href') : null;
                 postsData.push({
                     postId: msid, mid, originalPost: $post, username: getMessageUsername($post),
                     groupText: getMessageGroup($post), postCount: getMessagePostCount($post),
                     joinDate: getMessageJoinDate($post),
                     contentHtml: contentResult.html,
                     isReadReceipt: contentResult.isReadReceipt,
+                    replyHref,
                     relativeTime, postDate, isMessage: true, hideFooter: false, hideActions: false,
                     availableActions: { reply: true, delete: true, friend: true, block: true },
                     postNumber: i + 1
