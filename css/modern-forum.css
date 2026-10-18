@@ -2763,6 +2763,44 @@ body.modal-open {
   transform: translateY(-1px);
   box-shadow: 0 4px 10px rgba(5, 150, 105, 0.3);
 }
+.modern-confirm-dialog {
+    max-width: 420px;
+    width: 90%;
+    padding: var(--space-lg);
+}
+
+.modern-confirm-title {
+    margin: 0 0 var(--space-sm) 0;
+    font-family: var(--font-heading);
+    font-size: var(--text-lg);
+    color: var(--text-primary);
+    line-height: 1.3;
+    text-align: left;
+}
+
+.modern-confirm-message {
+    margin: 0 0 var(--space-lg) 0;
+    color: var(--text-secondary);
+    font-size: var(--text-sm);
+    line-height: var(--phi);
+    text-align: left;
+}
+
+.modern-confirm-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: var(--space-sm);
+}
+
+.modern-btn-danger {
+    background: var(--danger-color);
+    color: #fff;
+}
+
+.modern-btn-danger:hover {
+    background: #b91c1c;
+    transform: translateY(-1px);
+}
 
 /* Small-screen tweaks */
 @media (max-width: 550px) {
@@ -3816,6 +3854,20 @@ section.modern-stats { flex-direction: column; width: 100%; }
 .modern-input.has-error:focus {
     border-color: var(--danger-color);
     box-shadow: 0 0 0 2px rgba(220, 38, 38, 0.25);
+}
+
+/* Eliminate the ~300ms tap delay on interactive elements. The page's
+   viewport meta leaves double-tap-zoom enabled, so browsers wait to
+   disambiguate a single tap from the start of a double-tap. touch-action:
+   manipulation tells the browser to skip that wait for these elements
+   while leaving page-level zoom intact. */
+.action-icon,
+.modern-btn,
+.modern-editor-btn,
+.modern-nav-link,
+.modern-page-link,
+.modern-dropdown-item {
+    touch-action: manipulation;
 }
 
 @keyframes fieldShake {
