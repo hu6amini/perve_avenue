@@ -2461,206 +2461,225 @@ var EditorModule = (function (Utils, EventBus) {
     // FAST REPLY BUILDER (body#topic)
     // ========================================================================
     async function buildFastReplyEditor() {
-        var legacySend = document.querySelector('.fast.send');
-        if (!legacySend) return;
-        if (document.getElementById('modern-editor-fastreply')) return;
+    var legacySend = document.querySelector('.fast.send');
+    if (!legacySend) return;
+    if (document.getElementById('modern-editor-fastreply')) return;
 
-        var legacyPost = document.getElementById('Post');
-        var legacyForm = window.REPLIER || (legacyPost ? legacyPost.form : null);
-        var legacySubmit = document.querySelector('input[name="sub-mit"]');
+    var legacyPost = document.getElementById('Post');
+    var legacyForm = window.REPLIER || (legacyPost ? legacyPost.form : null);
+    var legacySubmit = document.querySelector('input[name="sub-mit"]');
 
-        var legacyHtml = legacyPost ? legacyPost.value : '';
+    var legacyHtml = legacyPost ? legacyPost.value : '';
 
-        // Insertion target: after #modern-pagination, fall back to after #posts-container, else after legacySend
-        var container = document.createElement('div');
-        container.id = 'modern-editor-fastreply';
-        container.className = 'modern-editor-container modern-editor-container--reply';
+    // Insertion target: after #modern-pagination, fall back to after #posts-container, else after legacySend
+    var container = document.createElement('div');
+    container.id = 'modern-editor-fastreply';
+    container.className = 'modern-editor-container modern-editor-container--reply';
 
-        var insertAfter =
-            document.getElementById('modern-pagination') ||
-            document.getElementById('posts-container') ||
-            legacySend;
+    var insertAfter =
+        document.getElementById('modern-pagination') ||
+        document.getElementById('posts-container') ||
+        legacySend;
 
-        if (insertAfter && insertAfter.parentNode) {
-            insertAfter.parentNode.insertBefore(container, insertAfter.nextSibling);
-        } else {
-            document.body.appendChild(container);
-        }
-
-        try {
-            await buildEditorInto(container, {
-                mode: 'reply',
-                initialHtml: legacyToHtml(legacyHtml),
-                placeholder: 'Write your reply…',
-                headerLabel: 'Replying as:',
-                submitLabel: 'Post reply',
-                onSync: function (legacy) { if (legacyPost) legacyPost.value = legacy; },
-                onSubmit: function () {
-                    var sig = document.getElementById('enablesig');
-                    var trk = document.getElementById('track_topic');
-                    if (sig) sig.checked = true;
-                    if (trk) trk.checked = true;
-                    if (legacySubmit) { legacySubmit.disabled = false; }
-                    if (legacyForm && legacyForm instanceof HTMLFormElement) {
-                        try { HTMLFormElement.prototype.submit.call(legacyForm); }
-                        catch (e) { legacyForm.submit(); }
-                    } else if (legacySubmit) {
-                        legacySubmit.click();
-                    }
-                }
-            });
-            console.log('[EditorModule] Fast reply editor built');
-        } catch (err) {
-            console.error('[EditorModule] Fast reply build failed:', err);
-            container.innerHTML = '<div style="color:red;padding:1rem;">Editor failed to load. <button onclick="location.reload()">Reload</button></div>';
-        }
+    if (insertAfter && insertAfter.parentNode) {
+        insertAfter.parentNode.insertBefore(container, insertAfter.nextSibling);
+    } else {
+        document.body.appendChild(container);
     }
+
+    // Move the #fastreply anchor to sit immediately before the modern editor,
+    // so #fastreply links and initial fragment navigation target the visible
+    // editor instead of the position of the (now CSS-hidden) legacy form.
+    var anchorEl = document.getElementById('fastreply');
+    if (anchorEl) {
+        var anchorNode = (anchorEl.parentElement && anchorEl.parentElement.classList.contains('anchor'))
+            ? anchorEl.parentElement
+            : anchorEl;
+        container.parentNode.insertBefore(anchorNode, container);
+    }
+
+    try {
+        await buildEditorInto(container, {
+            mode: 'reply',
+            initialHtml: legacyToHtml(legacyHtml),
+            placeholder: 'Write your reply…',
+            headerLabel: 'Replying as:',
+            submitLabel: 'Post reply',
+            onSync: function (legacy) { if (legacyPost) legacyPost.value = legacy; },
+            onSubmit: function () {
+                var sig = document.getElementById('enablesig');
+                var trk = document.getElementById('track_topic');
+                if (sig) sig.checked = true;
+                if (trk) trk.checked = true;
+                if (legacySubmit) { legacySubmit.disabled = false; }
+                if (legacyForm && legacyForm instanceof HTMLFormElement) {
+                    try { HTMLFormElement.prototype.submit.call(legacyForm); }
+                    catch (e) { legacyForm.submit(); }
+                } else if (legacySubmit) {
+                    legacySubmit.click();
+                }
+            }
+        });
+
+        // Second caveat: on a hard load of topic#fastreply the browser's
+        // first-paint fragment scroll fires before we move the anchor, so
+        // it targets the legacy position. Re-scroll now that the modern
+        // editor exists and has a real height.
+        if (window.location.hash === '#fastreply') {
+            setTimeout(function () {
+                container.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            }, 100);
+        }
+
+        console.log('[EditorModule] Fast reply editor built');
+    } catch (err) {
+        console.error('[EditorModule] Fast reply build failed:', err);
+        container.innerHTML = '<div style="color:red;padding:1rem;">Editor failed to load. <button onclick="location.reload()">Reload</button></div>';
+    }
+}
 
     // ========================================================================
     // FULL EDITOR BUILDER (body#send)
     // ========================================================================
     async function buildFullEditor() {
-        var legacySend = document.querySelector('.send');
-        if (!legacySend) return;
-        if (document.getElementById('modern-editor-full')) return;
+    var legacySend = document.querySelector('.send');
+    if (!legacySend) return;
+    if (document.getElementById('modern-editor-full')) return;
 
-        var legacyPost = document.getElementById('Post');
-        var legacyForm = window.REPLIER || (legacyPost ? legacyPost.form : null);
-        var legacySubmit = document.querySelector('input[name="submit_post"]');
+    var legacyPost = document.getElementById('Post');
+    var legacyForm = window.REPLIER || (legacyPost ? legacyPost.form : null);
+    var legacySubmit = document.querySelector('input[name="submit_post"]');
 
-        var legacyHtml = legacyPost ? legacyPost.value : '';
+    var legacyHtml = legacyPost ? legacyPost.value : '';
 
-        var container = document.createElement('div');
-        container.id = 'modern-editor-full';
-        container.className = 'modern-editor-container modern-editor-container--full';
+    var container = document.createElement('div');
+    container.id = 'modern-editor-full';
+    container.className = 'modern-editor-container modern-editor-container--full';
 
-        // Insert before #modern-summary-container (posts.js's summary), else before #modern-forum-wrapper's first child
-        var wrapper = document.getElementById('modern-forum-wrapper');
-        var summary = document.getElementById('modern-summary-container');
-        var insertBefore = summary || (wrapper ? wrapper.firstChild : null);
+    // Insert before #modern-summary-container (posts.js's summary), else before the wrapper's first child
+    var wrapper = document.getElementById('modern-forum-wrapper');
+    var summary = document.getElementById('modern-summary-container');
+    var insertBefore = summary || (wrapper ? wrapper.firstChild : null);
 
-        if (insertBefore && insertBefore.parentNode) {
-            insertBefore.parentNode.insertBefore(container, insertBefore);
-        } else if (wrapper) {
-            wrapper.appendChild(container);
-        } else {
-            legacySend.parentNode.insertBefore(container, legacySend);
-        }
-
-        // Check signature/track checkboxes in legacy before hiding
-        var sig = document.getElementById('enablesig');
-        var trk = document.getElementById('track_topic');
-        if (sig) sig.checked = true;
-        if (trk) trk.checked = true;
-
-        try {
-            await buildEditorInto(container, {
-                mode: 'full',
-                initialHtml: legacyToHtml(legacyHtml),
-                placeholder: 'Write your post…',
-                headerLabel: 'Writing as:',
-                submitLabel: 'Submit post',
-                onSync: function (legacy) { if (legacyPost) legacyPost.value = legacy; },
-                onSubmit: function () {
-                    var sig = document.getElementById('enablesig');
-                    var trk = document.getElementById('track_topic');
-                    if (sig) sig.checked = true;
-                    if (trk) trk.checked = true;
-                    if (legacySubmit) { legacySubmit.disabled = false; }
-                    if (legacyForm && legacyForm instanceof HTMLFormElement) {
-                        try { HTMLFormElement.prototype.submit.call(legacyForm); }
-                        catch (e) { legacyForm.submit(); }
-                    } else if (legacySubmit) {
-                        legacySubmit.click();
-                    }
-                }
-            });
-            console.log('[EditorModule] Full editor built');
-        } catch (err) {
-            console.error('[EditorModule] Full editor build failed:', err);
-            container.innerHTML = '<div style="color:red;padding:1rem;">Editor failed to load. <button onclick="location.reload()">Reload</button></div>';
-        }
+    if (insertBefore && insertBefore.parentNode) {
+        insertBefore.parentNode.insertBefore(container, insertBefore);
+    } else if (wrapper) {
+        wrapper.appendChild(container);
+    } else {
+        legacySend.parentNode.insertBefore(container, legacySend);
     }
+
+    // Signature / subscription force-checked before submit (both in
+    // onSubmit and here for the case where the editor never submits but
+    // the user later clicks something that does — harmless either way).
+    var sig = document.getElementById('enablesig');
+    var trk = document.getElementById('track_topic');
+    if (sig) sig.checked = true;
+    if (trk) trk.checked = true;
+
+    try {
+        await buildEditorInto(container, {
+            mode: 'full',
+            initialHtml: legacyToHtml(legacyHtml),
+            placeholder: 'Write your post…',
+            headerLabel: 'Writing as:',
+            submitLabel: 'Submit post',
+            onSync: function (legacy) { if (legacyPost) legacyPost.value = legacy; },
+            onSubmit: function () {
+                var sig = document.getElementById('enablesig');
+                var trk = document.getElementById('track_topic');
+                if (sig) sig.checked = true;
+                if (trk) trk.checked = true;
+                if (legacySubmit) { legacySubmit.disabled = false; }
+                if (legacyForm && legacyForm instanceof HTMLFormElement) {
+                    try { HTMLFormElement.prototype.submit.call(legacyForm); }
+                    catch (e) { legacyForm.submit(); }
+                } else if (legacySubmit) {
+                    legacySubmit.click();
+                }
+            }
+        });
+        console.log('[EditorModule] Full editor built');
+    } catch (err) {
+        console.error('[EditorModule] Full editor build failed:', err);
+        container.innerHTML = '<div style="color:red;padding:1rem;">Editor failed to load. <button onclick="location.reload()">Reload</button></div>';
+    }
+}
 
     // ========================================================================
     // FAST EDIT BUILDER (per-post)
     // ========================================================================
     async function buildFastEdit(fasteditEl) {
-        if (!fasteditEl || _activeFastEdits.has(fasteditEl)) return;
-        _activeFastEdits.set(fasteditEl, 'pending');
+    if (!fasteditEl || _activeFastEdits.has(fasteditEl)) return;
+    _activeFastEdits.set(fasteditEl, 'pending');
 
-        var legacyTextarea = fasteditEl.querySelector('.fastedit_text');
-        var legacySaveBtn = fasteditEl.querySelector('.fastedit_send');
-        var legacyCancelBtn = fasteditEl.querySelector('.fastedit_canc');
-        var legacyHidden = fasteditEl.querySelector('input[type="hidden"]');
+    var legacyTextarea = fasteditEl.querySelector('.fastedit_text');
+    var legacySaveBtn = fasteditEl.querySelector('.fastedit_send');
+    var legacyCancelBtn = fasteditEl.querySelector('.fastedit_canc');
+    var legacyHidden = fasteditEl.querySelector('input[type="hidden"]');
 
-        if (!legacyTextarea) {
-            _activeFastEdits.delete(fasteditEl);
-            return;
-        }
+    if (!legacyTextarea) {
+        _activeFastEdits.delete(fasteditEl);
+        return;
+    }
 
-        // Determine initial HTML: textarea if populated, else hidden input, else the post's current rendered content
-        var initialHtml = '';
-        var textareaVal = legacyTextarea.value ? legacyTextarea.value.trim() : '';
-        if (textareaVal) {
-            initialHtml = legacyToHtml(textareaVal);
-        } else if (legacyHidden && legacyHidden.value) {
-            // Extract just the body from the hidden input (strip wrappers, edit marker, signature)
-            initialHtml = legacyToHtml(extractFastEditBody(legacyHidden.value));
-        } else {
-            // Fall back to current rendered post content
-            var postEl = fasteditEl.closest('.post');
-            if (postEl) {
-                var contentTable = postEl.querySelector('.right.Item table.color') || postEl.querySelector('td.Item table.color');
-                if (contentTable) {
-                    var clone = contentTable.cloneNode(true);
-                    clone.querySelectorAll('.edit, .bottomborder, .signature').forEach(function (el) { el.remove(); });
-                    initialHtml = legacyToHtml(clone.innerHTML);
-                }
+    // Determine initial HTML: textarea if populated, else hidden input, else the post's current rendered content
+    var initialHtml = '';
+    var textareaVal = legacyTextarea.value ? legacyTextarea.value.trim() : '';
+    if (textareaVal) {
+        initialHtml = legacyToHtml(textareaVal);
+    } else if (legacyHidden && legacyHidden.value) {
+        initialHtml = legacyToHtml(extractFastEditBody(legacyHidden.value));
+    } else {
+        var postEl = fasteditEl.closest('.post');
+        if (postEl) {
+            var contentTable = postEl.querySelector('.right.Item table.color') || postEl.querySelector('td.Item table.color');
+            if (contentTable) {
+                var clone = contentTable.cloneNode(true);
+                clone.querySelectorAll('.edit, .bottomborder, .signature').forEach(function (el) { el.remove(); });
+                initialHtml = legacyToHtml(clone.innerHTML);
             }
-        }
-
-        // Build container inside .fastedit
-        var container = document.createElement('div');
-        container.className = 'modern-editor-container modern-editor-container--fastedit';
-        fasteditEl.appendChild(container);
-
-        try {
-            await buildEditorInto(container, {
-                mode: 'fastedit',
-                initialHtml: initialHtml,
-                placeholder: 'Edit your post…',
-                headerLabel: 'Editing as:',
-                submitLabel: 'Save changes',
-                onSync: function (legacy) { if (legacyTextarea) legacyTextarea.value = legacy; },
-                onCancel: function () {
-                    _activeFastEdits.delete(fasteditEl);
-                    if (legacyCancelBtn) legacyCancelBtn.click();
-                },
-                onSubmit: function () {
-                    if (!legacyTextarea) { showToast('Save failed — textarea missing', 'error'); return; }
-                    if (legacySaveBtn) {
-                        legacySaveBtn.click();
-                    } else {
-                        showToast('Save button missing', 'error');
-                        return;
-                    }
-                    // Wait for the fastedit to be removed (AJAX completes), then re-convert the post
-                    waitForFastEditRemoval(fasteditEl, function () {
-                        _activeFastEdits.delete(fasteditEl);
-                        triggerPostReconversion();
-                    });
-                }
-            });
-            _activeFastEdits.set(fasteditEl, 'active');
-            console.log('[EditorModule] Fast edit editor built for post');
-        } catch (err) {
-            console.error('[EditorModule] Fast edit build failed:', err);
-            _activeFastEdits.delete(fasteditEl);
-            container.innerHTML = '<div style="color:red;padding:1rem;">Editor failed to load.</div>';
         }
     }
 
+    var container = document.createElement('div');
+    container.className = 'modern-editor-container modern-editor-container--fastedit';
+    fasteditEl.appendChild(container);
+
+    try {
+        await buildEditorInto(container, {
+            mode: 'fastedit',
+            initialHtml: initialHtml,
+            placeholder: 'Edit your post…',
+            headerLabel: 'Editing as:',
+            submitLabel: 'Save changes',
+            onSync: function (legacy) { if (legacyTextarea) legacyTextarea.value = legacy; },
+            onCancel: function () {
+                _activeFastEdits.delete(fasteditEl);
+                if (legacyCancelBtn) legacyCancelBtn.click();
+            },
+            onSubmit: function () {
+                if (!legacyTextarea) { showToast('Save failed — textarea missing', 'error'); return; }
+                if (legacySaveBtn) {
+                    legacySaveBtn.click();
+                } else {
+                    showToast('Save button missing', 'error');
+                    return;
+                }
+                waitForFastEditRemoval(fasteditEl, function () {
+                    _activeFastEdits.delete(fasteditEl);
+                    triggerPostReconversion();
+                });
+            }
+        });
+        _activeFastEdits.set(fasteditEl, 'active');
+        console.log('[EditorModule] Fast edit editor built for post');
+    } catch (err) {
+        console.error('[EditorModule] Fast edit build failed:', err);
+        _activeFastEdits.delete(fasteditEl);
+        container.innerHTML = '<div style="color:red;padding:1rem;">Editor failed to load.</div>';
+    }
+}
     // Extract just the body from the fastedit hidden input value.
     // The hidden input is a rendered post-content fragment: table wrapper,
     // td content, then edit marker + bottomborder + signature. We strip
