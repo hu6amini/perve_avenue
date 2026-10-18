@@ -166,7 +166,7 @@ async function bootSystem() {
             loadScript("https://cdnjs.cloudflare.com/ajax/libs/slick-carousel/1.9.0/slick.min.js"),
             loadScript("https://cdn.jsdelivr.net/gh/hu6amini/perve_avenue@9681242beef6f3a2e2e4c8de461c2e6eeabec26a/core/dom-utils.min.js"),
             loadScript("https://cdn.jsdelivr.net/gh/hu6amini/perve_avenue@70efe7c7bca10a5093093841f67994aef3b76819/forum_core_observer.min.js"),
-            loadScript("https://cdn.jsdelivr.net/gh/hu6amini/perve_avenue@f026ad7f7daaf1eeb12eb4b6bcb46fe9f2d6d2cd/modules/theme.js")
+            loadScript("https://cdn.jsdelivr.net/gh/hu6amini/perve_avenue@f026ad7f7daaf1eeb12eb4b6bcb46fe9f2d6d2cd/modules/theme.min.js")
         ]);
         const failedB = resultsB.filter(r => r.status === 'rejected');
         if (failedB.length > 0) {
@@ -213,11 +213,12 @@ async function bootSystem() {
 
             const results = await Promise.allSettled([
                 loadScript("https://cdn.jsdelivr.net/gh/hu6amini/perve_avenue@11588f18d3c85bfe9998aea25a0ad1412492c188/modules/media-dimensions.min.js"),
-                loadScript("https://cdn.jsdelivr.net/gh/hu6amini/perve_avenue@3051b903c91564b713f0963e1553a1fde0921e81/modules/breadcrumbs.js"),
+                loadScript("https://cdn.jsdelivr.net/gh/hu6amini/perve_avenue@3051b903c91564b713f0963e1553a1fde0921e81/modules/breadcrumbs.min.js"),
                 loadScript("https://cdn.jsdelivr.net/gh/hu6amini/perve_avenue@a88198b93bbc0093b0d0d64be88d2e2472e79a89/modules/twemoji.min.js"),
-                loadScript("https://cdn.jsdelivr.net/gh/hu6amini/perve_avenue@542dedb572fef90b64ec5ea91274ead2e347680d/modules/boards.js"),
+                loadScript("https://cdn.jsdelivr.net/gh/hu6amini/perve_avenue@542dedb572fef90b64ec5ea91274ead2e347680d/modules/boards.min.js"),
                 loadScript("https://cdn.jsdelivr.net/gh/hu6amini/perve_avenue@437485f9f1a6f3f23c6dab6fa2e9230b5c5bc041/modules/posts.min.js"),
-                loadScript("https://cdn.jsdelivr.net/gh/hu6amini/perve_avenue@403484e8351e4fd2b9f757b5c340979cf7d452b8/modules/modals.min.js")
+                loadScript("https://cdn.jsdelivr.net/gh/hu6amini/perve_avenue@403484e8351e4fd2b9f757b5c340979cf7d452b8/modules/modals.min.js"),
+                loadScript("https://cdn.jsdelivr.net/gh/hu6amini/perve_avenue@8c9be787d1628ec7f274e252c0f73032f12f4637/modules/editor-module.min.js")                
             ]);
 
             const failed = results.filter(r => r.status === 'rejected');
