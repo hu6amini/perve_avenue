@@ -4371,23 +4371,6 @@ lite-vimeo.lite-activated > .lite-embed-playbtn {
     display: none;
 }
 
-/* --- Selection states (editor only) --- */
-.modern-wysiwyg .ProseMirror .lite-embed-wrapper.ProseMirror-selectednode > lite-youtube,
-.modern-wysiwyg .ProseMirror .lite-embed-wrapper.ProseMirror-selectednode > lite-vimeo {
-    box-shadow:
-        0 0 0 2px var(--primary-color),
-        0 0 0 4px var(--focus-ring);
-}
-
-/* Drag-select across block atoms — a TextSelection that spans an
-   atom gets this class so the browser paints a ring on what it
-   can't natively highlight. Covers images, link previews, hr,
-   and upload placeholders (the plugin whitelist); lite embeds
-   keep their own class. */
-.modern-wysiwyg .ProseMirror .atom-in-selection {
-    box-shadow: 0 0 0 2px var(--focus-ring);
-}
-
 .modern-wysiwyg .ProseMirror .lite-embed-wrapper.atom-in-selection > lite-youtube,
 .modern-wysiwyg .ProseMirror .lite-embed-wrapper.atom-in-selection > lite-vimeo {
     box-shadow: 0 0 0 2px var(--focus-ring);
