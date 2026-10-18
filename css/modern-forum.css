@@ -5511,3 +5511,52 @@ body.dropdown-sheet-open {
     gap: var(--space-xs) !important;
   }
 }
+/* ------------------------------------------------------------
+   26. READ RECEIPT POST
+   Read receipts arrive as ordinary post-card messages whose body
+   ends with a bolded "<name> has read this message" line. posts.js
+   (extractReceipt, called from getMessageContent) restructures the
+   body on detection: the original message becomes a
+   .modern-quote.long-quote.read-receipt-original, the "has read"
+   line becomes a .read-receipt-notice system banner, and the
+   article picks up .is-read-receipt so the styles stay scoped.
+   The quote reuses every existing .modern-quote rule — header,
+   content max-height, expand button — so long originals collapse
+   exactly like any other quote.
+   ------------------------------------------------------------ */
+
+.post-card.is-read-receipt .read-receipt-notice {
+    display: flex;
+    align-items: center;
+    gap: var(--space-xs);
+    margin: var(--space-sm) 0 0 0;
+    padding: var(--space-sm) var(--space-md);
+    background: rgba(16, 185, 129, 0.08);
+    border-left: 3px solid var(--success-color);
+    border-radius: var(--radius);
+    font-size: var(--text-sm);
+    color: var(--text-secondary);
+    text-align: left;
+}
+
+.post-card.is-read-receipt .read-receipt-notice i {
+    color: var(--success-color);
+    font-size: 0.9rem;
+    flex-shrink: 0;
+}
+
+.post-card.is-read-receipt .read-receipt-notice strong {
+    color: var(--text-primary);
+    font-weight: 600;
+}
+
+.post-card.is-read-receipt .read-receipt-original .quote-content {
+    opacity: 0.92;
+}
+
+/* Light theme — the tinted background needs a touch more
+   saturation on white to still read as a system banner rather
+   than an empty gap. */
+[data-theme="emerald-light"] .post-card.is-read-receipt .read-receipt-notice {
+    background: rgba(4, 120, 87, 0.06);
+}
