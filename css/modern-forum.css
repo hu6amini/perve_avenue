@@ -5662,22 +5662,14 @@ body.dropdown-sheet-open {
 /* ============================================================
    27. MODERN EDITOR CONTAINERS
    Standalone frame for the three editors produced by EditorModule:
-     #modern-editor-fastreply   (.fast.send replacement, body#topic)
-     #modern-editor-full        (.send replacement, body#send)
+     #modern-editor-fastreply            (.fast.send replacement, body#topic)
+     #modern-editor-full                 (.send replacement, body#send)
      .modern-editor-container--fastedit  (.fastedit replacement, per post)
 
    Inner elements (.modern-replying-as, .modern-editor-toolbar,
    .modern-wysiwyg, .modern-preview, .modern-actions) keep their
    section-19 rules. This section only changes what must change when
-   the editor is standalone rather than part of the messenger shell:
-
-     · adds a surface card frame (surface / border / radius / shadow)
-     · rounds the first / last child so their backgrounds don't
-       overflow the container's rounded border
-     · lifts .modern-replying-as to surface (card header pattern)
-     · drops .modern-actions to bg (post-footer pattern)
-     · rebalances the lopsided radii messenger applies
-     · softens the fast-edit variant, which lives inside .post-card
+   the editor is standalone rather than part of the messenger shell.
    ============================================================ */
 
 /* -------- Base frame -------- */
@@ -5725,36 +5717,32 @@ body#topic #fastreply {
   background: var(--surface-color);
 }
 
-/* Actions → bg (footer pattern, matches .post-footer).
-   The border-top is already present in section 19; the base
-   border-bottom-right-radius is superseded by the > :last-child rule. */
+/* Actions → bg (footer pattern, matches .post-footer) */
 .modern-editor-container .modern-actions {
   background: var(--bg-color);
 }
 
-/* Editor body: keep base bg-color from section 19. Only the max-height
-   is worth pinning; the base margin already reads as input-on-card. */
+/* Editor body: keep base bg-color from section 19; pin the max-height */
 .modern-editor-container .modern-wysiwyg {
   max-height: 60vh;
 }
 
-/* Preview — widen its gutter to match the editor body's. */
+/* Preview — widen its gutter to match the editor body's */
 .modern-editor-container .modern-preview {
   margin: var(--space-md) var(--pad-6);
 }
 
 /* ------------------------------------------------------------------
    Fast edit variant
-   .fastedit lives inside .post-card, which is already a surface card.
-   A surface-in-surface stack with a shadow reads as clutter, so the
-   fast-edit variant drops the shadow, sits on bg-color (subtle contrast
-   against the post card), and uses the smaller radius.
+   Lives as a sibling of the modern post card (or, when there is no
+   modern card, inside the legacy .fastedit). Drops the shadow to read
+   as a lighter inset, and uses the smaller radius.
    ------------------------------------------------------------------ */
 .modern-editor-container--fastedit {
   background: var(--bg-color);
   box-shadow: none;
   border-radius: var(--radius);
-  margin: var(--space-md) 0 0 0;
+  margin: var(--space-md) 0;
 }
 .modern-editor-container--fastedit > :first-child {
   border-top-left-radius: var(--radius);
@@ -5771,12 +5759,13 @@ body#topic #fastreply {
   margin: var(--space-sm) var(--pad-4);
 }
 
-/* Group-specific avatar borders for the replying-as header.
-   Colours mirror section 2 (.post-card.group-* .avatar-circle) and
-   section 18 (.mini-avatar.group-*), so the same role is the same
-   colour everywhere it appears. The base .modern-replying-avatar rule
-   in section 19 uses var(--primary-color) — that's the member default
-   and stays as-is. */
+/* ------------------------------------------------------------------
+   Group-specific avatar borders for the replying-as header.
+   Colours mirror section 2 (.post-card.group-*) and section 18
+   (.mini-avatar.group-*) so a role is the same colour everywhere it
+   appears. The base .modern-replying-avatar rule in section 19 uses
+   var(--primary-color) — that's the member default and stays as-is.
+   ------------------------------------------------------------------ */
 .modern-replying-as.group-founder .modern-replying-avatar,
 .modern-replying-as.group-founder .modern-replying-avatar--initial { border-color: #f59e0b !important; }
 
@@ -5800,6 +5789,32 @@ body#topic #fastreply {
 
 .modern-replying-as.group-member .modern-replying-avatar,
 .modern-replying-as.group-member .modern-replying-avatar--initial { border-color: var(--primary-color) !important; }
+
+/* ------------------------------------------------------------------
+   Hide the legacy editor shells. EditorModule no longer sets
+   display: none in JS — these rules are the sole mechanism.
+   ------------------------------------------------------------------ */
+body#topic .fast.send,
+body#send .send {
+  display: none !important;
+}
+
+/* Inside fastedit: hide everything except our modern container.
+   The forum stylesheet gives input[type=button], textarea and the
+   toolbar div their own display values, so !important is required. */
+body#topic .post .fastedit > :not(.modern-editor-container--fastedit) {
+  display: none !important;
+}
+
+/* ------------------------------------------------------------------
+   Fast edit active state — while the modern editor is open for a
+   given post, the corresponding modern card is hidden (editor takes
+   its visual place). Restored on cancel; rebuilt via reconversion
+   on successful save.
+   ------------------------------------------------------------------ */
+.post-card.is-being-edited {
+  display: none;
+}
 
 /* ------------------------------------------------------------------
    Mobile
