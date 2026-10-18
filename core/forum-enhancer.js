@@ -28,7 +28,8 @@
             modals: true,
             messenger: true,
             'slick-carousel': true,
-            boards: true,               // ← new
+            boards: true, // ← new
+            editor: true,
             navigation: false,
             sidebar: false,
             footer: false
@@ -307,13 +308,13 @@ if (typeof ThemeModule !== 'undefined') {
             log('ForumBoardsModule not found, boards enhancement disabled', 'warn');
             ENHANCER_CONFIG.modules.boards = false;
         }
-         // --- EDITOR MODULE (NEW) ---
+                 // --- EDITOR MODULE (NEW) ---
         if (typeof EditorModule !== 'undefined') {
-    registerModule('editor', EditorModule, ['forumObserver']);
-} else {
-    log('EditorModule not found, modern editors disabled', 'warn');
-    ENHANCER_CONFIG.modules.editor = false;
-}
+            registerModule('editor', EditorModule, ['forumObserver']);
+        } else {
+            log('EditorModule not found, modern editors disabled', 'warn');
+            ENHANCER_CONFIG.modules.editor = false;
+        }
     }
     
     // ============================================================================
