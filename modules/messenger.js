@@ -5684,7 +5684,6 @@ var MessengerModule = (function(Utils, EventBus) {
                         TrailingEmbedParagraph,
                         NormalizeEmptyDoc,
                         DeleteAdjacentAtom,
-                        BlockAtomSelection,
 
                         CharacterCount.configure({
                             limit: MAX_MESSAGE_LENGTH > 0 ? MAX_MESSAGE_LENGTH : null,
