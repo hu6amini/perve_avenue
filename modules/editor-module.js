@@ -2102,10 +2102,11 @@ var EditorModule = (function (Utils, EventBus) {
                 editor.commands.focus('end');
             },
             onUpdate: function ({ editor }) {
-                var html = editor.getHTML();
-                if (opts.onSync) opts.onSync(htmlToLegacy(html));
-                updateSendState();
-            }
+    var html = editor.getHTML();
+    var legacy = editorContentIsEmpty(html) ? '' : htmlToLegacy(html);
+    if (opts.onSync) opts.onSync(legacy);
+    updateSendState();
+}
         });
 
         editorRef.current = editor;
