@@ -2764,18 +2764,44 @@ body.modal-open {
   box-shadow: 0 4px 10px rgba(5, 150, 105, 0.3);
 }
 .modern-confirm-dialog {
+    background: var(--surface-color);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-lg);
+    padding: var(--space-lg);
     max-width: 420px;
     width: 90%;
-    padding: var(--space-lg);
+    box-shadow: var(--shadow-xl);
+    animation: modalSlideUp 0.3s ease;
+    display: flex;
+    flex-direction: column;
+    outline: none;
 }
 
 .modern-confirm-title {
     margin: 0 0 var(--space-sm) 0;
+    padding-bottom: var(--space-sm);
+    border-bottom: 1px solid var(--border-color);
     font-family: var(--font-heading);
     font-size: var(--text-lg);
+    font-weight: 400;
     color: var(--text-primary);
     line-height: 1.3;
     text-align: left;
+    display: flex;
+    align-items: center;
+    gap: var(--space-sm);
+}
+
+.modern-confirm-icon {
+    color: var(--danger-color);
+    font-size: 1.1rem;
+    flex-shrink: 0;
+    line-height: 1;
+}
+
+.modern-confirm-title span {
+    min-width: 0;
+    overflow-wrap: break-word;
 }
 
 .modern-confirm-message {
@@ -2790,16 +2816,32 @@ body.modal-open {
     display: flex;
     justify-content: flex-end;
     gap: var(--space-sm);
+    flex-wrap: wrap;
 }
 
 .modern-btn-danger {
     background: var(--danger-color);
     color: #fff;
+    border: 1px solid var(--danger-color);
 }
 
 .modern-btn-danger:hover {
     background: #b91c1c;
+    border-color: #b91c1c;
     transform: translateY(-1px);
+}
+
+.modern-btn-danger:focus-visible {
+    outline: 2px solid var(--danger-color);
+    outline-offset: 2px;
+}
+
+/* Light theme — the danger color is darker there, so the hover
+   shade needs to come down a notch to stay legible against the
+   white surface. */
+[data-theme="emerald-light"] .modern-btn-danger:hover {
+    background: #991b1b;
+    border-color: #991b1b;
 }
 
 /* Small-screen tweaks */
