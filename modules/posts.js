@@ -2810,12 +2810,6 @@ if (data.availableActions?.delete) actionsHtml += '<button class="action-icon de
     function handleReact(pid, buttonElement) {
         createCustomReactionPopup(buttonElement, pid);
     }
-    function handleMessageReply(msid) {
-        const originalPost = findOriginalMessagePost(msid);
-        if (!originalPost) return;
-        const replyLink = originalPost.querySelector('a[href*="CODE=04"]');
-        if (replyLink) window.location.href = replyLink.getAttribute('href');
-    }
         function handleMessageDelete(msid) {
     showConfirmDialog({
         title: 'Delete message?',
@@ -3094,10 +3088,6 @@ document.addEventListener('keydown', function (e) {
                 e.preventDefault(); e.stopPropagation();
                 handleReact(btn.getAttribute('data-pid'), btn);
             }
-        });
-        document.addEventListener('click', function (e) {
-            const btn = e.target.closest('.action-icon[data-action="reply"]');
-            if (btn) { e.preventDefault(); handleMessageReply(btn.getAttribute('data-pid')); }
         });
         document.addEventListener('click', function (e) {
             const btn = e.target.closest('.action-icon[data-action="friend"]');
