@@ -5661,19 +5661,23 @@ body.dropdown-sheet-open {
 }
 /* ============================================================
    27. MODERN EDITOR CONTAINERS
-   Frame for the three standalone editors produced by EditorModule:
-   fast reply (#modern-editor-fastreply), full editor
-   (#modern-editor-full), and fast edit (.modern-editor-container--fastedit
-   inside a .post).
+   Standalone frame for the three editors produced by EditorModule:
+     #modern-editor-fastreply   (.fast.send replacement, body#topic)
+     #modern-editor-full        (.send replacement, body#send)
+     .modern-editor-container--fastedit  (.fastedit replacement, per post)
 
-   The inner elements — .modern-replying-as, .modern-editor-toolbar,
-   .modern-wysiwyg, .modern-preview, .modern-actions — keep their
-   section-19 rules. This section only overrides what changes when the
-   editor is standalone:
-     · adds a card frame (surface / border / radius / shadow)
-     · rebalances the lopsided corner radii the messenger applies
-     · lifts the editor body off the page background
-     · softens the fast-edit variant for card-on-card nesting
+   Inner elements (.modern-replying-as, .modern-editor-toolbar,
+   .modern-wysiwyg, .modern-preview, .modern-actions) keep their
+   section-19 rules. This section only changes what must change when
+   the editor is standalone rather than part of the messenger shell:
+
+     · adds a surface card frame (surface / border / radius / shadow)
+     · rounds the first / last child so their backgrounds don't
+       overflow the container's rounded border
+     · lifts .modern-replying-as to surface (card header pattern)
+     · drops .modern-actions to bg (post-footer pattern)
+     · rebalances the lopsided radii messenger applies
+     · softens the fast-edit variant, which lives inside .post-card
    ============================================================ */
 
 /* -------- Base frame -------- */
@@ -5685,15 +5689,11 @@ body.dropdown-sheet-open {
   margin: var(--space-lg) 0;
   display: flex;
   flex-direction: column;
-  /* Deliberately NO overflow: hidden — the emoji picker is anchored at
-     bottom: 100% of the toolbar and extends above the container. It
-     would be clipped. Corner rounding is applied to the first and last
-     child below instead. */
+  /* No overflow: hidden — the emoji picker is anchored at bottom: 100%
+     of the toolbar and must escape the container. Child rounding below
+     handles what overflow: hidden would otherwise do. */
 }
 
-/* Round whichever element ends up at the top / bottom of the card,
-   regardless of whether it's the replying-as header, toolbar, preview,
-   or actions bar. */
 .modern-editor-container > :first-child {
   border-top-left-radius: var(--radius-lg);
   border-top-right-radius: var(--radius-lg);
@@ -5707,9 +5707,6 @@ body.dropdown-sheet-open {
 #modern-editor-fastreply {
   scroll-margin-top: var(--space-lg);
 }
-
-/* The #fastreply anchor was moved immediately before the container —
-   give it some breathing room when jumped to. */
 body#topic #fastreply {
   scroll-margin-top: var(--space-lg);
 }
@@ -5720,52 +5717,28 @@ body#topic #fastreply {
 }
 
 /* ------------------------------------------------------------------
-   Corner-radius + background overrides for the shell-styled bars.
-   Section 19 gives .modern-replying-as a top-right radius and
-   .modern-actions a bottom-right radius (they meet the messenger
-   shell's own borders on those sides). Standalone, they meet the card
-   frame on both sides. Actions is also switched to --bg-color so the
-   toolbar and the action bar form a matched top / bottom pair around
-   the --surface-color editor body.
+   Standalone-only overrides
    ------------------------------------------------------------------ */
+
+/* Replying-as → surface (card header pattern, matches .post-card-header) */
 .modern-editor-container .modern-replying-as {
-  border-top-left-radius: 0;
-  border-top-right-radius: 0;
-  border-bottom: 1px solid var(--border-color);
+  background: var(--surface-color);
 }
 
+/* Actions → bg (footer pattern, matches .post-footer).
+   The border-top is already present in section 19; the base
+   border-bottom-right-radius is superseded by the > :last-child rule. */
 .modern-editor-container .modern-actions {
   background: var(--bg-color);
-  border-bottom-left-radius: 0;
-  border-bottom-right-radius: 0;
-  border-top: 1px solid var(--border-color);
 }
 
-.modern-editor-container .modern-editor-toolbar {
-  /* Replying-as (above) already contributes a bottom border — remove the
-     toolbar's top border so the two bg-color strips don't get a double
-     rule between them. */
-  border-top: none;
-}
-
-/* ------------------------------------------------------------------
-   Editor body
-   Section 19 gives .modern-wysiwyg a --bg-color background because in
-   the messenger shell it sits inside a --surface-color frame and needed
-   an inset feel. Standalone that reads as "transparent" — the page body
-   and the editor are the same colour. Lift it to --surface-color so the
-   editable region belongs to the card. The existing :focus-within ring
-   from section 19 continues to delimit it while typing.
-   ------------------------------------------------------------------ */
+/* Editor body: keep base bg-color from section 19. Only the max-height
+   is worth pinning; the base margin already reads as input-on-card. */
 .modern-editor-container .modern-wysiwyg {
-  background: var(--surface-color);
-  border: 1px solid var(--border-color);
-  border-radius: var(--radius);
-  margin: var(--pad-5) var(--pad-6);
   max-height: 60vh;
 }
 
-/* Align the preview with the editor body's horizontal gutter */
+/* Preview — widen its gutter to match the editor body's. */
 .modern-editor-container .modern-preview {
   margin: var(--space-md) var(--pad-6);
 }
@@ -5773,9 +5746,9 @@ body#topic #fastreply {
 /* ------------------------------------------------------------------
    Fast edit variant
    .fastedit lives inside .post-card, which is already a surface card.
-   Nesting a full card inside another would be visually heavy, so the
-   fast-edit variant drops the shadow, sits on --bg-color (subtle
-   contrast against the post card), and uses the smaller radius.
+   A surface-in-surface stack with a shadow reads as clutter, so the
+   fast-edit variant drops the shadow, sits on bg-color (subtle contrast
+   against the post card), and uses the smaller radius.
    ------------------------------------------------------------------ */
 .modern-editor-container--fastedit {
   background: var(--bg-color);
@@ -5783,7 +5756,6 @@ body#topic #fastreply {
   border-radius: var(--radius);
   margin: var(--space-md) 0 0 0;
 }
-
 .modern-editor-container--fastedit > :first-child {
   border-top-left-radius: var(--radius);
   border-top-right-radius: var(--radius);
@@ -5792,21 +5764,15 @@ body#topic #fastreply {
   border-bottom-left-radius: var(--radius);
   border-bottom-right-radius: var(--radius);
 }
-
 .modern-editor-container--fastedit .modern-wysiwyg {
-  background: var(--surface-color);
-  margin: var(--pad-4);
   max-height: 50vh;
 }
-
 .modern-editor-container--fastedit .modern-preview {
   margin: var(--space-sm) var(--pad-4);
 }
 
 /* ------------------------------------------------------------------
-   Mobile — reduce the frame's radius and tighten margins.
-   The section-25 mobile rules for .modern-editor-toolbar and
-   .modern-editor-btn still apply (they're class-scoped, not shell-scoped).
+   Mobile
    ------------------------------------------------------------------ */
 @media (max-width: 680px) {
   .modern-editor-container {
@@ -5821,15 +5787,8 @@ body#topic #fastreply {
     border-bottom-left-radius: var(--radius);
     border-bottom-right-radius: var(--radius);
   }
-  .modern-editor-container .modern-wysiwyg {
-    margin: var(--pad-3);
-    max-height: 50vh;
-  }
-  .modern-editor-container .modern-preview {
-    margin: var(--space-sm) var(--pad-3);
-  }
-  .modern-editor-container--fastedit .modern-wysiwyg {
-    margin: var(--pad-2);
-    max-height: 40vh;
-  }
+  .modern-editor-container .modern-wysiwyg { max-height: 50vh; }
+  .modern-editor-container .modern-preview { margin: var(--space-sm) var(--pad-3); }
+  .modern-editor-container--fastedit .modern-wysiwyg { max-height: 40vh; }
+  .modern-editor-container--fastedit .modern-preview { margin: var(--space-sm) var(--pad-3); }
 }
