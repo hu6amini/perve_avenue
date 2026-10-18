@@ -756,6 +756,14 @@
     border-left: 0;
     border-right: 0;
 }
+/* Single click on a link preview produces a NodeSelection. ProseMirror
+   adds this class automatically; the ring mirrors the one images and
+   lite embeds get when they're the only thing selected. */
+.modern-wysiwyg .ProseMirror .link-preview-card.ProseMirror-selectednode {
+    box-shadow:
+        0 0 0 2px var(--primary-color),
+        0 0 0 4px var(--focus-ring);
+}
 
 .link-preview-card--loading { padding: var(--pad-5); }
 .link-preview-skeleton { display: flex; flex-direction: column; gap: var(--space-sm); width: 100%; }
@@ -4372,9 +4380,11 @@ lite-vimeo.lite-activated > .lite-embed-playbtn {
 }
 
 /* Drag-select across block atoms — a TextSelection that spans an
-   image or a lite embed gets this class so the browser paints a
-   ring on what it can't natively highlight. */
-.modern-wysiwyg .ProseMirror img.atom-in-selection {
+   atom gets this class so the browser paints a ring on what it
+   can't natively highlight. Covers images, link previews, hr,
+   and upload placeholders (the plugin whitelist); lite embeds
+   keep their own class. */
+.modern-wysiwyg .ProseMirror .atom-in-selection {
     box-shadow: 0 0 0 2px var(--focus-ring);
 }
 
