@@ -99,6 +99,11 @@
   cursor: pointer;
   font-size: 0.9rem;
 }
+.action-icon,
+.action-icon:hover,
+.action-icon:focus {
+  text-decoration: none;
+}
 .action-icon:hover {
   background: var(--hover-color);
   border-color: var(--primary-color);
