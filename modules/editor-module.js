@@ -2471,7 +2471,28 @@ var EditorModule = (function (Utils, EventBus) {
 
     var legacyHtml = legacyPost ? legacyPost.value : '';
 
-    // Insertion target: after #modern-pagination, fall back to after #posts-container, else after legacySend
+    // Extract the localStorage draft key from the legacy textarea's inline
+    // onkeyup handler. That handler is the only thing that ever writes to
+    // localStorage['t<topicId>']. Since our editor doesn't fire keyup on
+    // the hidden textarea, the write never happens and stale drafts survive
+    // a refresh. Mirror the write from onSync instead of hardcoding the key
+    // (it's topic-specific and the topic id differs per page).
+    var draftKey = null;
+    if (legacyPost) {
+        var onkeyup = legacyPost.getAttribute('onkeyup') || '';
+        var m = onkeyup.match(/localStorage\.setItem\(['"]([^'"]+)['"]/);
+        if (m) draftKey = m[1];
+    }
+
+    function persistDraft(legacy) {
+        if (!draftKey) return;
+        try {
+            var trimmed = (legacy || '').trim();
+            if (trimmed) localStorage.setItem(draftKey, trimmed);
+            else localStorage.removeItem(draftKey);
+        } catch (e) {}
+    }
+
     var container = document.createElement('div');
     container.id = 'modern-editor-fastreply';
     container.className = 'modern-editor-container modern-editor-container--reply';
@@ -2487,9 +2508,7 @@ var EditorModule = (function (Utils, EventBus) {
         document.body.appendChild(container);
     }
 
-    // Move the #fastreply anchor to sit immediately before the modern editor,
-    // so #fastreply links and initial fragment navigation target the visible
-    // editor instead of the position of the (now CSS-hidden) legacy form.
+    // Move the #fastreply anchor so fragment navigation targets the visible editor.
     var anchorEl = document.getElementById('fastreply');
     if (anchorEl) {
         var anchorNode = (anchorEl.parentElement && anchorEl.parentElement.classList.contains('anchor'))
@@ -2505,7 +2524,10 @@ var EditorModule = (function (Utils, EventBus) {
             placeholder: 'Write your reply…',
             headerLabel: 'Replying as:',
             submitLabel: 'Post reply',
-            onSync: function (legacy) { if (legacyPost) legacyPost.value = legacy; },
+            onSync: function (legacy) {
+                if (legacyPost) legacyPost.value = legacy;
+                persistDraft(legacy);
+            },
             onSubmit: function () {
                 var sig = document.getElementById('enablesig');
                 var trk = document.getElementById('track_topic');
@@ -2521,10 +2543,6 @@ var EditorModule = (function (Utils, EventBus) {
             }
         });
 
-        // Second caveat: on a hard load of topic#fastreply the browser's
-        // first-paint fragment scroll fires before we move the anchor, so
-        // it targets the legacy position. Re-scroll now that the modern
-        // editor exists and has a real height.
         if (window.location.hash === '#fastreply') {
             setTimeout(function () {
                 container.scrollIntoView({ behavior: 'smooth', block: 'start' });
