@@ -2685,8 +2685,13 @@ if (data.availableActions?.delete) actionsHtml += '<button class="action-icon de
 
     var box = document.createElement('div');
     box.className = 'modern-modal-box modern-confirm-dialog';
+
+    var iconHtml = opts.icon
+        ? '<i class="' + escapeHtml(opts.icon) + ' modern-confirm-icon" aria-hidden="true"></i>'
+        : '';
+
     box.innerHTML =
-        '<h3 class="modern-confirm-title">' + escapeHtml(opts.title || 'Confirm') + '</h3>' +
+        '<h3 class="modern-confirm-title">' + iconHtml + '<span>' + escapeHtml(opts.title || 'Confirm') + '</span></h3>' +
         '<p class="modern-confirm-message">' + escapeHtml(opts.message || '') + '</p>' +
         '<div class="modern-confirm-actions">' +
             '<button type="button" class="modern-btn modern-btn-secondary" data-action="cancel">' +
@@ -2720,27 +2725,28 @@ if (data.availableActions?.delete) actionsHtml += '<button class="action-icon de
     overlay.addEventListener('click', function(e) { if (e.target === overlay) close(); });
 }
         function handleDelete(pid) {
-        if (document.body.id === 'msg') {
-            handleMessageDelete(pid);
-            return;
-        }
-        showConfirmDialog({
-            title: 'Delete post?',
-            message: 'This post will be permanently deleted. This action cannot be undone.',
-            confirmText: 'Delete',
-            onConfirm: function() {
-                if (typeof window.delete_post === 'function') {
-                    window.delete_post(pid);
-                } else {
-                    const originalPost = document.getElementById(CONFIG.POST_ID_PREFIX + pid);
-                    if (originalPost) {
-                        const deleteLink = originalPost.querySelector('a[onclick*="delete_post"], .deletepost, a[href*="CODE=09"]');
-                        if (deleteLink) deleteLink.click();
-                    }
+    if (document.body.id === 'msg') {
+        handleMessageDelete(pid);
+        return;
+    }
+    showConfirmDialog({
+        title: 'Delete post?',
+        message: 'This post will be permanently deleted. This action cannot be undone.',
+        confirmText: 'Delete',
+        icon: 'fa-regular fa-trash-can',
+        onConfirm: function() {
+            if (typeof window.delete_post === 'function') {
+                window.delete_post(pid);
+            } else {
+                const originalPost = document.getElementById(CONFIG.POST_ID_PREFIX + pid);
+                if (originalPost) {
+                    const deleteLink = originalPost.querySelector('a[onclick*="delete_post"], .deletepost, a[href*="CODE=09"]');
+                    if (deleteLink) deleteLink.click();
                 }
             }
-        });
-    }
+        }
+    });
+}
     function handleShare(pid, buttonElement) {
         const url = window.location.href.split('#')[0] + '#entry' + pid;
         navigator.clipboard.writeText(url).then(() => {
@@ -2811,23 +2817,24 @@ if (data.availableActions?.delete) actionsHtml += '<button class="action-icon de
         if (replyLink) window.location.href = replyLink.getAttribute('href');
     }
         function handleMessageDelete(msid) {
-        showConfirmDialog({
-            title: 'Delete message?',
-            message: 'This message will be permanently deleted. This action cannot be undone.',
-            confirmText: 'Delete',
-            onConfirm: function() {
-                const originalPost = findOriginalMessagePost(msid);
-                if (!originalPost) return;
-                const deleteLink = originalPost.querySelector('a[onclick*="CODE=05"]');
-                if (deleteLink) {
-                    const onclick = deleteLink.getAttribute('onclick');
-                    const match = onclick.match(/window\.location='([^']+)'/);
-                    if (match) window.location.href = match[1];
-                    else deleteLink.click();
-                }
+    showConfirmDialog({
+        title: 'Delete message?',
+        message: 'This message will be permanently deleted. This action cannot be undone.',
+        confirmText: 'Delete',
+        icon: 'fa-regular fa-trash-can',
+        onConfirm: function() {
+            const originalPost = findOriginalMessagePost(msid);
+            if (!originalPost) return;
+            const deleteLink = originalPost.querySelector('a[onclick*="CODE=05"]');
+            if (deleteLink) {
+                const onclick = deleteLink.getAttribute('onclick');
+                const match = onclick.match(/window\.location='([^']+)'/);
+                if (match) window.location.href = match[1];
+                else deleteLink.click();
             }
-        });
-    }
+        }
+    });
+}
     function handleMessageFriend(msid) {
         const originalPost = findOriginalMessagePost(msid);
         if (!originalPost) return;
