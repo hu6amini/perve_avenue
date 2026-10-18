@@ -4434,8 +4434,7 @@ function attachPollHandlers(modernPoll, legacyPoll, pollData) {
         isValidPost,
         fixBrokenWeservImages,
         // Expose the profile hovercard builder for sibling modules
-        // (EditorModule's replying-as header) that need the same
-        // tooltip without duplicating markup and the tippy bootstrap.
+        // (EditorModule's replying-as header) that need the same tooltip.
         attachProfileTip: function (element, data) {
             if (!element || !data) return;
             var hovercardHtml = buildProfileHovercardHtml(data);
