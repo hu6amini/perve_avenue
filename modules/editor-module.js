@@ -2487,9 +2487,6 @@ var EditorModule = (function (Utils, EventBus) {
             document.body.appendChild(container);
         }
 
-        // Hide the legacy UI, keep form in DOM
-        legacySend.style.display = 'none';
-
         try {
             await buildEditorInto(container, {
                 mode: 'reply',
@@ -2550,8 +2547,6 @@ var EditorModule = (function (Utils, EventBus) {
             legacySend.parentNode.insertBefore(container, legacySend);
         }
 
-        legacySend.style.display = 'none';
-
         // Check signature/track checkboxes in legacy before hiding
         var sig = document.getElementById('enablesig');
         var trk = document.getElementById('track_topic');
@@ -2603,24 +2598,6 @@ var EditorModule = (function (Utils, EventBus) {
             _activeFastEdits.delete(fasteditEl);
             return;
         }
-
-        // Hide legacy toolbar, textarea, save/cancel buttons but keep in DOM
-        Array.from(fasteditEl.children).forEach(function (child) {
-            if (child === legacyTextarea || child === legacySaveBtn || child === legacyCancelBtn || child === legacyHidden) {
-                if (child === legacyTextarea) child.style.display = 'none';
-                else if (child === legacySaveBtn) { child.style.display = 'none'; child.dataset.editorPreserved = '1'; }
-                else if (child === legacyCancelBtn) { child.style.display = 'none'; child.dataset.editorPreserved = '1'; }
-                return;
-            }
-            // Hide the legacy button row (first child div with .codebuttons)
-            if (child.nodeType === 1 && child.querySelector && child.querySelector('.codebuttons')) {
-                child.style.display = 'none';
-            } else if (child.nodeType === 1 && child.tagName === 'BR') {
-                child.style.display = 'none';
-            } else if (child.nodeType === 1 && child.tagName === 'INPUT' && child.type === 'button') {
-                child.style.display = 'none';
-            }
-        });
 
         // Determine initial HTML: textarea if populated, else hidden input, else the post's current rendered content
         var initialHtml = '';
