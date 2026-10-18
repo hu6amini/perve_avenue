@@ -310,6 +310,40 @@ var MessengerModule = (function(Utils, EventBus) {
         return match[0].toUpperCase();
     }
 
+    function sanitizeGroupName(name) {
+    if (!name) return 'member';
+    return name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '') || 'member';
+}
+
+function getGroupClass(user) {
+    if (!user || !user.group) return 'group-member';
+    var groupName  = (user.group.name || '').toLowerCase();
+    var groupClass = (user.group.class || '').toLowerCase();
+    var groupBody  = (user.group.bodyclass || '').toLowerCase();
+    var groupId    = user.group.id;
+
+    if (groupClass.indexOf('founder') !== -1 || groupBody.indexOf('founder') !== -1 || groupName === 'founder') {
+        return 'group-founder';
+    }
+    if (groupName === 'administrator' || groupClass.indexOf('admin') !== -1 || groupId === 1) {
+        return 'group-administrator';
+    }
+    if (groupName === 'global moderator' || groupClass.indexOf('global_mod') !== -1) {
+        return 'group-global-moderator';
+    }
+    if (groupName === 'moderator' || groupClass.indexOf('mod') !== -1) {
+        return 'group-moderator';
+    }
+    if (groupName === 'developer' || groupClass.indexOf('developer') !== -1) {
+        return 'group-developer';
+    }
+    if (groupName === 'game dev' || groupClass.indexOf('game_dev') !== -1) {
+        return 'group-game-dev';
+    }
+    if (groupName === 'fan') return 'group-fan';
+    return 'group-' + sanitizeGroupName(user.group.name || 'member');
+}
+
     // ------------------------------------------------------------------------
     // HELPERS
     // ------------------------------------------------------------------------
@@ -996,39 +1030,64 @@ var MessengerModule = (function(Utils, EventBus) {
     }
 
     function buildReplyingAsHeader(user) {
-        if (!user) return null;
+    if (!user) return null;
 
-        var username = decodeHtmlEntities(user.nickname) || 'You';
-        var mid = user.mid;
-        var profileUrl = '/?act=Profile&MID=' + mid;
-        var avatarUrl = optimizeAvatarUrl(user.avatar, 36, 36);
+    var username = decodeHtmlEntities(user.nickname) || 'You';
+    var mid = user.mid;
+    var profileUrl = '/?act=Profile&MID=' + mid;
+    var avatarUrl = optimizeAvatarUrl(user.avatar, 36, 36);
+    var groupClass = getGroupClass(user);                                    // ← new
 
-        var header = document.createElement('div');
-        header.className = 'modern-replying-as';
+    var header = document.createElement('div');
+    header.className = 'modern-replying-as ' + groupClass;                   // ← changed from 'modern-replying-as'
 
-        var avatarHtml;
-        if (avatarUrl) {
-            avatarHtml = '<img class="modern-replying-avatar" ' +
-                'src="' + escapeHtml(avatarUrl) + '" ' +
-                'alt="Avatar of ' + escapeHtml(username) + '" ' +
-                'width="36" height="36" loading="lazy" decoding="async">';
-        } else {
-            var initial = getInitialFromName(username);
-            var bgColor = getColorFromNickname(username, mid);
-            avatarHtml = '<span class="modern-replying-avatar modern-replying-avatar--initial" ' +
-                'style="background-color:#' + bgColor + ';">' +
-                escapeHtml(initial) + '</span>';
-        }
-
-        header.innerHTML =
-            '<span class="modern-replying-label">Replying as:</span>' +
-            '<a href="' + escapeHtml(profileUrl) + '" class="modern-replying-user" rel="nofollow">' +
-                avatarHtml +
-                '<span class="modern-replying-name">' + escapeHtml(username) + '</span>' +
-            '</a>';
-
-        return header;
+    var avatarHtml;
+    if (avatarUrl) {
+        avatarHtml = '<img class="modern-replying-avatar" ' +
+            'src="' + escapeHtml(avatarUrl) + '" ' +
+            'alt="" width="36" height="36" loading="lazy" decoding="async">';
+    } else {
+        var initial = getInitialFromName(username);
+        var bgColor = getColorFromNickname(username, mid);
+        avatarHtml = '<span class="modern-replying-avatar modern-replying-avatar--initial" ' +
+            'style="background-color:#' + bgColor + ';">' +
+            escapeHtml(initial) + '</span>';
     }
+
+    header.innerHTML =
+        '<span class="modern-replying-label">Replying as:</span>' +
+        '<a href="' + escapeHtml(profileUrl) + '" class="modern-replying-user" rel="nofollow">' +
+            avatarHtml +
+            '<span class="modern-replying-name">' + escapeHtml(username) + '</span>' +
+        '</a>';
+
+    return header;
+}
+
+    function attachProfileTip(header, user) {
+    if (!header || !user) return;
+    var tryAttach = function () {
+        if (!window.ForumPostsModule ||
+            typeof window.ForumPostsModule.attachProfileTip !== 'function') {
+            return false;
+        }
+        var username = decodeHtmlEntities(user.nickname) || 'You';
+        var data = {
+            mid: user.mid,
+            username: username,
+            apiUser: user,
+            groupText: (user.group && user.group.name) || 'Member',
+            postCount: user.messages != null ? user.messages : 0,
+            reputation: user.reputation != null ? user.reputation : 0,
+            isOnline: user.status === 'online'
+        };
+        var userLink = header.querySelector('.modern-replying-user');
+        if (userLink) window.ForumPostsModule.attachProfileTip(userLink, data);
+        return true;
+    };
+    if (tryAttach()) return;
+    setTimeout(tryAttach, 200);
+}
 
     // ------------------------------------------------------------------------
     // SENDER AVATAR RESOLUTION (messages list)
@@ -2741,51 +2800,36 @@ var MessengerModule = (function(Utils, EventBus) {
         }
 
         fetchCurrentUserData().then(function (user) {
-            if (!user) {
-                if (!currentHeader && replyingAsPlaceholder.parentNode) {
-                    replyingAsPlaceholder.remove();
-                }
-                return;
-            }
+    if (!user) {
+        if (!currentHeader && replyingAsPlaceholder.parentNode) {
+            replyingAsPlaceholder.remove();
+        }
+        return;
+    }
 
-            if (!currentHeader) {
-                var header = buildReplyingAsHeader(user);
-                if (header && replyingAsPlaceholder.parentNode) {
-                    replyingAsPlaceholder.parentNode.replaceChild(header, replyingAsPlaceholder);
-                } else if (replyingAsPlaceholder.parentNode) {
-                    replyingAsPlaceholder.remove();
-                }
-                return;
-            }
+    // Rebuild the header rather than mutating it in place. The sync-
+    // built header has no group info — user.group isn't part of the
+    // menuwrap DOM — so its wrapper class is always 'group-member'.
+    // Mutating name / href / avatar on that header leaves the class
+    // stale. Building a fresh header and swapping it in carries the
+    // correct group class, the correct avatar, and the correct
+    // profile link all at once. There are no event listeners on the
+    // header, so replacing it is safe.
+    var newHeader = buildReplyingAsHeader(user);
+    if (!newHeader) return;
 
-            var nameEl = currentHeader.querySelector('.modern-replying-name');
-            if (nameEl && user.nickname && nameEl.textContent !== user.nickname) {
-                nameEl.textContent = user.nickname;
-            }
+    if (currentHeader && currentHeader.parentNode) {
+        currentHeader.parentNode.replaceChild(newHeader, currentHeader);
+    } else if (replyingAsPlaceholder.parentNode) {
+        replyingAsPlaceholder.parentNode.replaceChild(newHeader, replyingAsPlaceholder);
+    } else {
+        // Header position is gone — shouldn't fire, but don't crash.
+        return;
+    }
 
-            var linkEl = currentHeader.querySelector('.modern-replying-user');
-            if (linkEl && user.mid) linkEl.href = '/?act=Profile&MID=' + user.mid;
-
-            if (user.avatar) {
-                var newUrl = optimizeAvatarUrl(user.avatar, 36, 36);
-                if (newUrl) {
-                    var avatarEl = currentHeader.querySelector('.modern-replying-avatar');
-                    if (avatarEl && avatarEl.tagName === 'IMG') {
-                        if (avatarEl.src !== newUrl) avatarEl.src = newUrl;
-                    } else if (avatarEl && avatarEl.classList.contains('modern-replying-avatar--initial')) {
-                        var img = document.createElement('img');
-                        img.className = 'modern-replying-avatar';
-                        img.src = newUrl;
-                        img.alt = 'Avatar of ' + (user.nickname || 'You');
-                        img.width = 36;
-                        img.height = 36;
-                        img.loading = 'lazy';
-                        img.decoding = 'async';
-                        avatarEl.parentNode.replaceChild(img, avatarEl);
-                    }
-                }
-            }
-        });
+    currentHeader = newHeader;
+    attachProfileTip(currentHeader, user);
+});
 
         var editorElement = document.createElement('div');
         editorElement.id = 'tiptap-editor';
