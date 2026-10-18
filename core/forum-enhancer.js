@@ -307,6 +307,13 @@ if (typeof ThemeModule !== 'undefined') {
             log('ForumBoardsModule not found, boards enhancement disabled', 'warn');
             ENHANCER_CONFIG.modules.boards = false;
         }
+         // --- EDITOR MODULE (NEW) ---
+        if (typeof EditorModule !== 'undefined') {
+    registerModule('editor', EditorModule, ['forumObserver']);
+} else {
+    log('EditorModule not found, modern editors disabled', 'warn');
+    ENHANCER_CONFIG.modules.editor = false;
+}
     }
     
     // ============================================================================
