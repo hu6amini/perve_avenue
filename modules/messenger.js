@@ -146,6 +146,18 @@
 //      instead of newline-separated textareas; messages list gains
 //      per-row sender avatars (colored initial immediately, real
 //      avatar swapped in when /api.php?mid=X resolves).
+// v21: spoiler title edit — clicking the spoiler's header band (the
+//      top 60px of the block) opens the same title modal the toolbar
+//      button uses, so editing an existing spoiler's title no longer
+//      requires deleting and re-inserting the whole block. The
+//      spoiler's content area is untouched — clicks below the header
+//      band still place the caret normally. The selection-decoration
+//      plugin was renamed from LiteEmbedSelection to BlockAtomSelection
+//      and extended to paint the atom-in-selection ring on images,
+//      link previews, horizontal rules, and upload placeholders in
+//      addition to the lite embeds it already covered. Both changes
+//      are cosmetic / discovery improvements; neither touches the
+//      serialized payload or the reader-side output.
 var MessengerModule = (function(Utils, EventBus) {
     'use strict';
 
@@ -1024,29 +1036,29 @@ var MessengerModule = (function(Utils, EventBus) {
     // Cached per-MID so a page with many messages from the same
     // handful of senders fires one fetch each.
     function fetchSenderAvatar(mid) {
-    if (!mid) return Promise.resolve(null);
-    if (_senderAvatarCache.has(mid)) return Promise.resolve(_senderAvatarCache.get(mid));
-    return fetch('/api.php?mid=' + encodeURIComponent(mid))
-        .then(function(r) { return r.ok ? r.json() : null; })
-        .then(function(data) {
-            if (!data) return null;
-            var user = data['m' + mid] || data.info;
-            var result = {
-                avatar: (user && typeof user.avatar === 'string' && user.avatar) ? user.avatar : null,
-                // Field name is unconfirmed — inspect the JSON shape of
-                // /api.php?mid=X once to find out what the group is
-                // called. Common candidates: user.group, user.role,
-                // user.userGroup, user.user_group, user.position.
-                group: (user && typeof user.group === 'string') ? user.group : null
-            };
-            _senderAvatarCache.set(mid, result);
-            return result;
-        })
-        .catch(function() {
-            _senderAvatarCache.set(mid, null);
-            return null;
-        });
-}
+        if (!mid) return Promise.resolve(null);
+        if (_senderAvatarCache.has(mid)) return Promise.resolve(_senderAvatarCache.get(mid));
+        return fetch('/api.php?mid=' + encodeURIComponent(mid))
+            .then(function(r) { return r.ok ? r.json() : null; })
+            .then(function(data) {
+                if (!data) return null;
+                var user = data['m' + mid] || data.info;
+                var result = {
+                    avatar: (user && typeof user.avatar === 'string' && user.avatar) ? user.avatar : null,
+                    // Field name is unconfirmed — inspect the JSON shape of
+                    // /api.php?mid=X once to find out what the group is
+                    // called. Common candidates: user.group, user.role,
+                    // user.userGroup, user.user_group, user.position.
+                    group: (user && typeof user.group === 'string') ? user.group : null
+                };
+                _senderAvatarCache.set(mid, result);
+                return result;
+            })
+            .catch(function() {
+                _senderAvatarCache.set(mid, null);
+                return null;
+            });
+    }
 
     // ------------------------------------------------------------------------
     // MENTION SEARCH
@@ -3768,6 +3780,64 @@ var MessengerModule = (function(Utils, EventBus) {
             });
         }
 
+        function setupSpoilerTitleEdit(editorRoot, editorInstance) {
+            if (!editorRoot || !editorInstance) return;
+
+            // Resolve the position of the spoiler node containing the
+            // given DOM element. posAtDOM(el, 0) returns the position at
+            // the start of el's first child — inside the first paragraph
+            // of the spoiler. Walk up the ancestor chain until we hit the
+            // spoiler node, then before(depth) gives the spoiler's own
+            // position in the doc.
+            function findSpoilerPos(el) {
+                var pos;
+                try { pos = editorInstance.view.posAtDOM(el, 0); } catch (e) { return null; }
+                var $pos = editorInstance.state.doc.resolve(pos);
+                for (var d = $pos.depth; d > 0; d--) {
+                    if ($pos.node(d).type.name === 'spoiler') {
+                        return $pos.before(d);
+                    }
+                }
+                return null;
+            }
+
+            editorRoot.addEventListener('mousedown', function(e) {
+                if (e.button !== 0) return;
+                var spoiler = e.target.closest('div.spoiler');
+                if (!spoiler) return;
+
+                var rect = spoiler.getBoundingClientRect();
+                var yInSpoiler = e.clientY - rect.top;
+                // Header band is the top 60px of the spoiler (padding-top:
+                // 3.75rem in the CSS). Clicks below that land in the
+                // spoiler's content — let them through so the caret can
+                // still be placed in the body.
+                if (yInSpoiler > 60) return;
+
+                // Prevent ProseMirror from processing the mousedown so the
+                // selection doesn't move into the spoiler content before
+                // the modal opens.
+                e.preventDefault();
+                e.stopPropagation();
+
+                var pos = findSpoilerPos(spoiler);
+                if (pos === null) return;
+
+                var node = editorInstance.state.doc.nodeAt(pos);
+                if (!node || node.type.name !== 'spoiler') return;
+
+                var currentTitle = node.attrs.title || '';
+                showSpoilerTitleModal(currentTitle, function(newTitle) {
+                    var tr = editorInstance.state.tr.setNodeMarkup(
+                        pos,
+                        undefined,
+                        Object.assign({}, node.attrs, { title: newTitle || null })
+                    );
+                    editorInstance.view.dispatch(tr);
+                });
+            }, true); // capture phase — runs before ProseMirror's handler
+        }
+
         function setupEmoticonAutocomplete(editorInstance, editorRoot) {
             if (!editorInstance || !editorRoot) return;
 
@@ -5521,22 +5591,40 @@ var MessengerModule = (function(Utils, EventBus) {
                     },
                 });
 
-                const LiteEmbedSelection = Extension.create({
-                    name: 'liteEmbedSelection',
+                // Paints a ring around every atom the current range
+                // selection overlaps. The class names split by atom kind
+                // so the CSS can pick different radii / colors for
+                // embeds vs inline atoms if it wants to; today both
+                // resolve to the same focus ring, matching the existing
+                // reader-side treatment.
+                const BlockAtomSelection = Extension.create({
+                    name: 'blockAtomSelection',
                     addProseMirrorPlugins() {
                         return [
                             new Plugin({
-                                key: new PluginKey('liteEmbedSelection'),
+                                key: new PluginKey('blockAtomSelection'),
                                 props: {
                                     decorations(state) {
                                         const { from, to, empty } = state.selection;
                                         if (empty) return null;
                                         const decorations = [];
                                         state.doc.nodesBetween(from, to, (node, pos) => {
-                                            if (node.type.name === 'liteYouTube' || node.type.name === 'liteVimeo') {
+                                            const name = node.type.name;
+                                            if (name === 'liteYouTube' || name === 'liteVimeo') {
                                                 decorations.push(
                                                     Decoration.node(pos, pos + node.nodeSize, {
                                                         class: 'lite-embed-in-selection',
+                                                    })
+                                                );
+                                            } else if (
+                                                name === 'image' ||
+                                                name === 'linkPreview' ||
+                                                name === 'horizontalRule' ||
+                                                name === 'imageUploadPlaceholder'
+                                            ) {
+                                                decorations.push(
+                                                    Decoration.node(pos, pos + node.nodeSize, {
+                                                        class: 'atom-in-selection',
                                                     })
                                                 );
                                             }
@@ -5596,7 +5684,7 @@ var MessengerModule = (function(Utils, EventBus) {
                         TrailingEmbedParagraph,
                         NormalizeEmptyDoc,
                         DeleteAdjacentAtom,
-                        LiteEmbedSelection,
+                        BlockAtomSelection,
 
                         CharacterCount.configure({
                             limit: MAX_MESSAGE_LENGTH > 0 ? MAX_MESSAGE_LENGTH : null,
@@ -5683,52 +5771,52 @@ var MessengerModule = (function(Utils, EventBus) {
                             // once loaded, and the CSS max-width rules keep it
                             // inside the paragraph.
                             if (view.state.selection.empty) {
-    var imageUrlText = event.clipboardData
-        ? event.clipboardData.getData('text/plain')
-        : '';
-    if (imageUrlText) {
-        var imageUrl = imageUrlText.trim();
-        if (/^https?:\/\/\S+$/.test(imageUrl) && isImageUrl(imageUrl)) {
-            event.preventDefault();
+                                var imageUrlText = event.clipboardData
+                                    ? event.clipboardData.getData('text/plain')
+                                    : '';
+                                if (imageUrlText) {
+                                    var imageUrl = imageUrlText.trim();
+                                    if (/^https?:\/\/\S+$/.test(imageUrl) && isImageUrl(imageUrl)) {
+                                        event.preventDefault();
 
-            // Resolve natural dimensions before inserting. Without
-            // width/height the reader-side post renders the image
-            // at zero height, then jumps to its real size once it
-            // decodes — a CLS spike that the resize reservation
-            // would otherwise prevent. Same pattern the URL-modal
-            // path uses. If the fetch fails, fall through with the
-            // image inserted sans dimensions; better to show it at
-            // whatever size the browser lays out than to drop it.
-            var img = new Image();
-            img.onload = function () {
-                editor.chain().focus().insertContent({
-                    type: 'image',
-                    attrs: {
-                        src: imageUrl,
-                        alt: 'image',
-                        loading: 'lazy',
-                        decoding: 'async',
-                        width: this.naturalWidth,
-                        height: this.naturalHeight
-                    }
-                }).run();
-            };
-            img.onerror = function () {
-                editor.chain().focus().insertContent({
-                    type: 'image',
-                    attrs: {
-                        src: imageUrl,
-                        alt: 'image',
-                        loading: 'lazy',
-                        decoding: 'async'
-                    }
-                }).run();
-            };
-            img.src = imageUrl;
-            return true;
-        }
-    }
-}
+                                        // Resolve natural dimensions before inserting. Without
+                                        // width/height the reader-side post renders the image
+                                        // at zero height, then jumps to its real size once it
+                                        // decodes — a CLS spike that the resize reservation
+                                        // would otherwise prevent. Same pattern the URL-modal
+                                        // path uses. If the fetch fails, fall through with the
+                                        // image inserted sans dimensions; better to show it at
+                                        // whatever size the browser lays out than to drop it.
+                                        var img = new Image();
+                                        img.onload = function () {
+                                            editor.chain().focus().insertContent({
+                                                type: 'image',
+                                                attrs: {
+                                                    src: imageUrl,
+                                                    alt: 'image',
+                                                    loading: 'lazy',
+                                                    decoding: 'async',
+                                                    width: this.naturalWidth,
+                                                    height: this.naturalHeight
+                                                }
+                                            }).run();
+                                        };
+                                        img.onerror = function () {
+                                            editor.chain().focus().insertContent({
+                                                type: 'image',
+                                                attrs: {
+                                                    src: imageUrl,
+                                                    alt: 'image',
+                                                    loading: 'lazy',
+                                                    decoding: 'async'
+                                                }
+                                            }).run();
+                                        };
+                                        img.src = imageUrl;
+                                        return true;
+                                    }
+                                }
+                            }
 
                             // 5. Lite embeds
                             var clipboard = event.clipboardData;
@@ -6046,6 +6134,7 @@ var MessengerModule = (function(Utils, EventBus) {
 
                     setupImageNsfwOverlay(editorRoot, editor);
                     setupEmoticonAutocomplete(editor, editorRoot);
+                    setupSpoilerTitleEdit(editorRoot, editor);
                 }
 
                 editor.setOptions({
@@ -6285,26 +6374,28 @@ var MessengerModule = (function(Utils, EventBus) {
                 // Swap the colored initial for the real avatar once
                 // /api.php?mid=X resolves. Failures keep the initial.
                 if (senderMid) {
-    (function(rowEl, mid) {
-        fetchSenderAvatar(mid).then(function(result) {
-            if (!result || !result.avatar) return;
-            if (shouldUseInitialAvatar(result.avatar)) return;
-            var avatarEl = rowEl.querySelector('.msg-sender-avatar');
-            if (!avatarEl) return;
-            var img = document.createElement('img');
-            img.src = optimizeAvatarUrl(result.avatar, 48, 48) || result.avatar;
-            img.alt = '';
-            img.loading = 'lazy';
-            img.decoding = 'async';
-            avatarEl.innerHTML = '';
-avatarEl.style.backgroundColor = '';
-avatarEl.appendChild(img);
-            if (result.group) {
-                avatarEl.classList.add('group-' + result.group);
-            }
-        }).catch(function() {});
-    })(msgRow, senderMid);
-}
+                    (function(rowEl, mid) {
+                        fetchSenderAvatar(mid).then(function(result) {
+                            if (!result || !result.avatar) return;
+                            if (shouldUseInitialAvatar(result.avatar)) return;
+                            var avatarEl = rowEl.querySelector('.msg-sender-avatar');
+                            if (!avatarEl) return;
+                            var img = document.createElement('img');
+                            img.src = optimizeAvatarUrl(result.avatar, 48, 48) || result.avatar;
+                            img.alt = '';
+                            img.loading = 'lazy';
+                            img.decoding = 'async';
+                            avatarEl.innerHTML = '';
+                            // Clear the hash color so transparent pixels in
+                            // the image don't show the initial's background.
+                            avatarEl.style.backgroundColor = '';
+                            avatarEl.appendChild(img);
+                            if (result.group) {
+                                avatarEl.classList.add('group-' + result.group);
+                            }
+                        }).catch(function() {});
+                    })(msgRow, senderMid);
+                }
             }
             container.appendChild(listContainer);
 
