@@ -1,4 +1,4 @@
-// Forum Modernizer - Posts Module v2.7
+// Forum Modernizer - Posts Module v2.8
 //   + paragraphization: legacy content wrapped in <p>, top-level <br> removed
 //   + metadata <br> cleanup (bottomborder adjacency ordering fixed)
 //   + trailing-<br> / whitespace net
@@ -18,10 +18,23 @@
 //       stay scoped. Disagreements between the two signals log a
 //       warning and skip the transform — user prose that happens to
 //       end with "has read this message" no longer restructures.
+// v2.8: the modern edit button now proxies through the legacy
+//       ".fastedit_button" so in-place editing is available without
+//       leaving the topic page. If .fastedit appears within the
+//       CONFIG.FAST_EDIT_TIMEOUT window, the future editor module
+//       mounts TipTap over the textarea; the header button itself
+//       is unchanged. If .fastedit doesn't appear — blocked script,
+//       silent error, forum maintenance — the handler navigates to
+//       the full-page editor (CODE=08) as a fallback, matching the
+//       prior behaviour. getAvailableActions now treats
+//       .fastedit_button OR CODE=08 as evidence that edit is
+//       available, so the button renders when only fast edit
+//       survives a maintenance pass. The reply `<a>` fix and the
+//       confirm dialog from v2.7.1 are preserved.
 'use strict';
 
 const ForumPostsModule = (function () {
-    console.log('🔥 ForumPostsModule v2.7 loaded');
+    console.log('🔥 ForumPostsModule v2.8 loaded');
 
     // ===== USER TIMING: mark script start =====
     if (typeof performance !== 'undefined' && performance.mark) {
@@ -40,7 +53,15 @@ const ForumPostsModule = (function () {
         AVATAR_SIZE: 60,
         WESERV_CDN: 'https://images.weserv.nl/',
         CACHE: '1y',
-        QUALITY: 80
+        QUALITY: 80,
+        // How long to wait for .fastedit to appear after clicking the
+        // legacy fast-edit button before falling back to the full-page
+        // editor (CODE=08). Fast edit is normally a synchronous DOM
+        // swap, so 500ms is generous; the only realistic failure mode
+        // is a blocked or errored legacy script, in which case no
+        // amount of waiting would help. Raise if the forum ever adds
+        // an AJAX round-trip to the fast-edit activation path.
+        FAST_EDIT_TIMEOUT: 500
     });
 
     const OG_WORKER_URL = 'https://og-worker.nhristakiev.workers.dev/?url=';
@@ -768,7 +789,16 @@ function parseDateFromTitle(title) {
     function getAvailableActions($post, postId) {
         const actions = { quote: false, edit: false, delete: false, report: true, share: true };
         if ($post.querySelector('a[href*="CODE=02"]')) actions.quote = true;
-        if ($post.querySelector('a[href*="CODE=08"]')) actions.edit = true;
+        // Edit is available through EITHER the standard full-page
+        // editor (CODE=08) OR the in-place fast-edit button. Checking
+        // both keeps the modern edit button visible during forum
+        // maintenance windows where only one of the two paths
+        // survives. handleEdit() proxies through .fastedit_button
+        // first and falls back to CODE=08, so the click always
+        // resolves to a working editor.
+        if ($post.querySelector('.fastedit_button') || $post.querySelector('a[href*="CODE=08"]')) {
+            actions.edit = true;
+        }
         if ($post.querySelector('a[onclick*="delete_post"], a[href*="delete_post"], .deletepost, a[href*="CODE=09"]')) actions.delete = true;
         return actions;
     }
@@ -2673,12 +2703,63 @@ if (data.availableActions?.delete) actionsHtml += '<button class="action-icon de
         const quoteLink = originalPost.querySelector('a[href*="CODE=02"]');
         if (quoteLink) window.location.href = quoteLink.getAttribute('href');
     }
+
+    // Edit handler — proxies through the legacy fast-edit button so
+    // in-place editing is possible without leaving the topic page.
+    //
+    // Behaviour:
+    //   1. If fast edit is already open on this post, do nothing. The
+    //      user is already editing; clicking the header button again
+    //      would toggle-close (or no-op) via the legacy handler, and
+    //      the fallback timer below would then see .fastedit
+    //      disappear and navigate away — confusing.
+    //   2. If .fastedit_button exists, click it. The future editor
+    //      module watches for .fastedit to appear and mounts TipTap
+    //      over the textarea. If .fastedit doesn't appear within
+    //      CONFIG.FAST_EDIT_TIMEOUT, the legacy fast-edit JS didn't
+    //      respond (blocked script, silent error, maintenance); fall
+    //      back to the full-page editor (CODE=08) so the button is
+    //      never a dead end.
+    //   3. If no .fastedit_button exists, navigate to CODE=08
+    //      directly. This is the pre-v2.8 behaviour.
     function handleEdit(pid) {
         const originalPost = document.getElementById(CONFIG.POST_ID_PREFIX + pid);
         if (!originalPost) return;
+
+        // Fast edit already open on this post — nothing to do.
+        if (originalPost.querySelector('.fastedit')) {
+            return;
+        }
+
+        const fastEditBtn = originalPost.querySelector('.fastedit_button');
         const editLink = originalPost.querySelector('a[href*="CODE=08"]');
-        if (editLink) window.location.href = editLink.getAttribute('href');
+
+        if (fastEditBtn) {
+            fastEditBtn.click();
+            setTimeout(function () {
+                if (!originalPost.querySelector('.fastedit')) {
+                    console.debug(
+                        '[PostsModule] Fast edit did not activate within ' +
+                        CONFIG.FAST_EDIT_TIMEOUT + 'ms, falling back to full editor'
+                    );
+                    if (editLink) {
+                        window.location.href = editLink.getAttribute('href');
+                    } else {
+                        console.warn(
+                            '[PostsModule] Edit button clicked but neither fast edit nor full editor available for post', pid
+                        );
+                    }
+                }
+            }, CONFIG.FAST_EDIT_TIMEOUT);
+            return;
+        }
+
+        // No fast-edit button — use the standard full-page editor.
+        if (editLink) {
+            window.location.href = editLink.getAttribute('href');
+        }
     }
+
     function showConfirmDialog(opts) {
     var overlay = document.createElement('div');
     overlay.className = 'modern-modal-overlay';
