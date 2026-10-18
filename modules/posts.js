@@ -4426,13 +4426,27 @@ function attachPollHandlers(modernPoll, legacyPoll, pollData) {
     // ============================================================================
     // PUBLIC API
     // ============================================================================
-    return {
+        return {
         initialize,
         refreshReactionDisplay,
         refreshLikeDisplay,
         getPostsContainer,
         isValidPost,
         fixBrokenWeservImages,
+        // Expose the profile hovercard builder for sibling modules
+        // (EditorModule's replying-as header) that need the same
+        // tooltip without duplicating markup and the tippy bootstrap.
+        attachProfileTip: function (element, data) {
+            if (!element || !data) return;
+            var hovercardHtml = buildProfileHovercardHtml(data);
+            var fallback = 'View profile of ' + (data.username || 'this user');
+            applyTip(element, hovercardHtml || fallback, {
+                placement: 'right-start',
+                interactive: true,
+                maxWidth: 300,
+                hideOnClick: false
+            });
+        },
         reset: function () {
             convertedPostIds.clear();
             postReactions.clear();
