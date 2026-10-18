@@ -184,6 +184,40 @@ var EditorModule = (function (Utils, EventBus) {
         return AVATAR_COLORS[Math.abs(hash) % AVATAR_COLORS.length];
     }
 
+       function sanitizeGroupName(name) {
+        if (!name) return 'member';
+        return name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '') || 'member';
+    }
+
+    function getGroupClass(user) {
+        if (!user || !user.group) return 'group-member';
+        var groupName    = (user.group.name || '').toLowerCase();
+        var groupClass   = (user.group.class || '').toLowerCase();
+        var groupBody    = (user.group.bodyclass || '').toLowerCase();
+        var groupId      = user.group.id;
+
+        if (groupClass.indexOf('founder') !== -1 || groupBody.indexOf('founder') !== -1 || groupName === 'founder') {
+            return 'group-founder';
+        }
+        if (groupName === 'administrator' || groupClass.indexOf('admin') !== -1 || groupId === 1) {
+            return 'group-administrator';
+        }
+        if (groupName === 'global moderator' || groupClass.indexOf('global_mod') !== -1) {
+            return 'group-global-moderator';
+        }
+        if (groupName === 'moderator' || groupClass.indexOf('mod') !== -1) {
+            return 'group-moderator';
+        }
+        if (groupName === 'developer' || groupClass.indexOf('developer') !== -1) {
+            return 'group-developer';
+        }
+        if (groupName === 'game dev' || groupClass.indexOf('game_dev') !== -1) {
+            return 'group-game-dev';
+        }
+        if (groupName === 'fan') return 'group-fan';
+        return 'group-' + sanitizeGroupName(user.group.name || 'member');
+    }
+
     function optimizeAvatarUrl(url, width, height) {
         if (!url || typeof url !== 'string') return null;
         var trimmed = url.trim();
@@ -205,6 +239,31 @@ var EditorModule = (function (Utils, EventBus) {
         return lower.indexOf('img.forumfree.net') !== -1 ||
                lower.indexOf('style_images/default_avatar.png') !== -1 ||
                lower.indexOf('default_avatar') !== -1;
+    }
+
+       function attachProfileTip(header, user) {
+        if (!header || !user) return;
+        var tryAttach = function () {
+            if (!window.ForumPostsModule ||
+                typeof window.ForumPostsModule.attachProfileTip !== 'function') {
+                return false;
+            }
+            var username = decodeHtmlEntities(user.nickname) || 'You';
+            var data = {
+                mid: user.mid,
+                username: username,
+                apiUser: user,
+                groupText: (user.group && user.group.name) || 'Member',
+                postCount: user.messages != null ? user.messages : 0,
+                reputation: user.reputation != null ? user.reputation : 0,
+                isOnline: user.status === 'online'
+            };
+            var userLink = header.querySelector('.modern-replying-user');
+            if (userLink) window.ForumPostsModule.attachProfileTip(userLink, data);
+            return true;
+        };
+        if (tryAttach()) return;
+        setTimeout(tryAttach, 200);
     }
 
     // ========================================================================
@@ -255,15 +314,16 @@ var EditorModule = (function (Utils, EventBus) {
             .catch(function () { return null; });
     }
 
-    function buildUserHeader(user, label) {
+        function buildUserHeader(user, label) {
         if (!user) return null;
         var username = decodeHtmlEntities(user.nickname) || 'You';
         var mid = user.mid;
         var profileUrl = '/?act=Profile&MID=' + mid;
         var avatarUrl = optimizeAvatarUrl(user.avatar, 36, 36);
+        var groupClass = getGroupClass(user);
 
         var header = document.createElement('div');
-        header.className = 'modern-replying-as';
+        header.className = 'modern-replying-as ' + groupClass;
 
         var avatarHtml;
         if (avatarUrl) {
@@ -1047,12 +1107,35 @@ var EditorModule = (function (Utils, EventBus) {
 
         var lowlight = createLowlight(common);
 
-        // ---- Replying-as header ----
+                // ---- Replying-as header ----
+        // Paint immediately from sync data (mid, nickname, avatar) so the
+        // header isn't empty while the API fetch resolves, then swap in a
+        // fully-populated header — real group for the border, real
+        // messages / reputation for the hovercard. The sync data has no
+        // group field, so the class on the initial header is always
+        // 'group-member' until the swap.
         var syncUser = getCurrentUserSync();
+        var currentHeader = null;
         if (syncUser) {
-            var header = buildUserHeader(syncUser, opts.headerLabel || 'Replying as:');
-            if (header) host.appendChild(header);
+            currentHeader = buildUserHeader(syncUser, opts.headerLabel || 'Replying as:');
+            if (currentHeader) host.appendChild(currentHeader);
         }
+
+        fetchCurrentUserData().then(function (user) {
+            if (!user) return;
+            var newHeader = buildUserHeader(user, opts.headerLabel || 'Replying as:');
+            if (!newHeader) return;
+
+            if (currentHeader && currentHeader.parentNode) {
+                currentHeader.parentNode.replaceChild(newHeader, currentHeader);
+            } else if (host.firstChild) {
+                host.insertBefore(newHeader, host.firstChild);
+            } else {
+                host.appendChild(newHeader);
+            }
+            currentHeader = newHeader;
+            attachProfileTip(currentHeader, user);
+        });
 
         // ---- Recipient/Subject fields: omitted in every mode ----
 
