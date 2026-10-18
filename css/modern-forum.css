@@ -5771,6 +5771,36 @@ body#topic #fastreply {
   margin: var(--space-sm) var(--pad-4);
 }
 
+/* Group-specific avatar borders for the replying-as header.
+   Colours mirror section 2 (.post-card.group-* .avatar-circle) and
+   section 18 (.mini-avatar.group-*), so the same role is the same
+   colour everywhere it appears. The base .modern-replying-avatar rule
+   in section 19 uses var(--primary-color) — that's the member default
+   and stays as-is. */
+.modern-replying-as.group-founder .modern-replying-avatar,
+.modern-replying-as.group-founder .modern-replying-avatar--initial { border-color: #f59e0b !important; }
+
+.modern-replying-as.group-administrator .modern-replying-avatar,
+.modern-replying-as.group-administrator .modern-replying-avatar--initial { border-color: #dc2626 !important; }
+
+.modern-replying-as.group-global-moderator .modern-replying-avatar,
+.modern-replying-as.group-global-moderator .modern-replying-avatar--initial { border-color: #06b6d4 !important; }
+
+.modern-replying-as.group-moderator .modern-replying-avatar,
+.modern-replying-as.group-moderator .modern-replying-avatar--initial { border-color: #8b5cf6 !important; }
+
+.modern-replying-as.group-developer .modern-replying-avatar,
+.modern-replying-as.group-developer .modern-replying-avatar--initial { border-color: #0ea5e9 !important; }
+
+.modern-replying-as.group-game-dev .modern-replying-avatar,
+.modern-replying-as.group-game-dev .modern-replying-avatar--initial { border-color: #3b82f6 !important; }
+
+.modern-replying-as.group-fan .modern-replying-avatar,
+.modern-replying-as.group-fan .modern-replying-avatar--initial { border-color: #ec4899 !important; }
+
+.modern-replying-as.group-member .modern-replying-avatar,
+.modern-replying-as.group-member .modern-replying-avatar--initial { border-color: var(--primary-color) !important; }
+
 /* ------------------------------------------------------------------
    Mobile
    ------------------------------------------------------------------ */
