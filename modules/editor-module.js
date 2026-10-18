@@ -3,10 +3,16 @@
    Replaces:  body#topic .fast.send
               body#send  .send
               any .post  .fastedit  (dynamic)
+
    Relies on ForumCoreObserver for dynamic fast-edit detection.
    Mirrors the editor internals of messenger.js (toolbar, TipTap,
    preview, modals, converters) without the messenger-specific
-   sections.
+   sections. Uses the same wrapper (.modern-forum-wrapper) as the
+   rest of the modern stack for placement.
+
+   The legacy editor shells are hidden via CSS (section 27 in
+   modern-forum.css), not by JS, so this module makes no attempt
+   to set display: none anywhere.
    ============================================================ */
 'use strict';
 
@@ -21,7 +27,7 @@ var EditorModule = (function (Utils, EventBus) {
     var _dropdownBackdrop = null;
     var _uploadRegistry = new Map();
     var _currentUserCache = null;
-    var _activeFastEdits = new Map(); // keyed by fastedit element
+    var _activeFastEdits = new Map();
     var _observerIds = [];
 
     // ========================================================================
@@ -184,40 +190,6 @@ var EditorModule = (function (Utils, EventBus) {
         return AVATAR_COLORS[Math.abs(hash) % AVATAR_COLORS.length];
     }
 
-       function sanitizeGroupName(name) {
-        if (!name) return 'member';
-        return name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '') || 'member';
-    }
-
-    function getGroupClass(user) {
-        if (!user || !user.group) return 'group-member';
-        var groupName    = (user.group.name || '').toLowerCase();
-        var groupClass   = (user.group.class || '').toLowerCase();
-        var groupBody    = (user.group.bodyclass || '').toLowerCase();
-        var groupId      = user.group.id;
-
-        if (groupClass.indexOf('founder') !== -1 || groupBody.indexOf('founder') !== -1 || groupName === 'founder') {
-            return 'group-founder';
-        }
-        if (groupName === 'administrator' || groupClass.indexOf('admin') !== -1 || groupId === 1) {
-            return 'group-administrator';
-        }
-        if (groupName === 'global moderator' || groupClass.indexOf('global_mod') !== -1) {
-            return 'group-global-moderator';
-        }
-        if (groupName === 'moderator' || groupClass.indexOf('mod') !== -1) {
-            return 'group-moderator';
-        }
-        if (groupName === 'developer' || groupClass.indexOf('developer') !== -1) {
-            return 'group-developer';
-        }
-        if (groupName === 'game dev' || groupClass.indexOf('game_dev') !== -1) {
-            return 'group-game-dev';
-        }
-        if (groupName === 'fan') return 'group-fan';
-        return 'group-' + sanitizeGroupName(user.group.name || 'member');
-    }
-
     function optimizeAvatarUrl(url, width, height) {
         if (!url || typeof url !== 'string') return null;
         var trimmed = url.trim();
@@ -241,29 +213,38 @@ var EditorModule = (function (Utils, EventBus) {
                lower.indexOf('default_avatar') !== -1;
     }
 
-       function attachProfileTip(header, user) {
-        if (!header || !user) return;
-        var tryAttach = function () {
-            if (!window.ForumPostsModule ||
-                typeof window.ForumPostsModule.attachProfileTip !== 'function') {
-                return false;
-            }
-            var username = decodeHtmlEntities(user.nickname) || 'You';
-            var data = {
-                mid: user.mid,
-                username: username,
-                apiUser: user,
-                groupText: (user.group && user.group.name) || 'Member',
-                postCount: user.messages != null ? user.messages : 0,
-                reputation: user.reputation != null ? user.reputation : 0,
-                isOnline: user.status === 'online'
-            };
-            var userLink = header.querySelector('.modern-replying-user');
-            if (userLink) window.ForumPostsModule.attachProfileTip(userLink, data);
-            return true;
-        };
-        if (tryAttach()) return;
-        setTimeout(tryAttach, 200);
+    function sanitizeGroupName(name) {
+        if (!name) return 'member';
+        return name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '') || 'member';
+    }
+
+    function getGroupClass(user) {
+        if (!user || !user.group) return 'group-member';
+        var groupName  = (user.group.name || '').toLowerCase();
+        var groupClass = (user.group.class || '').toLowerCase();
+        var groupBody  = (user.group.bodyclass || '').toLowerCase();
+        var groupId    = user.group.id;
+
+        if (groupClass.indexOf('founder') !== -1 || groupBody.indexOf('founder') !== -1 || groupName === 'founder') {
+            return 'group-founder';
+        }
+        if (groupName === 'administrator' || groupClass.indexOf('admin') !== -1 || groupId === 1) {
+            return 'group-administrator';
+        }
+        if (groupName === 'global moderator' || groupClass.indexOf('global_mod') !== -1) {
+            return 'group-global-moderator';
+        }
+        if (groupName === 'moderator' || groupClass.indexOf('mod') !== -1) {
+            return 'group-moderator';
+        }
+        if (groupName === 'developer' || groupClass.indexOf('developer') !== -1) {
+            return 'group-developer';
+        }
+        if (groupName === 'game dev' || groupClass.indexOf('game_dev') !== -1) {
+            return 'group-game-dev';
+        }
+        if (groupName === 'fan') return 'group-fan';
+        return 'group-' + sanitizeGroupName(user.group.name || 'member');
     }
 
     // ========================================================================
@@ -314,7 +295,7 @@ var EditorModule = (function (Utils, EventBus) {
             .catch(function () { return null; });
     }
 
-        function buildUserHeader(user, label) {
+    function buildUserHeader(user, label) {
         if (!user) return null;
         var username = decodeHtmlEntities(user.nickname) || 'You';
         var mid = user.mid;
@@ -344,8 +325,33 @@ var EditorModule = (function (Utils, EventBus) {
         return header;
     }
 
+    function attachProfileTip(header, user) {
+        if (!header || !user) return;
+        var tryAttach = function () {
+            if (!window.ForumPostsModule ||
+                typeof window.ForumPostsModule.attachProfileTip !== 'function') {
+                return false;
+            }
+            var username = decodeHtmlEntities(user.nickname) || 'You';
+            var data = {
+                mid: user.mid,
+                username: username,
+                apiUser: user,
+                groupText: (user.group && user.group.name) || 'Member',
+                postCount: user.messages != null ? user.messages : 0,
+                reputation: user.reputation != null ? user.reputation : 0,
+                isOnline: user.status === 'online'
+            };
+            var userLink = header.querySelector('.modern-replying-user');
+            if (userLink) window.ForumPostsModule.attachProfileTip(userLink, data);
+            return true;
+        };
+        if (tryAttach()) return;
+        setTimeout(tryAttach, 200);
+    }
+
     // ========================================================================
-    // HTML → LEGACY CONVERTERS  (mirrors messenger)
+    // HTML → LEGACY CONVERTERS
     // ========================================================================
     function legacyToHtml(legacy) {
         if (!legacy) return '';
@@ -501,7 +507,7 @@ var EditorModule = (function (Utils, EventBus) {
     }
 
     // ========================================================================
-    // PREVIEW TRANSFORM  (mirrors messenger)
+    // SYNTAX HIGHLIGHTING (PREVIEW / READER)
     // ========================================================================
     function highlightCode(codeText) {
         if (codeText == null) return '';
@@ -529,6 +535,9 @@ var EditorModule = (function (Utils, EventBus) {
         return html;
     }
 
+    // ========================================================================
+    // PREVIEW TRANSFORM
+    // ========================================================================
     function transformPreviewHtml(html) {
         if (!html || typeof html !== 'string') return html;
         var temp = document.createElement('div');
@@ -837,7 +846,7 @@ var EditorModule = (function (Utils, EventBus) {
     }
 
     // ========================================================================
-    // MODALS (input / spoiler title / code lang / link / image edit)
+    // MODALS
     // ========================================================================
     function makeModalShell(width) {
         var overlay = document.createElement('div');
@@ -1036,7 +1045,7 @@ var EditorModule = (function (Utils, EventBus) {
     };
 
     // ========================================================================
-    // TIPTAP EXTENSION BOOTSTRAP (shared)
+    // TIPTAP DEPS
     // ========================================================================
     async function loadTipTapDeps() {
         const core = await import('https://esm.sh/@tiptap/core@2.5.2');
@@ -1088,10 +1097,9 @@ var EditorModule = (function (Utils, EventBus) {
     //   initialHtml
     //   placeholder
     //   headerLabel
-    //   onSync(legacyHtml)         — required: push content into legacy textarea
-    //   onSubmit()                 — required: submit / save
-    //   onCancel()                 — optional: cancel (fastedit only)
-    //   compact                    — boolean: tighter layout (fastedit)
+    //   onSync(legacyHtml)
+    //   onSubmit()
+    //   onCancel()
     // ========================================================================
     async function buildEditorInto(host, opts) {
         var editorRef = { current: null };
@@ -1107,13 +1115,7 @@ var EditorModule = (function (Utils, EventBus) {
 
         var lowlight = createLowlight(common);
 
-                // ---- Replying-as header ----
-        // Paint immediately from sync data (mid, nickname, avatar) so the
-        // header isn't empty while the API fetch resolves, then swap in a
-        // fully-populated header — real group for the border, real
-        // messages / reputation for the hovercard. The sync data has no
-        // group field, so the class on the initial header is always
-        // 'group-member' until the swap.
+        // ---- Replying-as header ----
         var syncUser = getCurrentUserSync();
         var currentHeader = null;
         if (syncUser) {
@@ -1137,8 +1139,6 @@ var EditorModule = (function (Utils, EventBus) {
             attachProfileTip(currentHeader, user);
         });
 
-        // ---- Recipient/Subject fields: omitted in every mode ----
-
         // ---- Toolbar ----
         var toolbar = document.createElement('div');
         toolbar.className = 'modern-editor-toolbar';
@@ -1154,7 +1154,6 @@ var EditorModule = (function (Utils, EventBus) {
 
         // ---- Preview ----
         var previewArea = document.createElement('div');
-        previewArea.id = 'modern-preview-area-' + Math.random().toString(36).slice(2, 9);
         previewArea.className = 'modern-preview';
         previewArea.style.display = 'none';
         previewArea.innerHTML = '<h3 class="modern-preview-title"><i class="fa-regular fa-eye"></i> Preview</h3><div class="preview-content"></div>';
@@ -1174,7 +1173,7 @@ var EditorModule = (function (Utils, EventBus) {
         var previewBtn = actions.querySelector('.modern-editor-preview-btn');
         var cancelBtn = actions.querySelector('.modern-editor-cancel');
 
-        // ---- Toolbar buttons ----
+        // ---- Helpers ----
         function addSep() {
             var s = document.createElement('span');
             s.className = 'toolbar-separator';
@@ -1197,7 +1196,6 @@ var EditorModule = (function (Utils, EventBus) {
 
         function exec(cmd) { if (!editorRef.current) return; cmd(); editorRef.current.commands.focus(); }
 
-        // Dropdown helpers
         var _backdrop = null;
         var _mobileMode = window.matchMedia('(max-width: 680px)').matches;
 
@@ -1270,6 +1268,7 @@ var EditorModule = (function (Utils, EventBus) {
             if (nowMobile !== _mobileMode) { _mobileMode = nowMobile; closeAllPopovers(); }
         });
 
+        // ---- Toolbar buttons ----
         var undoBtn = mkBtn('fa-regular fa-undo', 'Undo', 'Control+Z');
         var redoBtn = mkBtn('fa-regular fa-redo', 'Redo', 'Control+Shift+Z');
         undoBtn.disabled = true; redoBtn.disabled = true;
@@ -1508,7 +1507,6 @@ var EditorModule = (function (Utils, EventBus) {
             }).run();
         }
 
-        // The image button drops an idle placeholder; the placeholder itself handles both URL and file paths.
         imageBtn.onclick = function () {
             if (!editorRef.current) return;
             editorRef.current.chain().focus().insertContent({ type: 'imageUploadPlaceholder', attrs: { status: 'idle' } }).run();
@@ -1560,7 +1558,7 @@ var EditorModule = (function (Utils, EventBus) {
 
         nsfwBtn.onclick = function () { exec(function () { editorRef.current.chain().focus().toggleNSFW().run(); }); };
 
-        // Basic formatting handlers (need editor ref)
+        // Basic formatting
         undoBtn.onclick = function () { exec(function () { editorRef.current.chain().focus().undo().run(); }); };
         redoBtn.onclick = function () { exec(function () { editorRef.current.chain().focus().redo().run(); }); };
         clearFormatBtn.onclick = function () { exec(function () { editorRef.current.chain().focus().unsetAllMarks().clearNodes().run(); }); };
@@ -1576,8 +1574,6 @@ var EditorModule = (function (Utils, EventBus) {
         blockquoteBtn.onclick = function () { exec(function () { editorRef.current.chain().focus().toggleBlockquote().run(); }); };
 
         // ---- Node definitions ----
-
-        // Upload placeholder node (mirrors messenger's v17 behaviour)
         const ImageUploadPlaceholder = Node.create({
             name: 'imageUploadPlaceholder',
             group: 'block', atom: true, draggable: false, selectable: true,
@@ -1791,7 +1787,6 @@ var EditorModule = (function (Utils, EventBus) {
             }
         });
 
-        // Inline emoji node
         const Emoji = Node.create({
             name: 'emoji', inline: true, group: 'inline', atom: true,
             addAttributes() { return { src: { default: null }, alt: { default: '' }, loading: { default: 'lazy' }, decoding: { default: 'async' }, width: { default: 24 }, height: { default: 24 } }; },
@@ -2055,18 +2050,15 @@ var EditorModule = (function (Utils, EventBus) {
             editorProps: {
                 attributes: { class: 'modern-wysiwyg-content', 'aria-label': 'Message body' },
                 handlePaste: function (view, event) {
-                    // 1. Image file paste
                     var files = event.clipboardData ? event.clipboardData.files : null;
                     if (files && files.length) {
                         var imgs = Array.prototype.slice.call(files).filter(function (f) { return f.type && f.type.indexOf('image/') === 0; });
                         if (imgs.length) { event.preventDefault(); imgs.forEach(function (f) { uploadImageToWorker(f); }); return true; }
                     }
-                    // 2. Shift+paste
                     if (event.shiftKey) {
                         var t = event.clipboardData.getData('text/plain');
                         if (t) { event.preventDefault(); view.dispatch(view.state.tr.insertText(t)); return true; }
                     }
-                    // 3. Image URL
                     if (view.state.selection.empty) {
                         var txt = event.clipboardData ? event.clipboardData.getData('text/plain') : '';
                         if (txt) {
@@ -2118,7 +2110,6 @@ var EditorModule = (function (Utils, EventBus) {
 
         editorRef.current = editor;
 
-        // Active state syncing
         function updateActive() {
             undoBtn.disabled = !editor.can().undo();
             redoBtn.disabled = !editor.can().redo();
@@ -2139,7 +2130,6 @@ var EditorModule = (function (Utils, EventBus) {
         editor.on('transaction', updateActive);
         updateActive();
 
-        // Setup image hover toolbar + spoiler header click + emoticon autocomplete
         var editorRoot = editorEl.querySelector('.ProseMirror');
         if (editorRoot) {
             editorRoot.setAttribute('dropzone', 'copy');
@@ -2154,7 +2144,6 @@ var EditorModule = (function (Utils, EventBus) {
             setupEmoticonAutocomplete(editor, editorRoot);
         }
 
-        // Ctrl+Enter → submit
         editor.setOptions({
             editorProps: {
                 handleDOMEvents: {
@@ -2302,7 +2291,7 @@ var EditorModule = (function (Utils, EventBus) {
             ed.on('blur', function () { toolbarEl.style.display = 'none'; hovered = null; });
         }
 
-        // Helper: spoiler title edit (click header band)
+        // Helper: spoiler title edit
         function setupSpoilerTitleEdit(root, ed) {
             root.addEventListener('mousedown', function (e) {
                 if (e.button !== 0) return;
@@ -2491,7 +2480,6 @@ var EditorModule = (function (Utils, EventBus) {
 
         updateSendState();
 
-        // Store editor reference for external sync (e.g., before submit)
         host.__editorInstance = editor;
         host.__editorSync = function () {
             if (editor) {
@@ -2542,259 +2530,297 @@ var EditorModule = (function (Utils, EventBus) {
 
     // ========================================================================
     // FAST REPLY BUILDER (body#topic)
+    //
+    // Placement: after #modern-pagination when it exists, else appended to
+    // #modern-forum-wrapper. The wrapper always exists by the time this
+    // runs (forum-enhancer creates it synchronously before calling
+    // initializeAllModules), so no waiting, no observer, no fallback chain.
     // ========================================================================
     async function buildFastReplyEditor() {
-    var legacySend = document.querySelector('.fast.send');
-    if (!legacySend) return;
-    if (document.getElementById('modern-editor-fastreply')) return;
+        var legacySend = document.querySelector('.fast.send');
+        if (!legacySend) return;
+        if (document.getElementById('modern-editor-fastreply')) return;
 
-    var legacyPost = document.getElementById('Post');
-    var legacyForm = window.REPLIER || (legacyPost ? legacyPost.form : null);
-    var legacySubmit = document.querySelector('input[name="sub-mit"]');
+        var legacyPost = document.getElementById('Post');
+        var legacyForm = window.REPLIER || (legacyPost ? legacyPost.form : null);
+        var legacySubmit = document.querySelector('input[name="sub-mit"]');
 
-    var legacyHtml = legacyPost ? legacyPost.value : '';
+        var legacyHtml = legacyPost ? legacyPost.value : '';
 
-    // Extract the localStorage draft key from the legacy textarea's inline
-    // onkeyup handler. That handler is the only thing that ever writes to
-    // localStorage['t<topicId>']. Since our editor doesn't fire keyup on
-    // the hidden textarea, the write never happens and stale drafts survive
-    // a refresh. Mirror the write from onSync instead of hardcoding the key
-    // (it's topic-specific and the topic id differs per page).
-    var draftKey = null;
-    if (legacyPost) {
-        var onkeyup = legacyPost.getAttribute('onkeyup') || '';
-        var m = onkeyup.match(/localStorage\.setItem\(['"]([^'"]+)['"]/);
-        if (m) draftKey = m[1];
-    }
-
-    function persistDraft(legacy) {
-        if (!draftKey) return;
-        try {
-            var trimmed = (legacy || '').trim();
-            if (trimmed) localStorage.setItem(draftKey, trimmed);
-            else localStorage.removeItem(draftKey);
-        } catch (e) {}
-    }
-
-    var container = document.createElement('div');
-    container.id = 'modern-editor-fastreply';
-    container.className = 'modern-editor-container modern-editor-container--reply';
-
-    var insertAfter =
-        document.getElementById('modern-pagination') ||
-        document.getElementById('posts-container') ||
-        legacySend;
-
-    if (insertAfter && insertAfter.parentNode) {
-        insertAfter.parentNode.insertBefore(container, insertAfter.nextSibling);
-    } else {
-        document.body.appendChild(container);
-    }
-
-    // Move the #fastreply anchor so fragment navigation targets the visible editor.
-    var anchorEl = document.getElementById('fastreply');
-    if (anchorEl) {
-        var anchorNode = (anchorEl.parentElement && anchorEl.parentElement.classList.contains('anchor'))
-            ? anchorEl.parentElement
-            : anchorEl;
-        container.parentNode.insertBefore(anchorNode, container);
-    }
-
-    try {
-        await buildEditorInto(container, {
-            mode: 'reply',
-            initialHtml: legacyToHtml(legacyHtml),
-            placeholder: 'Write your reply…',
-            headerLabel: 'Replying as:',
-            submitLabel: 'Post reply',
-            onSync: function (legacy) {
-                if (legacyPost) legacyPost.value = legacy;
-                persistDraft(legacy);
-            },
-            onSubmit: function () {
-                var sig = document.getElementById('enablesig');
-                var trk = document.getElementById('track_topic');
-                if (sig) sig.checked = true;
-                if (trk) trk.checked = true;
-                if (legacySubmit) { legacySubmit.disabled = false; }
-                if (legacyForm && legacyForm instanceof HTMLFormElement) {
-                    try { HTMLFormElement.prototype.submit.call(legacyForm); }
-                    catch (e) { legacyForm.submit(); }
-                } else if (legacySubmit) {
-                    legacySubmit.click();
-                }
-            }
-        });
-
-        if (window.location.hash === '#fastreply') {
-            setTimeout(function () {
-                container.scrollIntoView({ behavior: 'smooth', block: 'start' });
-            }, 100);
+        // Extract the localStorage draft key from the legacy textarea's
+        // onkeyup handler. That handler is the only thing that ever writes
+        // to localStorage['t<topicId>']. Since our editor doesn't fire
+        // keyup on the hidden textarea, we mirror the write from onSync.
+        var draftKey = null;
+        if (legacyPost) {
+            var onkeyup = legacyPost.getAttribute('onkeyup') || '';
+            var dm = onkeyup.match(/localStorage\.setItem\(['"]([^'"]+)['"]/);
+            if (dm) draftKey = dm[1];
         }
 
-        console.log('[EditorModule] Fast reply editor built');
-    } catch (err) {
-        console.error('[EditorModule] Fast reply build failed:', err);
-        container.innerHTML = '<div style="color:red;padding:1rem;">Editor failed to load. <button onclick="location.reload()">Reload</button></div>';
+        function persistDraft(legacy) {
+            if (!draftKey) return;
+            try {
+                var trimmed = (legacy || '').trim();
+                if (trimmed) localStorage.setItem(draftKey, trimmed);
+                else localStorage.removeItem(draftKey);
+            } catch (e) {}
+        }
+
+        var container = document.createElement('div');
+        container.id = 'modern-editor-fastreply';
+        container.className = 'modern-editor-container modern-editor-container--reply';
+
+        // --- Placement ---
+        var insertAfter = document.getElementById('modern-pagination');
+        var wrapper = document.getElementById('modern-forum-wrapper');
+
+        if (insertAfter && insertAfter.parentNode) {
+            insertAfter.parentNode.insertBefore(container, insertAfter.nextSibling);
+        } else if (wrapper) {
+            wrapper.appendChild(container);
+        } else {
+            document.body.appendChild(container);
+        }
+
+        // --- Move the #fastreply anchor to sit immediately before the modern editor ---
+        var anchorEl = document.getElementById('fastreply');
+        if (anchorEl) {
+            var anchorNode = (anchorEl.parentElement && anchorEl.parentElement.classList.contains('anchor'))
+                ? anchorEl.parentElement
+                : anchorEl;
+            container.parentNode.insertBefore(anchorNode, container);
+        }
+
+        try {
+            await buildEditorInto(container, {
+                mode: 'reply',
+                initialHtml: legacyToHtml(legacyHtml),
+                placeholder: 'Write your reply…',
+                headerLabel: 'Replying as:',
+                submitLabel: 'Post reply',
+                onSync: function (legacy) {
+                    if (legacyPost) legacyPost.value = legacy;
+                    persistDraft(legacy);
+                },
+                onSubmit: function () {
+                    var sig = document.getElementById('enablesig');
+                    var trk = document.getElementById('track_topic');
+                    if (sig) sig.checked = true;
+                    if (trk) trk.checked = true;
+                    if (legacySubmit) legacySubmit.disabled = false;
+                    if (legacyForm && legacyForm instanceof HTMLFormElement) {
+                        try { HTMLFormElement.prototype.submit.call(legacyForm); }
+                        catch (e) { legacyForm.submit(); }
+                    } else if (legacySubmit) {
+                        legacySubmit.click();
+                    }
+                }
+            });
+
+            // Second caveat: on a hard load of topic#fastreply the browser's
+            // first-paint fragment scroll fires before we move the anchor, so
+            // it targets the legacy position. Re-scroll now that the modern
+            // editor exists and has a real height.
+            if (window.location.hash === '#fastreply') {
+                setTimeout(function () {
+                    container.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                }, 100);
+            }
+
+            console.log('[EditorModule] Fast reply editor built');
+        } catch (err) {
+            console.error('[EditorModule] Fast reply build failed:', err);
+            container.innerHTML = '<div style="color:red;padding:1rem;">Editor failed to load. <button onclick="location.reload()">Reload</button></div>';
+        }
     }
-}
 
     // ========================================================================
     // FULL EDITOR BUILDER (body#send)
+    //
+    // Placement: before #modern-summary-container when it exists, else
+    // appended to #modern-forum-wrapper. Summary, when it arrives later,
+    // is appended to the wrapper too — so it lands after the editor,
+    // preserving "editor before summary".
     // ========================================================================
     async function buildFullEditor() {
-    var legacySend = document.querySelector('.send');
-    if (!legacySend) return;
-    if (document.getElementById('modern-editor-full')) return;
+        var legacySend = document.querySelector('.send');
+        if (!legacySend) return;
+        if (document.getElementById('modern-editor-full')) return;
 
-    var legacyPost = document.getElementById('Post');
-    var legacyForm = window.REPLIER || (legacyPost ? legacyPost.form : null);
-    var legacySubmit = document.querySelector('input[name="submit_post"]');
+        var legacyPost = document.getElementById('Post');
+        var legacyForm = window.REPLIER || (legacyPost ? legacyPost.form : null);
+        var legacySubmit = document.querySelector('input[name="submit_post"]');
 
-    var legacyHtml = legacyPost ? legacyPost.value : '';
+        var legacyHtml = legacyPost ? legacyPost.value : '';
 
-    var container = document.createElement('div');
-    container.id = 'modern-editor-full';
-    container.className = 'modern-editor-container modern-editor-container--full';
+        var container = document.createElement('div');
+        container.id = 'modern-editor-full';
+        container.className = 'modern-editor-container modern-editor-container--full';
 
-    // Insert before #modern-summary-container (posts.js's summary), else before the wrapper's first child
-    var wrapper = document.getElementById('modern-forum-wrapper');
-    var summary = document.getElementById('modern-summary-container');
-    var insertBefore = summary || (wrapper ? wrapper.firstChild : null);
+        // --- Placement ---
+        var summary = document.getElementById('modern-summary-container');
+        var wrapper = document.getElementById('modern-forum-wrapper');
 
-    if (insertBefore && insertBefore.parentNode) {
-        insertBefore.parentNode.insertBefore(container, insertBefore);
-    } else if (wrapper) {
-        wrapper.appendChild(container);
-    } else {
-        legacySend.parentNode.insertBefore(container, legacySend);
-    }
+        if (summary && summary.parentNode) {
+            summary.parentNode.insertBefore(container, summary);
+        } else if (wrapper) {
+            wrapper.appendChild(container);
+        } else {
+            document.body.appendChild(container);
+        }
 
-    // Signature / subscription force-checked before submit (both in
-    // onSubmit and here for the case where the editor never submits but
-    // the user later clicks something that does — harmless either way).
-    var sig = document.getElementById('enablesig');
-    var trk = document.getElementById('track_topic');
-    if (sig) sig.checked = true;
-    if (trk) trk.checked = true;
+        // Force-check signature / subscription before submit
+        var sig = document.getElementById('enablesig');
+        var trk = document.getElementById('track_topic');
+        if (sig) sig.checked = true;
+        if (trk) trk.checked = true;
 
-    try {
-        await buildEditorInto(container, {
-            mode: 'full',
-            initialHtml: legacyToHtml(legacyHtml),
-            placeholder: 'Write your post…',
-            headerLabel: 'Writing as:',
-            submitLabel: 'Submit post',
-            onSync: function (legacy) { if (legacyPost) legacyPost.value = legacy; },
-            onSubmit: function () {
-                var sig = document.getElementById('enablesig');
-                var trk = document.getElementById('track_topic');
-                if (sig) sig.checked = true;
-                if (trk) trk.checked = true;
-                if (legacySubmit) { legacySubmit.disabled = false; }
-                if (legacyForm && legacyForm instanceof HTMLFormElement) {
-                    try { HTMLFormElement.prototype.submit.call(legacyForm); }
-                    catch (e) { legacyForm.submit(); }
-                } else if (legacySubmit) {
-                    legacySubmit.click();
+        try {
+            await buildEditorInto(container, {
+                mode: 'full',
+                initialHtml: legacyToHtml(legacyHtml),
+                placeholder: 'Write your post…',
+                headerLabel: 'Writing as:',
+                submitLabel: 'Submit post',
+                onSync: function (legacy) { if (legacyPost) legacyPost.value = legacy; },
+                onSubmit: function () {
+                    var s2 = document.getElementById('enablesig');
+                    var t2 = document.getElementById('track_topic');
+                    if (s2) s2.checked = true;
+                    if (t2) t2.checked = true;
+                    if (legacySubmit) legacySubmit.disabled = false;
+                    if (legacyForm && legacyForm instanceof HTMLFormElement) {
+                        try { HTMLFormElement.prototype.submit.call(legacyForm); }
+                        catch (e) { legacyForm.submit(); }
+                    } else if (legacySubmit) {
+                        legacySubmit.click();
+                    }
                 }
-            }
-        });
-        console.log('[EditorModule] Full editor built');
-    } catch (err) {
-        console.error('[EditorModule] Full editor build failed:', err);
-        container.innerHTML = '<div style="color:red;padding:1rem;">Editor failed to load. <button onclick="location.reload()">Reload</button></div>';
-    }
-}
-
-    // ========================================================================
-    // FAST EDIT BUILDER (per-post)
-    // ========================================================================
-    async function buildFastEdit(fasteditEl) {
-    if (!fasteditEl || _activeFastEdits.has(fasteditEl)) return;
-    _activeFastEdits.set(fasteditEl, 'pending');
-
-    var legacyTextarea = fasteditEl.querySelector('.fastedit_text');
-    var legacySaveBtn = fasteditEl.querySelector('.fastedit_send');
-    var legacyCancelBtn = fasteditEl.querySelector('.fastedit_canc');
-    var legacyHidden = fasteditEl.querySelector('input[type="hidden"]');
-
-    if (!legacyTextarea) {
-        _activeFastEdits.delete(fasteditEl);
-        return;
-    }
-
-    // Determine initial HTML: textarea if populated, else hidden input, else the post's current rendered content
-    var initialHtml = '';
-    var textareaVal = legacyTextarea.value ? legacyTextarea.value.trim() : '';
-    if (textareaVal) {
-        initialHtml = legacyToHtml(textareaVal);
-    } else if (legacyHidden && legacyHidden.value) {
-        initialHtml = legacyToHtml(extractFastEditBody(legacyHidden.value));
-    } else {
-        var postEl = fasteditEl.closest('.post');
-        if (postEl) {
-            var contentTable = postEl.querySelector('.right.Item table.color') || postEl.querySelector('td.Item table.color');
-            if (contentTable) {
-                var clone = contentTable.cloneNode(true);
-                clone.querySelectorAll('.edit, .bottomborder, .signature').forEach(function (el) { el.remove(); });
-                initialHtml = legacyToHtml(clone.innerHTML);
-            }
+            });
+            console.log('[EditorModule] Full editor built');
+        } catch (err) {
+            console.error('[EditorModule] Full editor build failed:', err);
+            container.innerHTML = '<div style="color:red;padding:1rem;">Editor failed to load. <button onclick="location.reload()">Reload</button></div>';
         }
     }
 
-    var container = document.createElement('div');
-    container.className = 'modern-editor-container modern-editor-container--fastedit';
-    fasteditEl.appendChild(container);
+    // ========================================================================
+    // FAST EDIT BUILDER (per-post)
+    //
+    // Placement: hide the corresponding modern card, insert the editor as
+    // a sibling of that card. On cancel, restore the card. On successful
+    // save, the post gets reconverted (which rebuilds the card from the
+    // new legacy content), so the restore happens naturally.
+    //
+    // Falls back to inserting inside .fastedit if there is no corresponding
+    // modern card (e.g., on a page where posts.js hasn't converted yet).
+    // ========================================================================
+    async function buildFastEdit(fasteditEl) {
+        if (!fasteditEl || _activeFastEdits.has(fasteditEl)) return;
+        _activeFastEdits.set(fasteditEl, 'pending');
 
-    try {
-        await buildEditorInto(container, {
-            mode: 'fastedit',
-            initialHtml: initialHtml,
-            placeholder: 'Edit your post…',
-            headerLabel: 'Editing as:',
-            submitLabel: 'Save changes',
-            onSync: function (legacy) { if (legacyTextarea) legacyTextarea.value = legacy; },
-            onCancel: function () {
-                _activeFastEdits.delete(fasteditEl);
-                if (legacyCancelBtn) legacyCancelBtn.click();
-            },
-            onSubmit: function () {
-                if (!legacyTextarea) { showToast('Save failed — textarea missing', 'error'); return; }
-                if (legacySaveBtn) {
-                    legacySaveBtn.click();
-                } else {
-                    showToast('Save button missing', 'error');
-                    return;
+        var legacyTextarea = fasteditEl.querySelector('.fastedit_text');
+        var legacySaveBtn = fasteditEl.querySelector('.fastedit_send');
+        var legacyCancelBtn = fasteditEl.querySelector('.fastedit_canc');
+        var legacyHidden = fasteditEl.querySelector('input[type="hidden"]');
+
+        if (!legacyTextarea) {
+            _activeFastEdits.delete(fasteditEl);
+            return;
+        }
+
+        // Determine initial HTML
+        var initialHtml = '';
+        var textareaVal = legacyTextarea.value ? legacyTextarea.value.trim() : '';
+        if (textareaVal) {
+            initialHtml = legacyToHtml(textareaVal);
+        } else if (legacyHidden && legacyHidden.value) {
+            initialHtml = legacyToHtml(extractFastEditBody(legacyHidden.value));
+        } else {
+            var postEl = fasteditEl.closest('.post');
+            if (postEl) {
+                var contentTable = postEl.querySelector('.right.Item table.color') || postEl.querySelector('td.Item table.color');
+                if (contentTable) {
+                    var clone = contentTable.cloneNode(true);
+                    clone.querySelectorAll('.edit, .bottomborder, .signature').forEach(function (el) { el.remove(); });
+                    initialHtml = legacyToHtml(clone.innerHTML);
                 }
-                waitForFastEditRemoval(fasteditEl, function () {
-                    _activeFastEdits.delete(fasteditEl);
-                    triggerPostReconversion();
-                });
             }
-        });
-        _activeFastEdits.set(fasteditEl, 'active');
-        console.log('[EditorModule] Fast edit editor built for post');
-    } catch (err) {
-        console.error('[EditorModule] Fast edit build failed:', err);
-        _activeFastEdits.delete(fasteditEl);
-        container.innerHTML = '<div style="color:red;padding:1rem;">Editor failed to load.</div>';
+        }
+
+        // Find the corresponding modern card
+        var legacyPost = fasteditEl.closest('.post');
+        var legacyPostId = legacyPost ? legacyPost.getAttribute('id') : null;
+        var modernCard = legacyPostId
+            ? document.querySelector('.post-card[data-original-id="' + legacyPostId + '"]')
+            : null;
+
+        var container = document.createElement('div');
+        container.className = 'modern-editor-container modern-editor-container--fastedit';
+
+        // --- Placement ---
+        var cardWasHidden = false;
+        if (modernCard && modernCard.parentNode) {
+            modernCard.classList.add('is-being-edited');
+            cardWasHidden = true;
+            modernCard.parentNode.insertBefore(container, modernCard.nextSibling);
+        } else {
+            fasteditEl.appendChild(container);
+        }
+
+        function restoreCard() {
+            if (cardWasHidden && modernCard) {
+                modernCard.classList.remove('is-being-edited');
+            }
+        }
+
+        try {
+            await buildEditorInto(container, {
+                mode: 'fastedit',
+                initialHtml: initialHtml,
+                placeholder: 'Edit your post…',
+                headerLabel: 'Editing as:',
+                submitLabel: 'Save changes',
+                onSync: function (legacy) { if (legacyTextarea) legacyTextarea.value = legacy; },
+                onCancel: function () {
+                    _activeFastEdits.delete(fasteditEl);
+                    restoreCard();
+                    if (legacyCancelBtn) legacyCancelBtn.click();
+                },
+                onSubmit: function () {
+                    if (!legacyTextarea) { showToast('Save failed — textarea missing', 'error'); return; }
+                    if (legacySaveBtn) {
+                        legacySaveBtn.click();
+                    } else {
+                        showToast('Save button missing', 'error');
+                        return;
+                    }
+                    waitForFastEditRemoval(fasteditEl, function () {
+                        _activeFastEdits.delete(fasteditEl);
+                        // Card restore handled by reconversion — posts.js
+                        // wipes and rebuilds, so the new card appears fresh.
+                        triggerPostReconversion();
+                    });
+                }
+            });
+            _activeFastEdits.set(fasteditEl, 'active');
+            console.log('[EditorModule] Fast edit editor built for post');
+        } catch (err) {
+            console.error('[EditorModule] Fast edit build failed:', err);
+            _activeFastEdits.delete(fasteditEl);
+            restoreCard();
+            container.innerHTML = '<div style="color:red;padding:1rem;">Editor failed to load.</div>';
+        }
     }
-}
-    // Extract just the body from the fastedit hidden input value.
-    // The hidden input is a rendered post-content fragment: table wrapper,
-    // td content, then edit marker + bottomborder + signature. We strip
-    // everything except the actual body content.
+
     function extractFastEditBody(html) {
         if (!html) return '';
         var temp = document.createElement('div');
         temp.innerHTML = html;
-        // If wrapped in a table, extract the td
         var td = temp.querySelector('td');
         var src = td || temp;
-        // Remove metadata
         src.querySelectorAll('.edit, .signature, .bottomborder').forEach(function (el) { el.remove(); });
-        // Remove leading empty cells if any
         src.querySelectorAll('td:empty').forEach(function (el) { el.remove(); });
         return src.innerHTML.trim();
     }
@@ -2831,7 +2857,6 @@ var EditorModule = (function (Utils, EventBus) {
     function registerObservers() {
         if (!globalThis.forumObserver || typeof globalThis.forumObserver.register !== 'function') return;
 
-        // Fast reply
         try {
             var id = globalThis.forumObserver.register({
                 id: 'editor-module-fastreply',
@@ -2843,7 +2868,6 @@ var EditorModule = (function (Utils, EventBus) {
             if (id) _observerIds.push(id);
         } catch (e) { console.error('[EditorModule] observer (fastreply) failed:', e); }
 
-        // Full editor
         try {
             var id2 = globalThis.forumObserver.register({
                 id: 'editor-module-full',
@@ -2855,7 +2879,6 @@ var EditorModule = (function (Utils, EventBus) {
             if (id2) _observerIds.push(id2);
         } catch (e) { console.error('[EditorModule] observer (full) failed:', e); }
 
-        // Fast edit — appears dynamically inside .post
         try {
             var id3 = globalThis.forumObserver.register({
                 id: 'editor-module-fastedit',
@@ -2878,8 +2901,7 @@ var EditorModule = (function (Utils, EventBus) {
         }
         isInitialized = true;
 
-        // Fetch current user data for the header
-        if (document.body.id === 'topic' || document.body.id === 'send' || document.body.id === 'msg') {
+        if (document.body.id === 'topic' || document.body.id === 'send') {
             fetchCurrentUserData();
         }
 
