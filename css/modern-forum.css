@@ -5643,7 +5643,7 @@ body#topic #fastreply {
    as a lighter inset, and uses the smaller radius.
    ------------------------------------------------------------------ */
 .modern-editor-container--fastedit {
-  background: var(--bg-color);
+  background: var(--surface-color);
   box-shadow: none;
   border-radius: var(--radius);
   margin: var(--space-md) 0;
