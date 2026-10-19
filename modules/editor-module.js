@@ -3579,10 +3579,30 @@ var EditorModule = (function (Utils, EventBus) {
                 submitLabel: 'Save changes',
                 onSync: function (legacy) { if (legacyTextarea) legacyTextarea.value = legacy; },
                 onCancel: function () {
-                    _activeFastEdits.delete(fasteditEl);
-                    restoreCard();
-                    if (legacyCancelBtn) legacyCancelBtn.click();
-                },
+    _activeFastEdits.delete(fasteditEl);
+    restoreCard();
+
+    // Remove our container explicitly. It's a sibling of the modern card,
+    // not a child of .fastedit, so the legacy cancel handler doesn't touch
+    // it — without this the editor stays visible below the post after
+    // cancel.
+    if (container.parentNode) container.remove();
+
+    // Dispatch the legacy cancel so the forum's own handler can run its
+    // teardown (removes/hides .fastedit, resets any internal state).
+    if (legacyCancelBtn) legacyCancelBtn.click();
+
+    // Some forum builds hide .fastedit on cancel rather than removing it.
+    // handleEdit in posts.js uses .fastedit presence as its "already open"
+    // signal, so a leftover hidden div would block the next Edit click.
+    // Deferred one tick so a synchronous legacy removal can win the race
+    // cleanly; if it already removed the div, the check below is a no-op.
+    setTimeout(function () {
+        if (fasteditEl && fasteditEl.parentNode) {
+            fasteditEl.remove();
+        }
+    }, 50);
+},
                 onSubmit: function () {
                     if (!legacyTextarea) { showToast('Save failed — textarea missing', 'error'); return; }
                     if (legacySaveBtn) {
