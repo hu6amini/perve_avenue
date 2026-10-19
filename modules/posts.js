@@ -2816,7 +2816,7 @@ if (data.availableActions?.delete) actionsHtml += '<button class="action-icon de
     confirmBtn.onclick = function() { close(); if (opts.onConfirm) opts.onConfirm(); };
     overlay.addEventListener('click', function(e) { if (e.target === overlay) close(); });
 }
-        function handleDelete(pid) {
+    function handleDelete(pid) {
     if (document.body.id === 'msg') {
         handleMessageDelete(pid);
         return;
@@ -2830,31 +2830,45 @@ if (data.availableActions?.delete) actionsHtml += '<button class="action-icon de
             const legacyPost = document.getElementById(CONFIG.POST_ID_PREFIX + pid);
             const modernCard = document.querySelector('.post-card[data-original-id="' + CONFIG.POST_ID_PREFIX + pid + '"]');
 
-            // The legacy AJAX removes the .post element but nothing tells our
-            // modern card to go away. Register with the shared observer so the
-            // watch is cleaned up on pagehide/destroy alongside everything else.
-            // If watchForRemoval isn't available (older observer build on the
-            // CDN), the double-confirm fix still applies; only the in-place
-            // card removal degrades to "until refresh".
-            if (legacyPost && modernCard && globalThis.forumObserver &&
-                typeof globalThis.forumObserver.watchForRemoval === 'function') {
-                globalThis.forumObserver.watchForRemoval(legacyPost, function() {
+            if (legacyPost && modernCard) {
+                let done = false;
+                const finish = () => {
+                    if (done) return;
+                    done = true;
                     if (modernCard.parentNode) modernCard.remove();
-                }, { timeout: 5000 });
+                };
+                const check = () => {
+                    if (done) return;
+                    if (!document.body.contains(legacyPost)) { finish(); return; }
+                    if (window.getComputedStyle(legacyPost).display === 'none') { finish(); return; }
+                    if (legacyPost.classList.contains('hidden')) { finish(); return; }
+                };
+
+                // Primary: shared observer if the current build exposes it.
+                // Safety net: local observer + attribute watch, scoped to 5s.
+                // The local observer catches both the "removed from DOM" case
+                // (childList) and the "hidden via style" case (attributes).
+                if (globalThis.forumObserver && typeof globalThis.forumObserver.watchForRemoval === 'function') {
+                    globalThis.forumObserver.watchForRemoval(legacyPost, finish, { timeout: 5000 });
+                }
+                const obs = new MutationObserver(check);
+                obs.observe(legacyPost, { attributes: true, attributeFilter: ['style', 'class'] });
+                obs.observe(document.body, { childList: true, subtree: true });
+                setTimeout(function() {
+                    obs.disconnect();
+                    check();
+                }, 5000);
             }
 
-            // Suppress the legacy confirm. delete_post() calls confirm()
-            // internally; our custom dialog has already asked. Restored
-            // in finally so a thrown error doesn't leave confirm permanently
-            // overridden.
+            // Suppress delete_post's internal confirm — the modern dialog
+            // has already asked. Restored in finally so an exception can't
+            // leave window.confirm permanently overridden.
             const originalConfirm = window.confirm;
             window.confirm = function() { return true; };
             try {
                 if (typeof window.delete_post === 'function') {
                     window.delete_post(pid);
                 } else if (legacyPost) {
-                    // Selector now also matches href="javascript:delete_post(...)"
-                    // — the legacy link uses href, not onclick.
                     const deleteLink = legacyPost.querySelector(
                         'a[onclick*="delete_post"], a[href*="delete_post"], .deletepost, a[href*="CODE=09"]'
                     );
@@ -2868,6 +2882,7 @@ if (data.availableActions?.delete) actionsHtml += '<button class="action-icon de
         }
     });
 }
+    
     function handleShare(pid, buttonElement) {
         const url = window.location.href.split('#')[0] + '#entry' + pid;
         navigator.clipboard.writeText(url).then(() => {
