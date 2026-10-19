@@ -31,6 +31,17 @@
 //       available, so the button renders when only fast edit
 //       survives a maintenance pass. The reply `<a>` fix and the
 //       confirm dialog from v2.7.1 are preserved.
+// v2.9: delete-post handling rewritten.
+//       - handleDelete suppresses delete_post()'s internal confirm()
+//         for the duration of the call so the modern dialog is the
+//         only prompt the user sees (fixes the double-confirm bug).
+//       - The corresponding modern card is removed the moment the
+//         legacy AJAX detaches the .post element, via the shared
+//         forumObserver.watchForRemoval API. No local observers,
+//         no leaked watches on pagehide (fixes the stale-card bug).
+//       - The delete-link fallback selector now also matches
+//         href="javascript:delete_post(...)" (previously only
+//         onclick was covered).
 'use strict';
 
 const ForumPostsModule = (function () {
@@ -2816,14 +2827,43 @@ if (data.availableActions?.delete) actionsHtml += '<button class="action-icon de
         confirmText: 'Delete',
         icon: 'fa-regular fa-trash-can',
         onConfirm: function() {
-            if (typeof window.delete_post === 'function') {
-                window.delete_post(pid);
-            } else {
-                const originalPost = document.getElementById(CONFIG.POST_ID_PREFIX + pid);
-                if (originalPost) {
-                    const deleteLink = originalPost.querySelector('a[onclick*="delete_post"], .deletepost, a[href*="CODE=09"]');
+            const legacyPost = document.getElementById(CONFIG.POST_ID_PREFIX + pid);
+            const modernCard = document.querySelector('.post-card[data-original-id="' + CONFIG.POST_ID_PREFIX + pid + '"]');
+
+            // The legacy AJAX removes the .post element but nothing tells our
+            // modern card to go away. Register with the shared observer so the
+            // watch is cleaned up on pagehide/destroy alongside everything else.
+            // If watchForRemoval isn't available (older observer build on the
+            // CDN), the double-confirm fix still applies; only the in-place
+            // card removal degrades to "until refresh".
+            if (legacyPost && modernCard && globalThis.forumObserver &&
+                typeof globalThis.forumObserver.watchForRemoval === 'function') {
+                globalThis.forumObserver.watchForRemoval(legacyPost, function() {
+                    if (modernCard.parentNode) modernCard.remove();
+                }, { timeout: 5000 });
+            }
+
+            // Suppress the legacy confirm. delete_post() calls confirm()
+            // internally; our custom dialog has already asked. Restored
+            // in finally so a thrown error doesn't leave confirm permanently
+            // overridden.
+            const originalConfirm = window.confirm;
+            window.confirm = function() { return true; };
+            try {
+                if (typeof window.delete_post === 'function') {
+                    window.delete_post(pid);
+                } else if (legacyPost) {
+                    // Selector now also matches href="javascript:delete_post(...)"
+                    // — the legacy link uses href, not onclick.
+                    const deleteLink = legacyPost.querySelector(
+                        'a[onclick*="delete_post"], a[href*="delete_post"], .deletepost, a[href*="CODE=09"]'
+                    );
                     if (deleteLink) deleteLink.click();
                 }
+            } catch (e) {
+                console.error('[PostsModule] Delete failed:', e);
+            } finally {
+                window.confirm = originalConfirm;
             }
         }
     });
