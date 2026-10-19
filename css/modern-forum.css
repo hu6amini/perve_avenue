@@ -666,7 +666,7 @@
 .link-preview-card .embedded-link-image {
     flex: 0 0 180px;
     width: 180px;
-    height: 160px;
+    height: auto;
     align-self: stretch;
     overflow: hidden;
 }
