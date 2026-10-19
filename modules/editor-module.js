@@ -10,6 +10,14 @@
    sections. Uses the same wrapper (.modern-forum-wrapper) as the
    rest of the modern stack for placement.
 
+   Content parity with the messenger:
+     · lite YouTube / Vimeo embeds (nodes, paste detection, OG captions)
+     · link previews (OG card on URL paste)
+     · @-mentions (autocomplete popup, searchMentions)
+     · inline-code paste handler (collapses whitespace)
+     · transformPastedHTML (nbsp cleanup)
+     · live preview auto-refresh on typing
+
    The legacy editor shells are hidden via CSS (section 27 in
    modern-forum.css), not by JS, so this module makes no attempt
    to set display: none anywhere.
@@ -29,6 +37,7 @@ var EditorModule = (function (Utils, EventBus) {
     var _currentUserCache = null;
     var _activeFastEdits = new Map();
     var _observerIds = [];
+    var _mentionSearchAbort = null;
 
     // ========================================================================
     // CONFIG
@@ -47,7 +56,8 @@ var EditorModule = (function (Utils, EventBus) {
         ],
         MAX_MESSAGE_LENGTH: 0,
         FAST_EDIT_REMOVAL_POLL_MS: 100,
-        FAST_EDIT_REMOVAL_TIMEOUT_MS: 5000
+        FAST_EDIT_REMOVAL_TIMEOUT_MS: 5000,
+        LIVE_PREVIEW_DEBOUNCE_MS: 800
     };
 
     var MAX_MESSAGE_LENGTH   = CONFIG.MAX_MESSAGE_LENGTH;
@@ -170,6 +180,107 @@ var EditorModule = (function (Utils, EventBus) {
         return match[0].toUpperCase();
     }
 
+    // ========================================================================
+    // LITE-EMBED URL PARSERS
+    // ========================================================================
+    function parseYouTubeUrl(url) {
+        if (!url || typeof url !== 'string') return null;
+        var m = url.match(/(?:youtube\.com\/(?:watch\?(?:.*&)?v=|embed\/|shorts\/)|youtu\.be\/)([A-Za-z0-9_-]{6,})/);
+        if (!m) return null;
+        var videoid = m[1];
+        var start = null;
+        var end = null;
+        var qIndex = url.indexOf('?');
+        if (qIndex >= 0) {
+            var hashIndex = url.indexOf('#', qIndex);
+            var queryStr = url.slice(qIndex + 1, hashIndex >= 0 ? hashIndex : undefined);
+            try {
+                var params = new URLSearchParams(queryStr);
+                var t = params.get('t') || params.get('start');
+                if (t) {
+                    var parsed = parseTimeString(t);
+                    if (parsed != null) start = parsed;
+                }
+                var e = params.get('end');
+                if (e) {
+                    var parsedEnd = parseInt(e, 10);
+                    if (!isNaN(parsedEnd) && parsedEnd > 0) end = parsedEnd;
+                }
+            } catch (err) {}
+        }
+        return { videoid: videoid, start: start, end: end };
+    }
+
+    function parseVimeoUrl(url) {
+        if (!url || typeof url !== 'string') return null;
+        var m = url.match(/vimeo\.com\/(?:[^\/\s]+\/)*?(\d+)/);
+        if (!m) return null;
+        var videoid = m[1];
+        var start = null;
+        try {
+            var hashIndex = url.indexOf('#');
+            if (hashIndex >= 0) {
+                var frag = url.slice(hashIndex + 1);
+                var fragMatch = frag.match(/^t=(.+)$/);
+                if (fragMatch) {
+                    var parsed = parseTimeString(fragMatch[1]);
+                    if (parsed != null) start = parsed;
+                }
+            }
+            if (start == null) {
+                var qIndex = url.indexOf('?');
+                if (qIndex >= 0) {
+                    var hashIndex2 = url.indexOf('#', qIndex);
+                    var queryStr = url.slice(qIndex + 1, hashIndex2 >= 0 ? hashIndex2 : undefined);
+                    var params = new URLSearchParams(queryStr);
+                    var t = params.get('t');
+                    if (t) {
+                        var parsed2 = parseTimeString(t);
+                        if (parsed2 != null) start = parsed2;
+                    }
+                }
+            }
+        } catch (err) {}
+        return { videoid: videoid, start: start };
+    }
+
+    // ========================================================================
+    // MENTION SEARCH
+    // ========================================================================
+    function searchMentions(query) {
+        if (!query || query.length < 1) return Promise.resolve([]);
+        if (_mentionSearchAbort) {
+            try { _mentionSearchAbort.abort(); } catch (e) {}
+        }
+        _mentionSearchAbort = new AbortController();
+        var url = '/api.php?search&name=' + encodeURIComponent(query) + '&n=10&cookie=1';
+        return fetch(url, {
+            credentials: 'include',
+            signal: _mentionSearchAbort.signal
+        })
+        .then(function (r) {
+            if (!r.ok) throw new Error('HTTP ' + r.status);
+            return r.json();
+        })
+        .then(function (data) {
+            var users = (data && Array.isArray(data.users)) ? data.users : [];
+            return users.slice(0, 8).map(function (u) {
+                if (u && typeof u.name === 'string') {
+                    u = Object.assign({}, u, { name: decodeHtmlEntities(u.name) });
+                }
+                return u;
+            });
+        })
+        .catch(function (err) {
+            if (err && err.name === 'AbortError') return [];
+            console.warn('[EditorModule] Search failed:', err);
+            return [];
+        });
+    }
+
+    // ========================================================================
+    // AVATAR COLOURS / HELPERS
+    // ========================================================================
     var AVATAR_COLORS = [
         '059669', '10B981', '34D399', '6EE7B7', 'A7F3D0',
         '0D9488', '14B8A6', '2DD4BF', '5EEAD4', '99F6E4',
@@ -1090,16 +1201,6 @@ var EditorModule = (function (Utils, EventBus) {
 
     // ========================================================================
     // EDITOR FACTORY
-    //
-    // Builds the toolbar, TipTap, preview and actions into `host`.
-    // `opts`:
-    //   mode: 'reply' | 'full' | 'fastedit'
-    //   initialHtml
-    //   placeholder
-    //   headerLabel
-    //   onSync(legacyHtml)
-    //   onSubmit()
-    //   onCancel()
     // ========================================================================
     async function buildEditorInto(host, opts) {
         var editorRef = { current: null };
@@ -1172,6 +1273,8 @@ var EditorModule = (function (Utils, EventBus) {
         var submitBtn = actions.querySelector('.modern-editor-submit-btn');
         var previewBtn = actions.querySelector('.modern-editor-preview-btn');
         var cancelBtn = actions.querySelector('.modern-editor-cancel');
+
+        var livePreviewTimer = null;
 
         // ---- Helpers ----
         function addSep() {
@@ -1267,6 +1370,100 @@ var EditorModule = (function (Utils, EventBus) {
             var nowMobile = isMobile();
             if (nowMobile !== _mobileMode) { _mobileMode = nowMobile; closeAllPopovers(); }
         });
+
+        // ---- Lite-embed helpers ----
+        function focusTrailingEmbedParagraph() {
+            if (!editorRef.current) return;
+            var doc = editorRef.current.state.doc;
+            if (doc.childCount < 2) return;
+            var last = doc.child(doc.childCount - 1);
+            var secondLast = doc.child(doc.childCount - 2);
+            if (last.type.name !== 'paragraph' || last.content.size !== 0) return;
+            var atomName = secondLast.type.name;
+            if (atomName !== 'liteYouTube' && atomName !== 'liteVimeo' && atomName !== 'imageUploadPlaceholder') return;
+            editorRef.current.chain().focus().setTextSelection(doc.content.size - 1).run();
+        }
+
+        function fetchEmbedMetadata(kind, videoid) {
+            if (!editorRef.current || !videoid) return;
+            var canonicalUrl = kind === 'liteYouTube'
+                ? 'https://www.youtube.com/watch?v=' + encodeURIComponent(videoid)
+                : 'https://vimeo.com/' + encodeURIComponent(videoid);
+
+            fetchWithTimeout(OG_WORKER_URL + encodeURIComponent(canonicalUrl), {}, OG_FETCH_TIMEOUT)
+                .then(function (r) { return r.ok ? r.json() : null; })
+                .then(function (data) {
+                    if (!data || data.error || !data.title) return;
+                    if (!editorRef.current) return;
+                    var positions = [];
+                    editorRef.current.state.doc.descendants(function (node, pos) {
+                        if (node.type.name === kind && node.attrs.videoid === videoid && !node.attrs.title) {
+                            positions.push(pos);
+                        }
+                        return true;
+                    });
+                    if (positions.length === 0) return;
+                    var tr = editorRef.current.state.tr;
+                    for (var i = 0; i < positions.length; i++) {
+                        var pos = positions[i];
+                        var node = tr.doc.nodeAt(pos);
+                        if (!node) continue;
+                        tr.setNodeMarkup(pos, undefined, Object.assign({}, node.attrs, {
+                            title: data.title || '',
+                            author: data.author || '',
+                        }));
+                    }
+                    editorRef.current.view.dispatch(tr);
+                })
+                .catch(function () {});
+        }
+
+        function insertLiteEmbed(kind, videoid, embedOpts) {
+            if (!editorRef.current) return;
+            embedOpts = embedOpts || {};
+            var attrs = { videoid: videoid };
+            if (embedOpts.start != null) attrs.start = String(embedOpts.start);
+            if (embedOpts.end != null) attrs.end = String(embedOpts.end);
+            editorRef.current.chain().focus().insertContent({ type: kind, attrs: attrs }).run();
+            focusTrailingEmbedParagraph();
+            fetchEmbedMetadata(kind, videoid);
+        }
+
+        // ---- Live preview ----
+        function updateLivePreview() {
+            if (!editorRef.current || editorContentIsEmpty(editorRef.current.getHTML())) return;
+
+            var hasPlaceholder = false;
+            editorRef.current.state.doc.content.content.some(function (child) {
+                if (child.type.name === 'imageUploadPlaceholder') {
+                    hasPlaceholder = true;
+                    return true;
+                }
+                return false;
+            });
+            if (hasPlaceholder) return;
+
+            if (!previewArea || previewArea.style.display === 'none') return;
+
+            var previewHtml = transformPreviewHtml(editorRef.current.getHTML());
+            var previewContent = previewArea.querySelector('.preview-content');
+            if (previewContent) {
+                previewContent.innerHTML = previewHtml;
+                if (window.twemoji) {
+                    window.twemoji.parse(previewContent, { base: TWEMOJI_BASE, ext: '.svg' });
+                }
+            }
+            initPreviewQuotesAndSpoilers(previewArea);
+        }
+
+        function scheduleLivePreviewRefresh() {
+            if (!previewArea || previewArea.style.display === 'none') return;
+            if (livePreviewTimer) clearTimeout(livePreviewTimer);
+            livePreviewTimer = setTimeout(function () {
+                livePreviewTimer = null;
+                updateLivePreview();
+            }, CONFIG.LIVE_PREVIEW_DEBOUNCE_MS);
+        }
 
         // ---- Toolbar buttons ----
         var undoBtn = mkBtn('fa-regular fa-undo', 'Undo', 'Control+Z');
@@ -1866,6 +2063,278 @@ var EditorModule = (function (Utils, EventBus) {
             }
         });
 
+        // ---- Lite YouTube / Vimeo nodes ----
+        const LiteYouTube = Node.create({
+            name: 'liteYouTube',
+            group: 'block', atom: true, draggable: true, selectable: true,
+            addAttributes() {
+                return {
+                    videoid: {
+                        default: null,
+                        parseHTML: el => el.getAttribute('videoid') || el.getAttribute('data-videoid') || null,
+                        renderHTML: attrs => attrs.videoid ? { videoid: attrs.videoid } : {},
+                    },
+                    title:  { default: '' },
+                    author: { default: '' },
+                    start: {
+                        default: null,
+                        parseHTML: el => el.getAttribute('start') || null,
+                        renderHTML: attrs => attrs.start ? { start: String(attrs.start) } : {},
+                    },
+                    end: {
+                        default: null,
+                        parseHTML: el => el.getAttribute('end') || null,
+                        renderHTML: attrs => attrs.end ? { end: String(attrs.end) } : {},
+                    },
+                };
+            },
+            parseHTML() {
+                return [
+                    {
+                        tag: 'div.lite-embed-wrapper',
+                        getAttrs: el => {
+                            const lite = el.querySelector('lite-youtube');
+                            if (!lite) return false;
+                            return {
+                                videoid: lite.getAttribute('videoid') || el.getAttribute('data-videoid') || null,
+                                title: el.getAttribute('data-title') || '',
+                                author: el.getAttribute('data-author') || '',
+                                start: el.getAttribute('data-start') || lite.getAttribute('start') || null,
+                                end: el.getAttribute('data-end') || lite.getAttribute('end') || null,
+                            };
+                        },
+                    },
+                    {
+                        tag: 'lite-youtube',
+                        getAttrs: el => ({
+                            videoid: el.getAttribute('videoid') || el.getAttribute('data-videoid') || null,
+                            title: el.getAttribute('data-title') || '',
+                            author: el.getAttribute('data-author') || '',
+                            start: el.getAttribute('start') || null,
+                            end: el.getAttribute('end') || null,
+                        }),
+                    },
+                    { tag: 'span.ff-lite-youtube' },
+                ];
+            },
+            renderHTML({ node, HTMLAttributes }) {
+                const title = node.attrs.title || '';
+                const author = node.attrs.author || '';
+                const caption = (title || author)
+                    ? ['div', { class: 'lite-embed-caption' },
+                        title ? ['span', { class: 'lite-embed-title' }, title] : '',
+                        author ? ['span', { class: 'lite-embed-author' }, author] : ''
+                      ]
+                    : '';
+                return [
+                    'div',
+                    {
+                        class: 'lite-embed-wrapper',
+                        'data-videoid': node.attrs.videoid || '',
+                        'data-title': title || null,
+                        'data-author': author || null,
+                        'data-start': node.attrs.start != null ? String(node.attrs.start) : null,
+                        'data-end':   node.attrs.end   != null ? String(node.attrs.end)   : null,
+                    },
+                    ['lite-youtube', HTMLAttributes],
+                    caption,
+                ];
+            },
+        });
+
+        const LiteVimeo = Node.create({
+            name: 'liteVimeo',
+            group: 'block', atom: true, draggable: true, selectable: true,
+            addAttributes() {
+                return {
+                    videoid: {
+                        default: null,
+                        parseHTML: el => el.getAttribute('videoid') || el.getAttribute('data-videoid') || null,
+                        renderHTML: attrs => attrs.videoid ? { videoid: attrs.videoid } : {},
+                    },
+                    title:  { default: '' },
+                    author: { default: '' },
+                    start: {
+                        default: null,
+                        parseHTML: el => el.getAttribute('start') || null,
+                        renderHTML: attrs => attrs.start ? { start: String(attrs.start) } : {},
+                    },
+                };
+            },
+            parseHTML() {
+                return [
+                    {
+                        tag: 'div.lite-embed-wrapper',
+                        getAttrs: el => {
+                            const lite = el.querySelector('lite-vimeo');
+                            if (!lite) return false;
+                            return {
+                                videoid: lite.getAttribute('videoid') || el.getAttribute('data-videoid') || null,
+                                title: el.getAttribute('data-title') || '',
+                                author: el.getAttribute('data-author') || '',
+                                start: el.getAttribute('data-start') || lite.getAttribute('start') || null,
+                            };
+                        },
+                    },
+                    {
+                        tag: 'lite-vimeo',
+                        getAttrs: el => ({
+                            videoid: el.getAttribute('videoid') || el.getAttribute('data-videoid') || null,
+                            title: el.getAttribute('data-title') || '',
+                            author: el.getAttribute('data-author') || '',
+                            start: el.getAttribute('start') || null,
+                        }),
+                    },
+                    { tag: 'span.ff-lite-vimeo' },
+                ];
+            },
+            renderHTML({ node, HTMLAttributes }) {
+                const title = node.attrs.title || '';
+                const author = node.attrs.author || '';
+                const caption = (title || author)
+                    ? ['div', { class: 'lite-embed-caption' },
+                        title ? ['span', { class: 'lite-embed-title' }, title] : '',
+                        author ? ['span', { class: 'lite-embed-author' }, author] : ''
+                      ]
+                    : '';
+                return [
+                    'div',
+                    {
+                        class: 'lite-embed-wrapper',
+                        'data-videoid': node.attrs.videoid || '',
+                        'data-title': title || null,
+                        'data-author': author || null,
+                        'data-start': node.attrs.start != null ? String(node.attrs.start) : null,
+                    },
+                    ['lite-vimeo', HTMLAttributes],
+                    caption,
+                ];
+            },
+        });
+
+        // ---- Link preview node ----
+        const LinkPreview = Node.create({
+            name: 'linkPreview',
+            inline: true, group: 'inline', atom: true, draggable: true, selectable: true,
+            addAttributes() {
+                return {
+                    href: { default: '' },
+                    title: { default: '' },
+                    description: { default: '' },
+                    author: { default: '' },
+                    imageSrc: { default: '' },
+                    loading: { default: false },
+                };
+            },
+            parseHTML() {
+                return [{ tag: 'span[data-type="link-preview"]' }];
+            },
+            renderHTML({ node, HTMLAttributes }) {
+                var href = node.attrs.href;
+                var title = node.attrs.title;
+                var description = node.attrs.description;
+                var imageSrc = node.attrs.imageSrc;
+                var loading = node.attrs.loading;
+
+                var hostname = '';
+                try {
+                    hostname = new URL(href).hostname.replace(/^www\./, '');
+                } catch (e) {
+                    hostname = href.replace(/^https?:\/\//, '').split('/')[0].replace(/^www\./, '');
+                }
+
+                if (loading) {
+                    return [
+                        'span',
+                        { class: 'link-preview-card link-preview-card--loading', 'data-type': 'link-preview', ...HTMLAttributes },
+                        ['span', { class: 'link-preview-skeleton' },
+                            ['span', { class: 'link-preview-skeleton-bar', style: 'width:40%;' }],
+                            ['span', { class: 'link-preview-skeleton-bar', style: 'width:80%;' }],
+                            ['span', { class: 'link-preview-skeleton-bar', style: 'width:60%;' }]
+                        ]
+                    ];
+                }
+
+                var finalImageUrl = imageSrc;
+                if (imageSrc && imageSrc.startsWith('/')) {
+                    try { finalImageUrl = new URL(href).origin + imageSrc; }
+                    catch (e) { finalImageUrl = imageSrc; }
+                }
+
+                var faviconUrl = 'https://www.google.com/s2/favicons?domain=' + hostname + '&sz=32';
+                var isRich = finalImageUrl && finalImageUrl.trim() !== '';
+
+                function isGenericTitle(t, h) {
+                    if (!t || t === h) return true;
+                    var generic = ['just a moment', 'access denied', 'verification required', 'please wait', 'captcha', 'challenge', 'checking your browser'];
+                    var lower = t.toLowerCase();
+                    return generic.some(function (term) { return lower.indexOf(term) !== -1; });
+                }
+                function needsProxy(url) {
+                    if (!url) return false;
+                    var blocked = ['discordapp.com', 'cdn.discordapp.com', 'media.discordapp.net', 'github.com', 'raw.githubusercontent.com', 'redd.it', 'reddit.com', 'twimg.com', 'pbs.twimg.com'];
+                    try {
+                        var host = new URL(url).hostname;
+                        return blocked.some(function (d) { return host.includes(d); });
+                    } catch (_) { return false; }
+                }
+
+                if (!isRich) {
+                    var showTitle = !isGenericTitle(title, href);
+                    var titlePart = showTitle ? (' – ' + title) : '';
+                    return [
+                        'span',
+                        { class: 'link-preview-simple', 'data-type': 'link-preview', ...HTMLAttributes },
+                        [
+                            'a',
+                            { href: href, target: '_blank', rel: 'noopener noreferrer', class: 'simple-link' },
+                            ['img', { src: faviconUrl, class: 'simple-favicon', alt: '', loading: 'lazy' }],
+                            ['span', { class: 'simple-hostname' }, hostname],
+                            ['span', { class: 'simple-title' }, titlePart]
+                        ]
+                    ];
+                }
+
+                var proxiedImage = finalImageUrl;
+                if (needsProxy(finalImageUrl)) {
+                    proxiedImage = 'https://images.weserv.nl/?url=' + encodeURIComponent(finalImageUrl) + '&output=webp&q=85';
+                }
+
+                return [
+                    'span',
+                    { class: 'link-preview-card', 'data-type': 'link-preview', ...HTMLAttributes },
+                    [
+                        'a',
+                        { href: href, target: '_blank', rel: 'noopener noreferrer', class: 'link-preview-link' },
+                        [
+                            'span',
+                            { class: 'link-preview-content' },
+                            [
+                                'span',
+                                { class: 'embedded-link-image' },
+                                ['img', { src: proxiedImage, class: 'link-preview-image', loading: 'lazy', alt: '' }]
+                            ],
+                            [
+                                'span',
+                                { class: 'link-preview-text' },
+                                ['span', { class: 'link-preview-title' }, title || href],
+                                node.attrs.author
+                                    ? ['span', { class: 'link-preview-author' }, node.attrs.author]
+                                    : '',
+                                description ? ['span', { class: 'link-preview-description' }, description] : '',
+                                [
+                                    'span',
+                                    { class: 'link-preview-url-wrapper' },
+                                    ['img', { src: faviconUrl, class: 'link-preview-favicon', alt: '' }],
+                                    ['span', { class: 'link-preview-hostname' }, hostname]
+                                ]
+                            ]
+                        ]
+                    ]
+                ];
+            },
+        });
+
         const Spoiler = Node.create({
             name: 'spoiler', group: 'block', content: 'block+', defining: true,
             addAttributes() {
@@ -1879,6 +2348,217 @@ var EditorModule = (function (Utils, EventBus) {
             name: 'nsfw', inclusive: false,
             parseHTML() { return [{ tag: 'span', getAttrs: el => el.classList.contains('ff-nsfw') ? {} : false }]; },
             renderHTML() { return ['span', { class: 'ff-nsfw' }, 0]; }
+        });
+
+        // ---- Mention node ----
+        const CustomMention = Mention.extend({
+            addAttributes() {
+                return {
+                    id: {
+                        default: null,
+                        parseHTML: function (el) { return el.getAttribute('data-uid'); },
+                        renderHTML: function (attrs) {
+                            return attrs.id != null ? { 'data-uid': attrs.id } : {};
+                        },
+                    },
+                    label: {
+                        default: null,
+                        parseHTML: function (el) {
+                            var v = el.getAttribute('data-username') || el.textContent || '';
+                            return decodeHtmlEntities(v).replace(/^@/, '');
+                        },
+                        renderHTML: function (attrs) {
+                            return attrs.label ? { 'data-username': attrs.label } : {};
+                        },
+                    },
+                };
+            },
+            renderHTML: function ({ node }) {
+                return ['mark', {
+                    'data-uid': node.attrs.id,
+                    'data-username': node.attrs.label || '',
+                }, node.attrs.label || ''];
+            },
+            parseHTML: function () {
+                return [{
+                    tag: 'mark[data-uid]',
+                    getAttrs: function (el) {
+                        var raw = el.getAttribute('data-username') || el.textContent || '';
+                        raw = decodeHtmlEntities(raw).replace(/^@/, '');
+                        return { id: el.getAttribute('data-uid'), label: raw };
+                    },
+                }];
+            },
+        }).configure({
+            HTMLAttributes: { class: 'user-tag' },
+            renderText: function ({ node }) {
+                return '@' + (node.attrs.label || '');
+            },
+            suggestion: {
+                char: '@',
+                allowSpaces: false,
+                allow: function ({ state, range }) {
+                    try {
+                        var $from = state.doc.resolve(range.from);
+                        return $from.parent.type.name !== 'codeBlock';
+                    } catch (e) { return true; }
+                },
+                items: function ({ query }) { return searchMentions(query); },
+                render: function () {
+                    var popup = null;
+                    var items = [];
+                    var selectedIndex = 0;
+                    var itemEls = [];
+                    var lastProps = null;
+
+                    function updateSelected() {
+                        itemEls.forEach(function (el, i) {
+                            el.classList.toggle('is-selected', i === selectedIndex);
+                        });
+                    }
+                    function makeInitialAvatar(name, userId) {
+                        var initial = getInitialFromName(name);
+                        var span = document.createElement('span');
+                        span.className = 'mention-suggestion-avatar mention-suggestion-avatar--initial';
+                        span.style.backgroundColor = '#' + getColorFromNickname(name, userId);
+                        span.textContent = initial;
+                        return span;
+                    }
+                    function buildList(props) {
+                        items = props.items || [];
+                        var seen = {};
+                        items = items.filter(function (u) {
+                            var k = String(u.id);
+                            if (seen[k]) return false;
+                            seen[k] = true;
+                            return true;
+                        });
+                        selectedIndex = 0;
+                        itemEls = [];
+                        if (!popup) return;
+                        popup.innerHTML = '';
+                        if (items.length === 0) {
+                            var emptyRow = document.createElement('div');
+                            emptyRow.style.cssText = 'padding:var(--pad-2) var(--pad-3);color:var(--text-tertiary);font-size:var(--text-xs);font-style:italic;';
+                            emptyRow.textContent = 'No users found';
+                            popup.appendChild(emptyRow);
+                            popup.style.display = 'block';
+                            return;
+                        }
+                        items.forEach(function (user) {
+                            var el = document.createElement('button');
+                            el.type = 'button';
+                            el.className = 'mention-suggestion-item';
+                            el.setAttribute('role', 'option');
+
+                            var rawAvatar = (typeof user.avatar === 'string' && user.avatar) ? user.avatar : null;
+                            var avatarUrl = (rawAvatar && !shouldUseInitialAvatar(rawAvatar))
+                                ? (optimizeAvatarUrl(rawAvatar, 28, 28) || rawAvatar)
+                                : null;
+                            var userName = decodeHtmlEntities(user.name || '');
+
+                            if (avatarUrl) {
+                                var img = document.createElement('img');
+                                img.className = 'mention-suggestion-avatar';
+                                img.src = avatarUrl;
+                                img.alt = '';
+                                img.width = 28; img.height = 28; img.loading = 'lazy';
+                                img.onerror = function () { this.replaceWith(makeInitialAvatar(userName, user.id)); };
+                                img.onload = function () {
+                                    if (this.naturalWidth <= 1 || this.naturalHeight <= 1) {
+                                        this.replaceWith(makeInitialAvatar(userName, user.id));
+                                    }
+                                };
+                                el.appendChild(img);
+                            } else {
+                                el.appendChild(makeInitialAvatar(userName, user.id));
+                            }
+
+                            var name = document.createElement('span');
+                            name.className = 'mention-suggestion-name';
+                            name.textContent = userName;
+                            el.appendChild(name);
+
+                            el.addEventListener('mousedown', function (e) {
+                                e.preventDefault();
+                                props.command({ id: String(user.id), label: userName || String(user.id) });
+                            });
+                            itemEls.push(el);
+                            popup.appendChild(el);
+                        });
+                        popup.style.display = 'block';
+                        updateSelected();
+                    }
+                    function positionPopup(props) {
+                        if (!popup) return;
+                        var rect = props.clientRect && props.clientRect();
+                        if (!rect) return;
+                        var scrollX = window.pageXOffset || document.documentElement.scrollLeft;
+                        var scrollY = window.pageYOffset || document.documentElement.scrollTop;
+                        popup.style.left = (rect.left + scrollX) + 'px';
+                        popup.style.top = (rect.bottom + scrollY + 4) + 'px';
+                    }
+                    function reposition() {
+                        if (lastProps && popup) positionPopup(lastProps);
+                    }
+
+                    return {
+                        onStart: function (props) {
+                            lastProps = props;
+                            popup = document.createElement('div');
+                            popup.className = 'mention-suggestions';
+                            popup.setAttribute('role', 'listbox');
+                            document.body.appendChild(popup);
+                            window.addEventListener('scroll', reposition, true);
+                            window.addEventListener('resize', reposition);
+                            buildList(props);
+                            positionPopup(props);
+                        },
+                        onUpdate: function (props) {
+                            lastProps = props;
+                            if (!popup) return;
+                            buildList(props);
+                            positionPopup(props);
+                        },
+                        onKeyDown: function (props) {
+                            if (!popup || popup.style.display === 'none' || items.length === 0) return false;
+                            if (props.event.key === 'ArrowDown') {
+                                selectedIndex = (selectedIndex + 1) % items.length;
+                                updateSelected();
+                                return true;
+                            }
+                            if (props.event.key === 'ArrowUp') {
+                                selectedIndex = (selectedIndex - 1 + items.length) % items.length;
+                                updateSelected();
+                                return true;
+                            }
+                            if (props.event.key === 'Enter') {
+                                var user = items[selectedIndex];
+                                if (user) {
+                                    props.command({
+                                        id: String(user.id),
+                                        label: decodeHtmlEntities(user.name || '') || String(user.id),
+                                    });
+                                }
+                                return true;
+                            }
+                            if (props.event.key === 'Escape') {
+                                if (popup) { popup.remove(); popup = null; }
+                                return true;
+                            }
+                            return false;
+                        },
+                        onExit: function () {
+                            window.removeEventListener('scroll', reposition, true);
+                            window.removeEventListener('resize', reposition);
+                            if (popup) { popup.remove(); popup = null; }
+                            items = [];
+                            itemEls = [];
+                            lastProps = null;
+                        },
+                    };
+                },
+            },
         });
 
         const SemanticColor = Mark.create({
@@ -1895,6 +2575,76 @@ var EditorModule = (function (Utils, EventBus) {
                 var v = HTMLAttributes.variant || 'primary';
                 return ['span', { class: 'text-' + v, 'data-color': v }, 0];
             }
+        });
+
+        // ---- Link preview paste plugin ----
+        const linkPreviewPlugin = new Plugin({
+            key: new PluginKey('linkPreview'),
+            props: {
+                handlePaste: function (view, event) {
+                    var text = event.clipboardData ? event.clipboardData.getData('text/plain') : '';
+                    if (!text) return false;
+                    var trimmed = text.trim();
+                    var urlRegex = /^(https?:\/\/[^\s]+)$/;
+                    if (!urlRegex.test(trimmed)) return false;
+                    event.preventDefault();
+
+                    var url = trimmed;
+                    var state = view.state;
+                    var tr = state.tr.replaceWith(
+                        state.selection.from, state.selection.to,
+                        state.schema.nodes.linkPreview.create({
+                            href: url, title: '', description: '', imageSrc: '', loading: true
+                        })
+                    );
+                    view.dispatch(tr);
+
+                    function replaceSkeletonWithText() {
+                        var foundPos = -1;
+                        view.state.doc.descendants(function (node, pos) {
+                            if (node.type.name === 'linkPreview' && node.attrs.href === url && node.attrs.loading) {
+                                foundPos = pos;
+                                return false;
+                            }
+                            return true;
+                        });
+                        if (foundPos === -1) return;
+                        view.dispatch(view.state.tr.replaceWith(foundPos, foundPos + 1, view.state.schema.text(url)));
+                    }
+
+                    fetchWithTimeout(OG_WORKER_URL + encodeURIComponent(url), {}, OG_FETCH_TIMEOUT)
+                        .then(function (res) { return res.json(); })
+                        .then(function (data) {
+                            var foundPos = -1;
+                            view.state.doc.descendants(function (node, pos) {
+                                if (node.type.name === 'linkPreview' && node.attrs.href === url && node.attrs.loading) {
+                                    foundPos = pos;
+                                    return false;
+                                }
+                                return true;
+                            });
+                            if (foundPos === -1) return;
+                            if (data.error || (!data.imageSrc && (!data.title || data.title === url))) {
+                                view.dispatch(view.state.tr.replaceWith(foundPos, foundPos + 1, view.state.schema.text(url)));
+                                return;
+                            }
+                            var newNode = view.state.schema.nodes.linkPreview.create({
+                                href: data.href || url,
+                                title: data.title || url,
+                                description: data.description || '',
+                                author: data.author || '',
+                                imageSrc: data.imageSrc || '',
+                                loading: false,
+                            });
+                            view.dispatch(view.state.tr.replaceWith(foundPos, foundPos + 1, newNode));
+                        })
+                        .catch(function (err) {
+                            if (err && err.name === 'AbortError') { replaceSkeletonWithText(); return; }
+                            replaceSkeletonWithText();
+                        });
+                    return true;
+                },
+            },
         });
 
         const NormalizeEmptyDoc = Extension.create({
@@ -2041,7 +2791,8 @@ var EditorModule = (function (Utils, EventBus) {
                 }),
                 Underline, CustomImage, ImageUploadPlaceholder, Emoji,
                 Link.configure({ openOnClick: false, autolink: true, linkOnPaste: true, HTMLAttributes: { target: '_blank', rel: 'noopener noreferrer' } }),
-                Spoiler, NSFW, SemanticColor, EmoticonRule,
+                LiteYouTube, LiteVimeo, Spoiler, NSFW, LinkPreview, SemanticColor, CustomMention,
+                EmoticonRule,
                 TrailingEmbedParagraph, NormalizeEmptyDoc, DeleteAdjacentAtom, BlockAtomSelection,
                 CharacterCount.configure({ limit: MAX_MESSAGE_LENGTH > 0 ? MAX_MESSAGE_LENGTH : null }),
                 Typography
@@ -2049,16 +2800,50 @@ var EditorModule = (function (Utils, EventBus) {
             content: initialHtml,
             editorProps: {
                 attributes: { class: 'modern-wysiwyg-content', 'aria-label': 'Message body' },
+                plugins: [linkPreviewPlugin],
+                transformPastedHTML: function (html) {
+                    if (!html || typeof html !== 'string') return html;
+                    if (html.indexOf('&nbsp') === -1 &&
+                        html.indexOf('&#160') === -1 &&
+                        html.indexOf('\u00a0') === -1) {
+                        return html;
+                    }
+                    return html
+                        .replace(/&nbsp;?|&#160;|&#xA0;/gi, ' ')
+                        .replace(/\u00a0/g, ' ')
+                        .replace(/ {2,}/g, ' ');
+                },
                 handlePaste: function (view, event) {
+                    // 1. File paste (images)
                     var files = event.clipboardData ? event.clipboardData.files : null;
                     if (files && files.length) {
                         var imgs = Array.prototype.slice.call(files).filter(function (f) { return f.type && f.type.indexOf('image/') === 0; });
                         if (imgs.length) { event.preventDefault(); imgs.forEach(function (f) { uploadImageToWorker(f); }); return true; }
                     }
+
+                    // 2. Inline-code paste (collapse whitespace)
+                    if (view.state.selection.empty) {
+                        var $from = view.state.selection.$from;
+                        var codeMarkType = view.state.schema.marks.code;
+                        var hasCode = codeMarkType && codeMarkType.isInSet($from.marks());
+                        if (hasCode) {
+                            var pasteText = event.clipboardData ? event.clipboardData.getData('text/plain') : '';
+                            if (pasteText && pasteText.length > 0) {
+                                event.preventDefault();
+                                var collapsed = pasteText.replace(/\s+/g, ' ').trim();
+                                if (collapsed) view.dispatch(view.state.tr.insertText(collapsed));
+                                return true;
+                            }
+                        }
+                    }
+
+                    // 3. Shift+paste (plain text override)
                     if (event.shiftKey) {
                         var t = event.clipboardData.getData('text/plain');
                         if (t) { event.preventDefault(); view.dispatch(view.state.tr.insertText(t)); return true; }
                     }
+
+                    // 4. Image URL paste (before the link preview pipeline)
                     if (view.state.selection.empty) {
                         var txt = event.clipboardData ? event.clipboardData.getData('text/plain') : '';
                         if (txt) {
@@ -2081,6 +2866,51 @@ var EditorModule = (function (Utils, EventBus) {
                             }
                         }
                     }
+
+                    // 5. Lite embeds (iframe or URL paste)
+                    var clipboard = event.clipboardData;
+                    if (clipboard) {
+                        var htmlData = clipboard.getData('text/html');
+                        if (htmlData && htmlData.indexOf('<iframe') !== -1) {
+                            var srcMatch = htmlData.match(/<iframe[^>]+src=["']([^"']+)["']/i);
+                            var iframeSrc = srcMatch ? srcMatch[1].replace(/&amp;/g, '&') : '';
+                            if (iframeSrc) {
+                                var ytFromIframe = parseYouTubeUrl(iframeSrc);
+                                if (ytFromIframe) {
+                                    event.preventDefault();
+                                    insertLiteEmbed('liteYouTube', ytFromIframe.videoid, { start: ytFromIframe.start, end: ytFromIframe.end });
+                                    return true;
+                                }
+                                var vmFromIframe = parseVimeoUrl(iframeSrc);
+                                if (vmFromIframe) {
+                                    event.preventDefault();
+                                    insertLiteEmbed('liteVimeo', vmFromIframe.videoid, { start: vmFromIframe.start });
+                                    return true;
+                                }
+                            }
+                        }
+
+                        var textData = clipboard.getData('text/plain');
+                        if (textData) {
+                            var candidate = textData.trim();
+                            if (/^https?:\/\/\S+$/.test(candidate)) {
+                                var yt = parseYouTubeUrl(candidate);
+                                if (yt) {
+                                    event.preventDefault();
+                                    insertLiteEmbed('liteYouTube', yt.videoid, { start: yt.start, end: yt.end });
+                                    return true;
+                                }
+                                var vm = parseVimeoUrl(candidate);
+                                if (vm) {
+                                    event.preventDefault();
+                                    insertLiteEmbed('liteVimeo', vm.videoid, { start: vm.start });
+                                    return true;
+                                }
+                            }
+                        }
+                    }
+
+                    // 6. Fall through to default handler
                     return false;
                 }
             },
@@ -2102,11 +2932,12 @@ var EditorModule = (function (Utils, EventBus) {
                 editor.commands.focus('end');
             },
             onUpdate: function ({ editor }) {
-    var html = editor.getHTML();
-    var legacy = editorContentIsEmpty(html) ? '' : htmlToLegacy(html);
-    if (opts.onSync) opts.onSync(legacy);
-    updateSendState();
-}
+                var html = editor.getHTML();
+                var legacy = editorContentIsEmpty(html) ? '' : htmlToLegacy(html);
+                if (opts.onSync) opts.onSync(legacy);
+                updateSendState();
+                scheduleLivePreviewRefresh();
+            }
         });
 
         editorRef.current = editor;
@@ -2439,17 +3270,11 @@ var EditorModule = (function (Utils, EventBus) {
             else submitBtn.setAttribute('title', hasPlaceholder ? 'Finish or remove the image placeholder' : 'Write something before submitting');
         }
 
-        // Preview
+        // Preview button
         previewBtn.onclick = function () {
             if (!editorRef.current || editorContentIsEmpty(editorRef.current.getHTML())) return;
             previewArea.style.display = 'block';
-            var html = transformPreviewHtml(editorRef.current.getHTML());
-            var pc = previewArea.querySelector('.preview-content');
-            if (pc) {
-                pc.innerHTML = html;
-                if (window.twemoji) window.twemoji.parse(pc, { base: TWEMOJI_BASE, ext: '.svg' });
-            }
-            initPreviewQuotesAndSpoilers(previewArea);
+            updateLivePreview();
             previewArea.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
         };
 
@@ -2460,7 +3285,6 @@ var EditorModule = (function (Utils, EventBus) {
             if (editorContentIsEmpty(editorRef.current.getHTML())) return;
             var legacy = htmlToLegacy(editorRef.current.getHTML());
             if (opts.onSync) opts.onSync(legacy);
-            // Always check the sig/track checkboxes if they exist
             var sig = document.getElementById('enablesig');
             var trk = document.getElementById('track_topic');
             if (sig) sig.checked = true;
@@ -2531,11 +3355,6 @@ var EditorModule = (function (Utils, EventBus) {
 
     // ========================================================================
     // FAST REPLY BUILDER (body#topic)
-    //
-    // Placement: after #modern-pagination when it exists, else appended to
-    // #modern-forum-wrapper. The wrapper always exists by the time this
-    // runs (forum-enhancer creates it synchronously before calling
-    // initializeAllModules), so no waiting, no observer, no fallback chain.
     // ========================================================================
     async function buildFastReplyEditor() {
         var legacySend = document.querySelector('.fast.send');
@@ -2548,10 +3367,6 @@ var EditorModule = (function (Utils, EventBus) {
 
         var legacyHtml = legacyPost ? legacyPost.value : '';
 
-        // Extract the localStorage draft key from the legacy textarea's
-        // onkeyup handler. That handler is the only thing that ever writes
-        // to localStorage['t<topicId>']. Since our editor doesn't fire
-        // keyup on the hidden textarea, we mirror the write from onSync.
         var draftKey = null;
         if (legacyPost) {
             var onkeyup = legacyPost.getAttribute('onkeyup') || '';
@@ -2572,7 +3387,6 @@ var EditorModule = (function (Utils, EventBus) {
         container.id = 'modern-editor-fastreply';
         container.className = 'modern-editor-container modern-editor-container--reply';
 
-        // --- Placement ---
         var insertAfter = document.getElementById('modern-pagination');
         var wrapper = document.getElementById('modern-forum-wrapper');
 
@@ -2584,7 +3398,6 @@ var EditorModule = (function (Utils, EventBus) {
             document.body.appendChild(container);
         }
 
-        // --- Move the #fastreply anchor to sit immediately before the modern editor ---
         var anchorEl = document.getElementById('fastreply');
         if (anchorEl) {
             var anchorNode = (anchorEl.parentElement && anchorEl.parentElement.classList.contains('anchor'))
@@ -2619,10 +3432,6 @@ var EditorModule = (function (Utils, EventBus) {
                 }
             });
 
-            // Second caveat: on a hard load of topic#fastreply the browser's
-            // first-paint fragment scroll fires before we move the anchor, so
-            // it targets the legacy position. Re-scroll now that the modern
-            // editor exists and has a real height.
             if (window.location.hash === '#fastreply') {
                 setTimeout(function () {
                     container.scrollIntoView({ behavior: 'smooth', block: 'start' });
@@ -2638,11 +3447,6 @@ var EditorModule = (function (Utils, EventBus) {
 
     // ========================================================================
     // FULL EDITOR BUILDER (body#send)
-    //
-    // Placement: before #modern-summary-container when it exists, else
-    // appended to #modern-forum-wrapper. Summary, when it arrives later,
-    // is appended to the wrapper too — so it lands after the editor,
-    // preserving "editor before summary".
     // ========================================================================
     async function buildFullEditor() {
         var legacySend = document.querySelector('.send');
@@ -2659,7 +3463,6 @@ var EditorModule = (function (Utils, EventBus) {
         container.id = 'modern-editor-full';
         container.className = 'modern-editor-container modern-editor-container--full';
 
-        // --- Placement ---
         var summary = document.getElementById('modern-summary-container');
         var wrapper = document.getElementById('modern-forum-wrapper');
 
@@ -2671,7 +3474,6 @@ var EditorModule = (function (Utils, EventBus) {
             document.body.appendChild(container);
         }
 
-        // Force-check signature / subscription before submit
         var sig = document.getElementById('enablesig');
         var trk = document.getElementById('track_topic');
         if (sig) sig.checked = true;
@@ -2708,14 +3510,6 @@ var EditorModule = (function (Utils, EventBus) {
 
     // ========================================================================
     // FAST EDIT BUILDER (per-post)
-    //
-    // Placement: hide the corresponding modern card, insert the editor as
-    // a sibling of that card. On cancel, restore the card. On successful
-    // save, the post gets reconverted (which rebuilds the card from the
-    // new legacy content), so the restore happens naturally.
-    //
-    // Falls back to inserting inside .fastedit if there is no corresponding
-    // modern card (e.g., on a page where posts.js hasn't converted yet).
     // ========================================================================
     async function buildFastEdit(fasteditEl) {
         if (!fasteditEl || _activeFastEdits.has(fasteditEl)) return;
@@ -2731,7 +3525,6 @@ var EditorModule = (function (Utils, EventBus) {
             return;
         }
 
-        // Determine initial HTML
         var initialHtml = '';
         var textareaVal = legacyTextarea.value ? legacyTextarea.value.trim() : '';
         if (textareaVal) {
@@ -2750,7 +3543,6 @@ var EditorModule = (function (Utils, EventBus) {
             }
         }
 
-        // Find the corresponding modern card
         var legacyPost = fasteditEl.closest('.post');
         var legacyPostId = legacyPost ? legacyPost.getAttribute('id') : null;
         var modernCard = legacyPostId
@@ -2760,7 +3552,6 @@ var EditorModule = (function (Utils, EventBus) {
         var container = document.createElement('div');
         container.className = 'modern-editor-container modern-editor-container--fastedit';
 
-        // --- Placement ---
         var cardWasHidden = false;
         if (modernCard && modernCard.parentNode) {
             modernCard.classList.add('is-being-edited');
@@ -2799,8 +3590,6 @@ var EditorModule = (function (Utils, EventBus) {
                     }
                     waitForFastEditRemoval(fasteditEl, function () {
                         _activeFastEdits.delete(fasteditEl);
-                        // Card restore handled by reconversion — posts.js
-                        // wipes and rebuilds, so the new card appears fresh.
                         triggerPostReconversion();
                     });
                 }
