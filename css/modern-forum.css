@@ -758,8 +758,6 @@
 .modern-wysiwyg .ProseMirror .link-preview-card {
     max-width: calc(100% - 20px);
     box-sizing: border-box;
-    border-left: 0;
-    border-right: 0;
 }
 /* Single click on a link preview produces a NodeSelection. ProseMirror
    adds this class automatically; the ring mirrors the one images and
