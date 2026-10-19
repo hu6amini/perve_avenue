@@ -2737,9 +2737,21 @@ if (data.availableActions?.delete) actionsHtml += '<button class="action-icon de
         const originalPost = document.getElementById(CONFIG.POST_ID_PREFIX + pid);
         if (!originalPost) return;
 
-        // Fast edit already open on this post — nothing to do.
-        if (originalPost.querySelector('.fastedit')) {
-            return;
+                // Fast edit already open on this post — nothing to do. Presence
+        // alone isn't enough: some forum versions hide .fastedit on cancel
+        // rather than removing it, and a leftover hidden div would block
+        // every subsequent Edit click. Only treat .fastedit as "already
+        // open" when it's actually visible.
+        const existingFastEdit = originalPost.querySelector('.fastedit');
+        if (existingFastEdit) {
+            const style = window.getComputedStyle(existingFastEdit);
+            const isVisible = style.display !== 'none'
+                           && style.visibility !== 'hidden'
+                           && existingFastEdit.offsetHeight > 0;
+            if (isVisible) return;
+            // Stale hidden .fastedit — clean it up so the button below can
+            // re-open it cleanly.
+            existingFastEdit.remove();
         }
 
         const fastEditBtn = originalPost.querySelector('.fastedit_button');
