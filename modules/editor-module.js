@@ -3511,8 +3511,9 @@ var EditorModule = (function (Utils, EventBus) {
     // ========================================================================
     // FAST EDIT BUILDER (per-post)
     // ========================================================================
-    async function buildFastEdit(fasteditEl) {
+        async function buildFastEdit(fasteditEl) {
         if (!fasteditEl || _activeFastEdits.has(fasteditEl)) return;
+        console.log('[EditorModule] buildFastEdit fired for:', fasteditEl.className || fasteditEl.tagName);
         _activeFastEdits.set(fasteditEl, 'pending');
 
         var legacyTextarea = fasteditEl.querySelector('.fastedit_text');
@@ -3552,13 +3553,15 @@ var EditorModule = (function (Utils, EventBus) {
         var container = document.createElement('div');
         container.className = 'modern-editor-container modern-editor-container--fastedit';
 
-        var cardWasHidden = false;
+                var cardWasHidden = false;
         if (modernCard && modernCard.parentNode) {
             modernCard.classList.add('is-being-edited');
             cardWasHidden = true;
             modernCard.parentNode.insertBefore(container, modernCard.nextSibling);
+            console.log('[EditorModule] fast edit: inserted after modern card (modernCard found)');
         } else {
             fasteditEl.appendChild(container);
+            console.log('[EditorModule] fast edit: inserted inside .fastedit (modernCard NOT found)');
         }
 
         function restoreCard() {
@@ -3678,6 +3681,24 @@ var EditorModule = (function (Utils, EventBus) {
             });
             if (id3) _observerIds.push(id3);
         } catch (e) { console.error('[EditorModule] observer (fastedit) failed:', e); }
+
+               // Belt-and-braces: also react to .fastedit_button clicks. The
+        // observer registration above should catch .fastedit being added
+        // to the DOM, but if it ever misses (mid-batch, in-editor filter,
+        // observerOrigin marker on the .post during a posts-module run),
+        // this fallback catches it. The _activeFastEdits guard makes the
+        // build idempotent — safe to call twice.
+        addGlobalListener(document, 'click', function (e) {
+            var btn = e.target.closest('.fastedit_button');
+            if (!btn) return;
+            setTimeout(function () {
+                document.querySelectorAll('.post .fastedit').forEach(function (fe) {
+                    if (_activeFastEdits.has(fe)) return;
+                    if (fe.querySelector('.modern-editor-container--fastedit')) return;
+                    buildFastEdit(fe);
+                });
+            }, 50);
+        });
     }
 
     // ========================================================================
