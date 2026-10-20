@@ -63,6 +63,22 @@
 //       #modern-posts-container, which getPostsContainer never
 //       creates — the real id is #posts-container — so in-page hash
 //       changes were a silent no-op.
+// v3.2: canonical anchor element inside the modern card. The v3.1
+//       fix relied on the <article> itself carrying the id, which
+//       coupled scroll-target semantics to the visual container and
+//       meant scroll-margin/sticky-header offset had to be applied
+//       to the whole card. Instead, the modern card now contains its
+//       own <div class="anchor"><a id="entry<postId>"></a></div> as
+//       the first child — mirroring the legacy markup exactly. This
+//       gives a dedicated zero-size scroll target, lets scroll-
+//       margin-top be scoped to .anchor, restores native fragment
+//       navigation for #entry<postId> (since the id now resolves to
+//       the modern anchor, not the legacy one), and lets
+//       scrollToHashAfterBuild go back to a plain getElementById.
+//       The broken aria-labelledby="post-title-<id>" (which pointed
+//       at nothing) is removed. scrollToHashAfterBuild also gains a
+//       post-image-settle correction pass so late lazy-load layout
+//       shifts don't strand the smooth scroll mid-flight.
 'use strict';
 
 const ForumPostsModule = (function () {
@@ -2534,7 +2550,19 @@ function attemptWrapImage(img) {
     }
 
     // ============================================================================
-    // GENERATE MODERN CARD (with anchor ID)
+    // GENERATE MODERN CARD
+    //
+    // The card carries a dedicated <div class="anchor"><a id="entry<postId>">
+    // as its first child, mirroring the legacy markup. That makes the
+    // anchor the canonical fragment target for #entry<postId> — the
+    // article itself no longer holds the id, so scroll-margin-top on
+    // .anchor handles sticky-header offset without touching card layout,
+    // and native fragment navigation lands on a zero-size element right
+    // at the top of the card. stripLegacyEntryAnchors ensures no legacy
+    // <a> competes for the same id.
+    //
+    // aria-labelledby was previously set to "post-title-<postId>", which
+    // pointed at nothing (the id was never emitted anywhere). Removed.
     // ============================================================================
     function generateModernPost(data) {
         if (!data) return '';
@@ -2642,7 +2670,10 @@ if (data.availableActions?.delete) actionsHtml += '<button class="action-icon de
         }
 
         const receiptClass = data.isReadReceipt ? ' is-read-receipt' : '';
-        return '<article id="entry' + data.postId + '" class="post-card ' + groupCssClass + receiptClass + '" data-original-id="' + (data.originalIdPrefix || CONFIG.POST_ID_PREFIX) + data.postId + '" data-post-id="' + data.postId + '" aria-labelledby="post-title-' + data.postId + '">' +
+        return '<article class="post-card ' + groupCssClass + receiptClass + '"' +
+            ' data-original-id="' + (data.originalIdPrefix || CONFIG.POST_ID_PREFIX) + data.postId + '"' +
+            ' data-post-id="' + data.postId + '">' +
+            '<div class="anchor"><a id="entry' + data.postId + '"></a></div>' +
             '<header class="post-card-header"><div class="post-meta"><div class="post-number"><i class="fa-regular fa-hashtag" aria-hidden="true"></i> ' + data.postNumber + '</div>' + postTimeHtml + '</div>' + headerActionsHtml + '</header>' +
             '<div class="post-card-body"><div class="avatar-modern">' + avatarHtml + '</div>' +
             '<div class="post-user-info"><div class="user-name"><a href="' + profileUrl + '" class="user-profile-link">' + escapeHtml(username) + '</a></div>' +
@@ -4148,26 +4179,29 @@ function attachPollHandlers(modernPoll, legacyPoll, pollData) {
     // the URL lands on the hidden legacy anchor — the browser's
     // first-paint fragment scroll fires before the modern cards exist.
     // Once conversion completes, scrollToHashAfterBuild retargets the
-    // scroll to the correct modern card.
+    // scroll to the correct modern anchor.
     //
-    // Historically every case resolved via document.getElementById /
-    // the legacy anchor. That broke #entry<postId>: both the legacy
-    // <a id="entry<postId>"> and the modern card carry that id, and
-    // getElementById returns the first in document order — the legacy
-    // anchor — which sits inside the rebuilt container, so the
-    // contains() fallback never fired and no movement was visible.
+    // The modern card carries its own dedicated anchor:
     //
-    // Now every case resolves the modern card via data-post-id, which
-    // is guaranteed unique. #entry<postId> carries the postId inline;
-    // #lastpost / #newpost resolve via the surviving legacy anchor.
+    //     <div class="anchor"><a id="entry<postId>"></a></div>
     //
-    // The complementary change is stripLegacyEntryAnchors below, which
-    // removes the duplicate id from the legacy anchor once the modern
-    // card exists. That makes the modern card the sole canonical
-    // anchor, matching the summary page's unique #entrysummary_N
-    // anchors and giving native fragment navigation a single target.
-    // #lastpost / #newpost anchors are left in place — they remain the
-    // source of truth for the retarget below.
+    // as the first child, mirroring the legacy markup. That makes
+    // getElementById('entry<postId>') resolve to the modern anchor
+    // once conversion is done — no data-post-id workaround needed.
+    // stripLegacyEntryAnchors (below) removes any legacy anchor that
+    // happens to carry the same id (older forum versions did; the
+    // current version does not) so there's never a duplicate.
+    //
+    // #lastpost / #newpost still resolve via the surviving legacy
+    // anchor, which continues to be the source of truth for those
+    // special fragment names.
+    //
+    // Two scroll passes:
+    //   1. setTimeout(0) — after the current task, once layout is
+    //      settled for the card just inserted.
+    //   2. 600ms later — corrects for late lazy-image layout shifts
+    //      above the target. Guarded so it only fires when the card
+    //      is still roughly on screen (won't fight a manual scroll).
     // ============================================================================
     function scrollToHashAfterBuild(container) {
         if (!container) return;
@@ -4175,49 +4209,47 @@ function attachPollHandlers(modernPoll, legacyPoll, pollData) {
         if (!hash || hash === '#') return;
         var id = hash.slice(1);
 
-        var modernCard = null;
+        var target = null;
 
         if (/^entry\d+$/.test(id)) {
-            var entryPostId = id.slice('entry'.length);
-            modernCard = container.querySelector(
-                '.post-card[data-post-id="' + entryPostId + '"]'
-            );
+            target = document.getElementById(id);
         } else if (id === 'lastpost' || id === 'newpost') {
-            var legacyAnchor = document.querySelector(
-                '.post .anchor a[id="' + id + '"]'
-            );
+            var legacyAnchor = document.querySelector('.post .anchor a[id="' + id + '"]');
             if (!legacyAnchor) return;
             var legacyPost = legacyAnchor.closest('.post');
             if (!legacyPost) return;
             var postId = (legacyPost.id || '').replace(/^ee/, '');
             if (!postId) return;
-            modernCard = container.querySelector(
-                '.post-card[data-post-id="' + postId + '"]'
-            );
+            target = document.getElementById('entry' + postId);
         } else {
             return;
         }
 
-        if (modernCard) {
-            requestAnimationFrame(function () {
-                modernCard.scrollIntoView({ behavior: 'smooth', block: 'start' });
-            });
+        if (!target || !container.contains(target)) return;
+
+        function jump() {
+            target.scrollIntoView({ behavior: 'smooth', block: 'start' });
         }
+
+        setTimeout(jump, 0);
+
+        setTimeout(function () {
+            var rect = target.getBoundingClientRect();
+            var onTarget = rect.top >= -50 && rect.top <= 200;
+            if (onTarget) jump();
+        }, 600);
     }
 
-    // The modern card carries id="entry<postId>". The legacy markup
-    // also carries <a id="entry<postId>"> inside .anchor. Once the
-    // modern card exists, the legacy anchor is dead weight and actively
-    // breaks getElementById / native fragment navigation by being the
-    // first match in document order. Strip it so the modern card
-    // becomes the sole, canonical anchor — the same shape the
-    // send-page summary cards already have (#entrysummary_N), which
-    // work natively.
+    // The modern card carries id="entry<postId>" on its inner <a>.
+    // Legacy markup *also* carries <a id="entry<postId>"> inside
+    // .anchor on older forum versions (not on the current one — this
+    // topic dump shows all legacy .anchor > a elements are empty).
+    // stripLegacyEntryAnchors removes any such duplicates so
+    // getElementById is unambiguous. Idempotent, harmless when there
+    // is nothing to strip.
     //
-    // #lastpost / #newpost are left alone: scrollToHashAfterBuild still
-    // needs those legacy anchors as the source of truth.
-    //
-    // Idempotent — safe to call on every conversion pass.
+    // #lastpost / #newpost anchors are left alone: scrollToHashAfterBuild
+    // still needs them as the source of truth.
     function stripLegacyEntryAnchors() {
         document.querySelectorAll('.post .anchor a[id^="entry"]').forEach(function (a) {
             a.removeAttribute('id');
