@@ -3106,24 +3106,33 @@ var EditorModule = (function (Utils, EventBus) {
         });
 
         // Helper: image hover toolbar
+                // Helper: image hover toolbar
         function setupImageToolbar(root, ed) {
+            var scrollContainer = root.parentNode; // This is the .modern-wysiwyg wrapper
+            
             var toolbarEl = document.createElement('div');
             toolbarEl.className = 'editor-image-toolbar';
             toolbarEl.style.display = 'none';
+            
             var nsfwB = document.createElement('button');
             nsfwB.type = 'button'; nsfwB.className = 'editor-image-nsfw-btn';
             nsfwB.innerHTML = '<i class="fa-regular fa-eye-slash" aria-hidden="true"></i>';
             nsfwB.title = 'Mark as NSFW'; nsfwB.setAttribute('aria-label', 'Toggle NSFW');
+            
             var editB = document.createElement('button');
             editB.type = 'button'; editB.className = 'editor-image-edit-btn';
             editB.innerHTML = '<i class="fa-regular fa-pen" aria-hidden="true"></i>';
             editB.title = 'Edit image'; editB.setAttribute('aria-label', 'Edit image');
+            
             var delB = document.createElement('button');
             delB.type = 'button'; delB.className = 'editor-image-delete-btn';
             delB.innerHTML = '<i class="fa-regular fa-trash-can" aria-hidden="true"></i>';
             delB.title = 'Delete image'; delB.setAttribute('aria-label', 'Delete image');
+            
             toolbarEl.appendChild(nsfwB); toolbarEl.appendChild(editB); toolbarEl.appendChild(delB);
-            root.appendChild(toolbarEl); 
+            
+            // Mount to the scroll container, NOT .ProseMirror
+            scrollContainer.appendChild(toolbarEl); 
 
             [nsfwB, editB, delB].forEach(function (b) { b.addEventListener('mousedown', function (e) { e.preventDefault(); }); });
 
@@ -3142,14 +3151,13 @@ var EditorModule = (function (Utils, EventBus) {
 
             function position(img) {
                 var r = img.getBoundingClientRect();
-                var rootRect = root.getBoundingClientRect();
+                var rootRect = scrollContainer.getBoundingClientRect();
                 var w = toolbarEl.offsetWidth || 108;
                 var h = toolbarEl.offsetHeight || 32;
                 
-                // Calculate position relative to the .ProseMirror scroll container,
-                // not the viewport/window.
-                var top = (r.top - rootRect.top) + root.scrollTop + 6;
-                var left = (r.right - rootRect.left) + root.scrollLeft - w - 8;
+                // Calculate position relative to the scroll container (.modern-wysiwyg)
+                var top = (r.top - rootRect.top) + scrollContainer.scrollTop + 6;
+                var left = (r.right - rootRect.left) + scrollContainer.scrollLeft - w - 8;
                 
                 toolbarEl.style.top = Math.max(4, top) + 'px';
                 toolbarEl.style.left = Math.max(4, left) + 'px';
