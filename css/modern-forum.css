@@ -4043,6 +4043,7 @@ section.modern-stats { flex-direction: column; width: 100%; }
   padding: 0;
   scrollbar-width: thin;
   scrollbar-color: var(--surface-light) transparent;
+  position: relative;
 }
 .modern-wysiwyg::-webkit-scrollbar { width: 6px; }
 .modern-wysiwyg::-webkit-scrollbar-track { background: transparent; }
