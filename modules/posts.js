@@ -49,6 +49,20 @@
 //       conversion completes, scrollToHashAfterBuild retargets the
 //       scroll to the correct modern card. A hashchange listener
 //       handles in-page hash changes for the same three anchors.
+// v3.1: #entry<postId> retargeting fixed. Two elements carried the
+//       same id — the legacy <a id="entry<postId>"> inside .anchor
+//       and the modern card — and getElementById returned the legacy
+//       anchor (first in document order), which sat inside the
+//       rebuilt container, so the contains() fallback never fired
+//       and no scroll movement was visible. scrollToHashAfterBuild
+//       now resolves every case via data-post-id, and
+//       stripLegacyEntryAnchors removes the duplicate id from the
+//       legacy anchor so the modern card is the sole canonical
+//       fragment target (same shape as the send-page summary cards).
+//       The hashchange listener was also fixed: it looked for
+//       #modern-posts-container, which getPostsContainer never
+//       creates — the real id is #posts-container — so in-page hash
+//       changes were a silent no-op.
 'use strict';
 
 const ForumPostsModule = (function () {
@@ -1548,7 +1562,7 @@ function convertLegacySpoiler(codeTopElem, codeBodyElem, title) {
         return createElementFromHTML(spoilerHtml);
     } catch (e) { return null; }
 }
-    
+
     // ============================================================================
     // POST-PROCESSING: remove expand button if content fits (image-aware)
     // ============================================================================
@@ -2901,7 +2915,7 @@ if (data.availableActions?.delete) actionsHtml += '<button class="action-icon de
         }
     });
 }
-    
+
     function handleShare(pid, buttonElement) {
         const url = window.location.href.split('#')[0] + '#entry' + pid;
         navigator.clipboard.writeText(url).then(() => {
@@ -3076,12 +3090,12 @@ if (data.availableActions?.delete) actionsHtml += '<button class="action-icon de
             textSpan.textContent = isExpanded ? 'Show more' : 'Show less';
         }
     }
-    
+
     function handleQuoteJump(btn) {
         const targetUrl = btn.getAttribute('data-target-url');
         if (targetUrl) window.location.href = targetUrl;
     }
-    
+
     function handleSpoilerToggle(trigger) {
         const header = trigger.closest('.spoiler-header');
         if (!header) return;
@@ -3632,7 +3646,7 @@ function parseLegacyIframeProvider(src) {
 
     return null;
 }
-    
+
     // ============================================================================
     // ATTACHMENT CONVERSION
     // ============================================================================
@@ -4133,19 +4147,27 @@ function attachPollHandlers(modernPoll, legacyPoll, pollData) {
     // A fresh page load with #entry<postId>, #lastpost, or #newpost in
     // the URL lands on the hidden legacy anchor — the browser's
     // first-paint fragment scroll fires before the modern cards exist.
-    // By the time conversion completes, the modern cards exist, so
-    // retarget the scroll to the correct one.
+    // Once conversion completes, scrollToHashAfterBuild retargets the
+    // scroll to the correct modern card.
     //
-    // #entry<postId>: the modern card carries id="entry<postId>", but
-    // the legacy post also contains <a id="entry<postId>"> inside its
-    // hidden .anchor div. getElementById may return the legacy anchor
-    // depending on document order, so fall back to a data-attribute
-    // lookup scoped to the modern container when the id-based lookup
-    // returns something that isn't a modern card.
+    // Historically every case resolved via document.getElementById /
+    // the legacy anchor. That broke #entry<postId>: both the legacy
+    // <a id="entry<postId>"> and the modern card carry that id, and
+    // getElementById returns the first in document order — the legacy
+    // anchor — which sits inside the rebuilt container, so the
+    // contains() fallback never fired and no movement was visible.
     //
-    // #lastpost / #newpost: no modern equivalent exists. Resolve the
-    // legacy anchor's host post, then find the matching modern card by
-    // data-post-id.
+    // Now every case resolves the modern card via data-post-id, which
+    // is guaranteed unique. #entry<postId> carries the postId inline;
+    // #lastpost / #newpost resolve via the surviving legacy anchor.
+    //
+    // The complementary change is stripLegacyEntryAnchors below, which
+    // removes the duplicate id from the legacy anchor once the modern
+    // card exists. That makes the modern card the sole canonical
+    // anchor, matching the summary page's unique #entrysummary_N
+    // anchors and giving native fragment navigation a single target.
+    // #lastpost / #newpost anchors are left in place — they remain the
+    // source of truth for the retarget below.
     // ============================================================================
     function scrollToHashAfterBuild(container) {
         if (!container) return;
@@ -4153,34 +4175,53 @@ function attachPollHandlers(modernPoll, legacyPoll, pollData) {
         if (!hash || hash === '#') return;
         var id = hash.slice(1);
 
-        if (/^entry\d+$/.test(id)) {
-            var card = document.getElementById(id);
-            if (!card || !container.contains(card)) {
-                var entryPostId = id.replace(/^entry/, '');
-                card = container.querySelector('.post-card[data-post-id="' + entryPostId + '"]');
-            }
-            if (card) {
-                requestAnimationFrame(function () {
-                    card.scrollIntoView({ behavior: 'smooth', block: 'start' });
-                });
-            }
-            return;
-        }
+        var modernCard = null;
 
-        if (id === 'lastpost' || id === 'newpost') {
-            var legacyAnchor = document.querySelector('.post .anchor a[id="' + id + '"]');
+        if (/^entry\d+$/.test(id)) {
+            var entryPostId = id.slice('entry'.length);
+            modernCard = container.querySelector(
+                '.post-card[data-post-id="' + entryPostId + '"]'
+            );
+        } else if (id === 'lastpost' || id === 'newpost') {
+            var legacyAnchor = document.querySelector(
+                '.post .anchor a[id="' + id + '"]'
+            );
             if (!legacyAnchor) return;
             var legacyPost = legacyAnchor.closest('.post');
             if (!legacyPost) return;
             var postId = (legacyPost.id || '').replace(/^ee/, '');
             if (!postId) return;
-            var modernCard = container.querySelector('.post-card[data-post-id="' + postId + '"]');
-            if (modernCard) {
-                requestAnimationFrame(function () {
-                    modernCard.scrollIntoView({ behavior: 'smooth', block: 'start' });
-                });
-            }
+            modernCard = container.querySelector(
+                '.post-card[data-post-id="' + postId + '"]'
+            );
+        } else {
+            return;
         }
+
+        if (modernCard) {
+            requestAnimationFrame(function () {
+                modernCard.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            });
+        }
+    }
+
+    // The modern card carries id="entry<postId>". The legacy markup
+    // also carries <a id="entry<postId>"> inside .anchor. Once the
+    // modern card exists, the legacy anchor is dead weight and actively
+    // breaks getElementById / native fragment navigation by being the
+    // first match in document order. Strip it so the modern card
+    // becomes the sole, canonical anchor — the same shape the
+    // send-page summary cards already have (#entrysummary_N), which
+    // work natively.
+    //
+    // #lastpost / #newpost are left alone: scrollToHashAfterBuild still
+    // needs those legacy anchors as the source of truth.
+    //
+    // Idempotent — safe to call on every conversion pass.
+    function stripLegacyEntryAnchors() {
+        document.querySelectorAll('.post .anchor a[id^="entry"]').forEach(function (a) {
+            a.removeAttribute('id');
+        });
     }
 
     // ============================================================================
@@ -4250,6 +4291,7 @@ function attachPollHandlers(modernPoll, legacyPoll, pollData) {
             whenTippyReady(function () { autoTippyFromTitle(container); });
             waitForLightGallery();
             setTimeout(fixBrokenWeservImages, 300);
+            stripLegacyEntryAnchors();
             setTimeout(function () { scrollToHashAfterBuild(container); }, 100);
             console.log('[PostsModule] Messages ready - ' + postsData.length + ' messages converted');
         } catch (err) { console.error('[PostsModule] Messages conversion error:', err); }
@@ -4380,6 +4422,7 @@ function attachPollHandlers(modernPoll, legacyPoll, pollData) {
             whenTippyReady(function () { autoTippyFromTitle(container); });
             waitForLightGallery();
             setTimeout(fixBrokenWeservImages, 300);
+            stripLegacyEntryAnchors();
             setTimeout(function () { scrollToHashAfterBuild(container); }, 100);
             console.log('[PostsModule] Ready - ' + (postsData.length + blogCount) + ' posts converted');
         } catch (err) { console.error('[PostsModule] Conversion error:', err); }
@@ -4557,8 +4600,14 @@ function attachPollHandlers(modernPoll, legacyPoll, pollData) {
             // #lastpost, or #newpost into an already-loaded tab also
             // retargets the scroll. The fresh-load case is handled by
             // scrollToHashAfterBuild inside convertAllPosts / convertMessages.
+            //
+            // Note: the container is #posts-container (CONFIG.CONTAINER_ID),
+            // not #modern-posts-container. getPostsContainer resolves it
+            // (creating it if needed) — the previous getElementById call
+            // looked for an id getPostsContainer never creates, so in-page
+            // hash changes were a silent no-op.
             window.addEventListener('hashchange', function () {
-                var container = document.getElementById('modern-posts-container');
+                var container = getPostsContainer();
                 if (container) scrollToHashAfterBuild(container);
             });
         }).catch(err => console.error('[PostsModule] Dependency wait failed:', err));
