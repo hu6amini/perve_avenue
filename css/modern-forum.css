@@ -3938,6 +3938,8 @@ section.modern-stats { flex-direction: column; width: 100%; }
   border-bottom: 1px solid var(--border-color);
   background: var(--bg-color);
   align-items: center;
+  position: relative;
+  z-index: 10;
 }
 .modern-editor-btn {
   background: var(--surface-color);
@@ -4064,6 +4066,7 @@ section.modern-stats { flex-direction: column; width: 100%; }
   font-size: var(--text-base);
   line-height: 1.618;
   text-align: left;
+  position: relative;
 }
 
 .modern-wysiwyg:empty::before {
