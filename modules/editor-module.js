@@ -1366,7 +1366,7 @@ var EditorModule = (function (Utils, EventBus) {
         var cancelBtnHtml = opts.onCancel ? '<button type="button" class="modern-btn modern-btn-secondary modern-editor-cancel"><i class="fa-regular fa-xmark"></i> Cancel</button>' : '';
         actions.innerHTML = cancelBtnHtml +
             '<button type="button" class="modern-btn modern-btn-secondary modern-editor-preview-btn"><i class="fa-regular fa-eye"></i> Preview</button>' +
-            '<button type="button" class="modern-btn modern-btn-primary modern-editor-submit-btn" aria-keyshortcuts="Control+Enter"><i class="fa-regular fa-paper-plane"></i> ' + escapeHtml(opts.submitLabel || 'Submit') + '</button>';
+            '<button type="button" class="modern-btn modern-btn-primary modern-editor-submit-btn" aria-keyshortcuts="Control+Enter"><i class="fa-regular fa-floppy-disk"></i> ' + escapeHtml(opts.submitLabel || 'Submit') + '</button>';
         host.appendChild(actions);
 
         var submitBtn = actions.querySelector('.modern-editor-submit-btn');
