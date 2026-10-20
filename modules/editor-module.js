@@ -464,6 +464,102 @@ var EditorModule = (function (Utils, EventBus) {
     // ========================================================================
     // HTML → LEGACY CONVERTERS
     // ========================================================================
+        function paragraphizeLegacyHtml(html) {
+        if (!html || typeof html !== 'string') return html;
+        try {
+            const BLOCK_TAGS = new Set([
+                'H1','H2','H3','H4','H5','H6','DIV','P','UL','OL','LI',
+                'BLOCKQUOTE','PRE','TABLE','HR','SECTION','ARTICLE','FIGURE',
+                'HEADER','FOOTER','ASIDE','NAV','DL','DT','DD','FORM'
+            ]);
+
+            const container = document.createElement('div');
+            container.innerHTML = html;
+            const newChildren = [];
+            let inlineBuffer = [];
+            let pendingBreaks = 0;
+
+            function hasVisibleContent(nodes) {
+                return nodes.some(n => {
+                    if (n.nodeType === 3) return n.nodeValue.trim().length > 0;
+                    if (n.nodeType === 1) return n.tagName !== 'BR';
+                    return false;
+                });
+            }
+
+            function flushBuffer() {
+                // Strip leading <br>
+                while (inlineBuffer.length > 0 && inlineBuffer[0].nodeType === 1 && inlineBuffer[0].tagName === 'BR') {
+                    inlineBuffer.shift();
+                }
+                // Strip trailing <br>
+                while (inlineBuffer.length > 0 && inlineBuffer[inlineBuffer.length - 1].nodeType === 1 && inlineBuffer[inlineBuffer.length - 1].tagName === 'BR') {
+                    inlineBuffer.pop();
+                }
+                if (!hasVisibleContent(inlineBuffer)) {
+                    inlineBuffer = [];
+                    return;
+                }
+                const p = document.createElement('p');
+                inlineBuffer.forEach(n => p.appendChild(n));
+                newChildren.push(p);
+                inlineBuffer = [];
+            }
+
+            Array.from(container.childNodes).forEach(child => {
+                // Check for <br>
+                if (child.nodeType === 1 && child.tagName === 'BR') {
+                    pendingBreaks++;
+                    if (pendingBreaks >= 2) {
+                        flushBuffer();
+                        pendingBreaks = 0;
+                    }
+                    return;
+                }
+
+                // Check for whitespace text nodes between <br>s
+                if (child.nodeType === 3 && !child.nodeValue.trim() && pendingBreaks > 0) {
+                    return;
+                }
+
+                // If we had a single <br> pending, it was just a line break.
+                if (pendingBreaks === 1) {
+                    inlineBuffer.push(document.createElement('br'));
+                }
+                pendingBreaks = 0;
+
+                // Block tags
+                if (child.nodeType === 1 && BLOCK_TAGS.has(child.tagName)) {
+                    flushBuffer();
+                    newChildren.push(child);
+                    return;
+                }
+
+                inlineBuffer.push(child);
+            });
+
+            // Handle any remaining single <br>
+            if (pendingBreaks === 1) {
+                inlineBuffer.push(document.createElement('br'));
+            }
+
+            flushBuffer();
+
+            container.innerHTML = '';
+            newChildren.forEach(n => container.appendChild(n));
+
+            // Recurse into quotes and spoilers
+            Array.from(container.querySelectorAll('.quote-content, .spoiler-content-inner')).forEach(el => {
+                el.innerHTML = paragraphizeLegacyHtml(el.innerHTML);
+            });
+
+            return container.innerHTML;
+        } catch (e) {
+            console.warn('[EditorModule] paragraphizeLegacyHtml failed:', e);
+            return html;
+        }
+    }
+   
     function legacyToHtml(legacy) {
         if (!legacy) return '';
         var html = legacy;
@@ -569,25 +665,36 @@ var EditorModule = (function (Utils, EventBus) {
     // typing) and end up in the saved payload, so the reader side
     // doesn't have to re-fetch them either.
     // ========================================================================
-    async function legacyToHtmlAsync(legacy) {
+        async function legacyToHtmlAsync(legacy) {
         if (!legacy) return '';
 
-                // [IMG=payload]url[/IMG] — payload is either a format hint
-        // (png, jpg, …) or a descriptive alt text (scene names, filenames
-        // with hyphens). Either way it's information the BBCode carries
-        // that a plain [img]url[/img] doesn't, so route it into the alt
-        // attribute rather than throwing it away. Escape the payload
-        // before embedding it in the attribute — it can contain quotes
-        // and ampersands.
-        var expanded = legacy.replace(
-            /\[IMG=([^\]]+)\]([^\[]+?)\[\/IMG\]/gi,
-            function (_, altText, url) {
-                var safeAlt = escapeHtml(altText.trim());
-                return '<img src="' + url.trim() + '" alt="' + safeAlt + '" loading="lazy" decoding="async">';
-            }
-        );
+        var expanded = legacy.replace(/\[IMG=([^\]]+)\]([^\[]+?)\[\/IMG\]/gi, function (_, altText, url) {
+            var safeAlt = escapeHtml(altText.trim());
+            return '<img src="' + url.trim() + '" alt="' + safeAlt + '" loading="lazy" decoding="async">';
+        });
+
+        // If the text has raw newlines (\n) but no <br> tags, convert newlines to <br>
+        if (!/<br\s*\/?>/i.test(expanded) && /\n/.test(expanded)) {
+            // Protect code blocks so we don't inject <br> inside them
+            var codeBlocks = [];
+            expanded = expanded.replace(/\[code\]([\s\S]*?)\[\/code\]/gi, function(match) {
+                var id = '\uE000CODE' + codeBlocks.length + 'Z\uE001';
+                codeBlocks.push(match);
+                return id;
+            });
+            
+            expanded = expanded.replace(/\r\n/g, '\n').replace(/\n/g, '<br>');
+            
+            expanded = expanded.replace(/\uE000CODE(\d+)Z\uE001/g, function(m, idx) {
+                return codeBlocks[parseInt(idx, 10)];
+            });
+        }
 
         var html = legacyToHtml(expanded);
+        
+        // Convert double <br> tags into proper <p> paragraphs
+        html = paragraphizeLegacyHtml(html);
+        
         return await enrichImageDimensions(html);
     }
 
