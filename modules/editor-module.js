@@ -3123,7 +3123,7 @@ var EditorModule = (function (Utils, EventBus) {
             delB.innerHTML = '<i class="fa-regular fa-trash-can" aria-hidden="true"></i>';
             delB.title = 'Delete image'; delB.setAttribute('aria-label', 'Delete image');
             toolbarEl.appendChild(nsfwB); toolbarEl.appendChild(editB); toolbarEl.appendChild(delB);
-            document.body.appendChild(toolbarEl);
+            root.appendChild(toolbarEl); 
 
             [nsfwB, editB, delB].forEach(function (b) { b.addEventListener('mousedown', function (e) { e.preventDefault(); }); });
 
@@ -3142,13 +3142,17 @@ var EditorModule = (function (Utils, EventBus) {
 
             function position(img) {
                 var r = img.getBoundingClientRect();
+                var rootRect = root.getBoundingClientRect();
                 var w = toolbarEl.offsetWidth || 108;
                 var h = toolbarEl.offsetHeight || 32;
-                var vw = window.innerWidth, vh = window.innerHeight;
-                var l = Math.max(4, Math.min(r.right - 8 - w, vw - w - 4));
-                var t = Math.max(4, Math.min(r.top + 6, vh - h - 4));
-                toolbarEl.style.top = (t + window.pageYOffset) + 'px';
-                toolbarEl.style.left = (l + window.pageXOffset) + 'px';
+                
+                // Calculate position relative to the .ProseMirror scroll container,
+                // not the viewport/window.
+                var top = (r.top - rootRect.top) + root.scrollTop + 6;
+                var left = (r.right - rootRect.left) + root.scrollLeft - w - 8;
+                
+                toolbarEl.style.top = Math.max(4, top) + 'px';
+                toolbarEl.style.left = Math.max(4, left) + 'px';
             }
 
             function show(img) {
@@ -3221,9 +3225,6 @@ var EditorModule = (function (Utils, EventBus) {
                 ed.view.dispatch(ed.view.state.tr.delete(r.pos, r.pos + r.node.nodeSize));
                 toolbarEl.style.display = 'none'; hovered = null;
             });
-
-            addGlobalListener(window, 'scroll', function () { if (hovered && toolbarEl.style.display === 'flex') position(hovered); }, true);
-            addGlobalListener(window, 'resize', function () { if (hovered && toolbarEl.style.display === 'flex') position(hovered); });
 
             ed.on('transaction', function () {
                 if (!hovered) return;
