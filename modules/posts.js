@@ -2786,54 +2786,195 @@ if (data.availableActions?.delete) actionsHtml += '<button class="action-icon de
     //   3. If no .fastedit_button exists, navigate to CODE=08
     //      directly. This is the pre-v2.8 behaviour.
     function handleEdit(pid) {
-        const originalPost = document.getElementById(CONFIG.POST_ID_PREFIX + pid);
-        if (!originalPost) return;
+    const originalPost = document.getElementById(CONFIG.POST_ID_PREFIX + pid);
+    if (!originalPost) return;
 
-                // Fast edit already open on this post — nothing to do. Presence
-        // alone isn't enough: some forum versions hide .fastedit on cancel
-        // rather than removing it, and a leftover hidden div would block
-        // every subsequent Edit click. Only treat .fastedit as "already
-        // open" when it's actually visible.
-        const existingFastEdit = originalPost.querySelector('.fastedit');
-        if (existingFastEdit) {
-            const style = window.getComputedStyle(existingFastEdit);
-            const isVisible = style.display !== 'none'
-                           && style.visibility !== 'hidden'
-                           && existingFastEdit.offsetHeight > 0;
-            if (isVisible) return;
-            // Stale hidden .fastedit — clean it up so the button below can
-            // re-open it cleanly.
-            existingFastEdit.remove();
-        }
-
-        const fastEditBtn = originalPost.querySelector('.fastedit_button');
-        const editLink = originalPost.querySelector('a[href*="CODE=08"]');
-
-        if (fastEditBtn) {
-            fastEditBtn.click();
-            setTimeout(function () {
-                if (!originalPost.querySelector('.fastedit')) {
-                    console.debug(
-                        '[PostsModule] Fast edit did not activate within ' +
-                        CONFIG.FAST_EDIT_TIMEOUT + 'ms, falling back to full editor'
-                    );
-                    if (editLink) {
-                        window.location.href = editLink.getAttribute('href');
-                    } else {
-                        console.warn(
-                            '[PostsModule] Edit button clicked but neither fast edit nor full editor available for post', pid
-                        );
-                    }
-                }
-            }, CONFIG.FAST_EDIT_TIMEOUT);
+    // Fast edit already open on this post. Presence alone isn't enough:
+    // some forum versions hide .fastedit on cancel rather than removing
+    // it, and a leftover hidden div would block every subsequent Edit
+    // click. Only treat .fastedit as "already open" when it's actually
+    // visible.
+    const existingFastEdit = originalPost.querySelector('.fastedit');
+    if (existingFastEdit) {
+        const style = window.getComputedStyle(existingFastEdit);
+        const isVisible = style.display !== 'none'
+                       && style.visibility !== 'hidden'
+                       && existingFastEdit.offsetHeight > 0;
+        if (isVisible) {
+            // Already open — put focus back in the editor so clicking
+            // Edit again lands the caret where it belongs.
+            focusFastEditEditor(originalPost);
             return;
         }
+        // Stale hidden .fastedit — clean it up so the button below can
+        // re-open it cleanly.
+        existingFastEdit.remove();
+    }
 
-        // No fast-edit button — use the standard full-page editor.
-        if (editLink) {
-            window.location.href = editLink.getAttribute('href');
+    const fastEditBtn = originalPost.querySelector('.fastedit_button');
+    const editLink = originalPost.querySelector('a[href*="CODE=08"]');
+
+    if (fastEditBtn) {
+        fastEditBtn.click();
+
+        // Focus the fast-edit editor as soon as it mounts so users can
+        // start typing immediately. Waits for TipTap to replace the
+        // legacy textarea and re-focuses the ProseMirror surface when
+        // it does.
+        focusFastEditEditor(originalPost);
+
+        setTimeout(function () {
+            if (!originalPost.querySelector('.fastedit')) {
+                console.debug(
+                    '[PostsModule] Fast edit did not activate within ' +
+                    CONFIG.FAST_EDIT_TIMEOUT + 'ms, falling back to full editor'
+                );
+                if (editLink) {
+                    window.location.href = editLink.getAttribute('href');
+                } else {
+                    console.warn(
+                        '[PostsModule] Edit button clicked but neither fast edit nor full editor available for post', pid
+                    );
+                }
+            }
+        }, CONFIG.FAST_EDIT_TIMEOUT);
+        return;
+    }
+
+    // No fast-edit button — use the standard full-page editor.
+    if (editLink) {
+        window.location.href = editLink.getAttribute('href');
+    }
+}
+    // Focus the fast-edit editor as soon as it mounts so users can start
+// typing without first clicking into the textarea / TipTap surface.
+//
+// Flow after .fastedit_button.click():
+//   1. Legacy JS creates .fastedit containing a plain <textarea>.
+//   2. The editor module mounts TipTap over the textarea, replacing
+//      it with a .ProseMirror contenteditable surface inside
+//      .modern-editor-container--fastedit.
+//
+// We can't know which of (1)-(2) we'll catch first, so we:
+//   - Try immediately — covers the "textarea is already visible"
+//     fast path, and also covers "TipTap was mounted synchronously".
+//   - Keep a MutationObserver on the post while we wait, preferring
+//     ProseMirror over textarea. When TipTap mounts over the
+//     textarea, we re-focus the new ProseMirror surface.
+//   - Give up after FOCUS_TIMEOUT so the observer doesn't live
+//     forever if something goes wrong.
+//
+// Cursor placement:
+//   - textarea: at end of value.
+//   - ProseMirror: at end of the last text node. If empty, at the
+//     start (so any placeholder shows with the caret after it).
+//
+// Guard: if focus is already inside the target (user clicked it
+// manually before the observer fired), we don't reposition their
+// cursor.
+function focusFastEditEditor(originalPost) {
+    if (!originalPost) return;
+
+    const FOCUS_TIMEOUT = 2000;
+    let stopped = false;
+
+    function findEditable(root) {
+        // Prefer TipTap's mounted contenteditable surface. Several
+        // class conventions are checked so this works regardless of
+        // exactly how the editor module styles its root.
+        const proseMirror = root.querySelector(
+            '.ProseMirror[contenteditable="true"], ' +
+            '[contenteditable="true"].tiptap, ' +
+            '.modern-wysiwyg-content[contenteditable="true"]'
+        );
+        if (proseMirror) return { type: 'prosemirror', el: proseMirror };
+
+        // Raw textarea — legacy state, or fallback if the editor
+        // module hasn't mounted (or isn't loaded at all).
+        const textarea = root.querySelector('textarea');
+        if (textarea) return { type: 'textarea', el: textarea };
+
+        return null;
+    }
+
+    function placeCursorAtEnd(el, type) {
+        el.focus();
+        try {
+            if (type === 'textarea') {
+                const len = el.value.length;
+                if (len > 0) el.setSelectionRange(len, len);
+            } else {
+                // ProseMirror contenteditable
+                const range = document.createRange();
+                const walker = document.createTreeWalker(el, NodeFilter.SHOW_TEXT);
+                let lastText = null;
+                let node;
+                while ((node = walker.nextNode())) lastText = node;
+
+                if (lastText) {
+                    range.setStart(lastText, lastText.nodeValue.length);
+                    range.collapse(true);
+                } else {
+                    range.selectNodeContents(el);
+                    range.collapse(true);
+                }
+
+                const sel = window.getSelection();
+                if (sel) {
+                    sel.removeAllRanges();
+                    sel.addRange(range);
+                }
+            }
+        } catch (e) {
+            // Focus already happened; cursor placement is best-effort.
         }
     }
+
+    function tryFocus() {
+        if (stopped) return true;
+
+        // The editor mounts inside .fastedit. Fall back to a bare
+        // .modern-editor-container--fastedit in case a future
+        // editor-module version re-parents its surface.
+        const root =
+            originalPost.querySelector('.fastedit') ||
+            originalPost.querySelector('.modern-editor-container--fastedit');
+
+        if (!root) return false;
+
+        const target = findEditable(root);
+        if (!target) return false;
+
+        // Don't reposition a cursor the user has already placed.
+        const active = document.activeElement;
+        const alreadyFocused =
+            active === target.el ||
+            (target.el.contains && target.el.contains(active));
+
+        if (!alreadyFocused) {
+            placeCursorAtEnd(target.el, target.type);
+        }
+
+        // If ProseMirror is present, it's the final surface — done.
+        // If we only found a textarea, keep watching for TipTap to
+        // mount over it and re-focus the ProseMirror surface.
+        return target.type === 'prosemirror';
+    }
+
+    // Immediate attempt — covers the textarea fast path and any
+    // synchronous TipTap mount.
+    if (tryFocus()) return;
+
+    const observer = new MutationObserver(function () {
+        if (tryFocus()) observer.disconnect();
+    });
+    observer.observe(originalPost, { childList: true, subtree: true });
+
+    setTimeout(function () {
+        stopped = true;
+        observer.disconnect();
+    }, FOCUS_TIMEOUT);
+}
 
     function showConfirmDialog(opts) {
     var overlay = document.createElement('div');
