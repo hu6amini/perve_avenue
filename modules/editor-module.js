@@ -572,9 +572,19 @@ var EditorModule = (function (Utils, EventBus) {
     async function legacyToHtmlAsync(legacy) {
         if (!legacy) return '';
 
+                // [IMG=payload]url[/IMG] — payload is either a format hint
+        // (png, jpg, …) or a descriptive alt text (scene names, filenames
+        // with hyphens). Either way it's information the BBCode carries
+        // that a plain [img]url[/img] doesn't, so route it into the alt
+        // attribute rather than throwing it away. Escape the payload
+        // before embedding it in the attribute — it can contain quotes
+        // and ampersands.
         var expanded = legacy.replace(
-            /\[IMG=([a-zA-Z0-9]+)\]([^\[]+)\[\/IMG\]/gi,
-            function (_, fmt, url) { return '[img]' + url.trim() + '[/img]'; }
+            /\[IMG=([^\]]+)\]([^\[]+?)\[\/IMG\]/gi,
+            function (_, altText, url) {
+                var safeAlt = escapeHtml(altText.trim());
+                return '<img src="' + url.trim() + '" alt="' + safeAlt + '" loading="lazy" decoding="async">';
+            }
         );
 
         var html = legacyToHtml(expanded);
