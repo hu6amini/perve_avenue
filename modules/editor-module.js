@@ -553,6 +553,95 @@ var EditorModule = (function (Utils, EventBus) {
         return html;
     }
 
+       // ========================================================================
+    // ASYNC LEGACY → HTML CONVERTER
+    //
+    // legacyToHtml is synchronous and handles the plain [img]url[/img]
+    // form. Some forum versions emit [IMG=format]url[/IMG] (format =
+    // png / jpg / gif / webp / svg / bmp), which the [img]…[/img] rule
+    // doesn't match because of the =format suffix. Left unconverted,
+    // that raw BBCode reaches the editor as a text node.
+    //
+    // This wrapper expands the =format variants into the plain form so
+    // legacyToHtml produces a real <img> element, then fetches natural
+    // dimensions for any image that still lacks width/height. The
+    // dimensions make the editor reserve layout space (no CLS while
+    // typing) and end up in the saved payload, so the reader side
+    // doesn't have to re-fetch them either.
+    // ========================================================================
+    async function legacyToHtmlAsync(legacy) {
+        if (!legacy) return '';
+
+        var expanded = legacy.replace(
+            /\[IMG=([a-zA-Z0-9]+)\]([^\[]+)\[\/IMG\]/gi,
+            function (_, fmt, url) { return '[img]' + url.trim() + '[/img]'; }
+        );
+
+        var html = legacyToHtml(expanded);
+        return await enrichImageDimensions(html);
+    }
+
+    async function enrichImageDimensions(html) {
+        if (!html || html.indexOf('<img') === -1) return html;
+
+        var temp = document.createElement('div');
+        temp.innerHTML = html;
+
+        var promises = [];
+
+        temp.querySelectorAll('img').forEach(function (img) {
+            var w = img.getAttribute('width');
+            var h = img.getAttribute('height');
+            if (w && h && parseInt(w, 10) > 0 && parseInt(h, 10) > 0) return;
+
+            if (img.classList.contains('twemoji')) return;
+            var alt = img.getAttribute('alt') || '';
+            if (alt.startsWith(':') && alt.endsWith(':')) return;
+
+            var src = img.getAttribute('src') || '';
+            if (!src) return;
+            // Already proxied — dimensions are baked into the URL; the
+            // natural-size fetch would just echo them back.
+            if (src.indexOf('weserv.nl') !== -1 || src.indexOf('wsrv.nl') !== -1) return;
+
+            if (!img.hasAttribute('loading')) img.setAttribute('loading', 'lazy');
+            if (!img.hasAttribute('decoding')) img.setAttribute('decoding', 'async');
+
+            promises.push(new Promise(function (resolve) {
+                var probe = new Image();
+                var done = false;
+                // 4s per-image cap so a hung request can't block editor
+                // construction. Images that fail or time out just keep
+                // the no-dimensions state — the reader-side
+                // fixMissingImageDimensions still gets a shot at them.
+                var timer = setTimeout(function () {
+                    if (!done) { done = true; resolve(); }
+                }, 4000);
+                probe.onload = function () {
+                    if (done) return;
+                    done = true;
+                    clearTimeout(timer);
+                    if (probe.naturalWidth > 0 && probe.naturalHeight > 0) {
+                        img.setAttribute('width', probe.naturalWidth);
+                        img.setAttribute('height', probe.naturalHeight);
+                    }
+                    resolve();
+                };
+                probe.onerror = function () {
+                    if (done) return;
+                    done = true;
+                    clearTimeout(timer);
+                    resolve();
+                };
+                probe.src = src;
+            }));
+        });
+
+        if (promises.length === 0) return temp.innerHTML;
+        await Promise.all(promises);
+        return temp.innerHTML;
+    }
+
     function htmlToLegacy(html) {
         if (!html || typeof html !== 'string') return html;
         var result = html;
@@ -3419,7 +3508,7 @@ var EditorModule = (function (Utils, EventBus) {
         try {
             await buildEditorInto(container, {
                 mode: 'reply',
-                initialHtml: legacyToHtml(legacyHtml),
+                initialHtml: await legacyToHtmlAsync(legacyHtml),
                 placeholder: 'Write your reply…',
                 headerLabel: 'Replying as:',
                 submitLabel: 'Post reply',
@@ -3492,7 +3581,7 @@ var EditorModule = (function (Utils, EventBus) {
         try {
             await buildEditorInto(container, {
                 mode: 'full',
-                initialHtml: legacyToHtml(legacyHtml),
+                initialHtml: await legacyToHtmlAsync(legacyHtml),
                 placeholder: 'Write your post…',
                 headerLabel: 'Writing as:',
                 submitLabel: 'Submit post',
@@ -3539,9 +3628,9 @@ var EditorModule = (function (Utils, EventBus) {
         var initialHtml = '';
         var textareaVal = legacyTextarea.value ? legacyTextarea.value.trim() : '';
         if (textareaVal) {
-            initialHtml = legacyToHtml(textareaVal);
+            initialHtml = await legacyToHtmlAsync(textareaVal);
         } else if (legacyHidden && legacyHidden.value) {
-            initialHtml = legacyToHtml(extractFastEditBody(legacyHidden.value));
+            initialHtml = await legacyToHtmlAsync(extractFastEditBody(legacyHidden.value));
         } else {
             var postEl = fasteditEl.closest('.post');
             if (postEl) {
@@ -3549,7 +3638,7 @@ var EditorModule = (function (Utils, EventBus) {
                 if (contentTable) {
                     var clone = contentTable.cloneNode(true);
                     clone.querySelectorAll('.edit, .bottomborder, .signature').forEach(function (el) { el.remove(); });
-                    initialHtml = legacyToHtml(clone.innerHTML);
+                    initialHtml = await legacyToHtmlAsync(clone.innerHTML);
                 }
             }
         }
