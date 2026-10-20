@@ -37,11 +37,18 @@
 //         only prompt the user sees (fixes the double-confirm bug).
 //       - The corresponding modern card is removed the moment the
 //         legacy AJAX detaches the .post element, via the shared
-//         forumObserver.watchForRemoval API. No local observers,
-//         no leaked watches on pagehide (fixes the stale-card bug).
+//         forumObserver.watchForRemoval API, with a local MutationObserver
+//         safety net that also catches the "hidden via display:none" case.
 //       - The delete-link fallback selector now also matches
 //         href="javascript:delete_post(...)" (previously only
 //         onclick was covered).
+// v3.0: post-build hash navigation. A fresh page load with
+//       #entry<postId>, #lastpost, or #newpost in the URL lands on
+//       the hidden legacy anchor — the browser's first-paint
+//       fragment scroll fires before the modern cards exist. Once
+//       conversion completes, scrollToHashAfterBuild retargets the
+//       scroll to the correct modern card. A hashchange listener
+//       handles in-page hash changes for the same three anchors.
 'use strict';
 
 const ForumPostsModule = (function () {
@@ -4119,7 +4126,63 @@ function attachPollHandlers(modernPoll, legacyPoll, pollData) {
         });
     });
 }
-    
+
+    // ============================================================================
+    // POST-BUILD HASH NAVIGATION
+    //
+    // A fresh page load with #entry<postId>, #lastpost, or #newpost in
+    // the URL lands on the hidden legacy anchor — the browser's
+    // first-paint fragment scroll fires before the modern cards exist.
+    // By the time conversion completes, the modern cards exist, so
+    // retarget the scroll to the correct one.
+    //
+    // #entry<postId>: the modern card carries id="entry<postId>", but
+    // the legacy post also contains <a id="entry<postId>"> inside its
+    // hidden .anchor div. getElementById may return the legacy anchor
+    // depending on document order, so fall back to a data-attribute
+    // lookup scoped to the modern container when the id-based lookup
+    // returns something that isn't a modern card.
+    //
+    // #lastpost / #newpost: no modern equivalent exists. Resolve the
+    // legacy anchor's host post, then find the matching modern card by
+    // data-post-id.
+    // ============================================================================
+    function scrollToHashAfterBuild(container) {
+        if (!container) return;
+        var hash = window.location.hash;
+        if (!hash || hash === '#') return;
+        var id = hash.slice(1);
+
+        if (/^entry\d+$/.test(id)) {
+            var card = document.getElementById(id);
+            if (!card || !container.contains(card)) {
+                var entryPostId = id.replace(/^entry/, '');
+                card = container.querySelector('.post-card[data-post-id="' + entryPostId + '"]');
+            }
+            if (card) {
+                requestAnimationFrame(function () {
+                    card.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                });
+            }
+            return;
+        }
+
+        if (id === 'lastpost' || id === 'newpost') {
+            var legacyAnchor = document.querySelector('.post .anchor a[id="' + id + '"]');
+            if (!legacyAnchor) return;
+            var legacyPost = legacyAnchor.closest('.post');
+            if (!legacyPost) return;
+            var postId = (legacyPost.id || '').replace(/^ee/, '');
+            if (!postId) return;
+            var modernCard = container.querySelector('.post-card[data-post-id="' + postId + '"]');
+            if (modernCard) {
+                requestAnimationFrame(function () {
+                    modernCard.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                });
+            }
+        }
+    }
+
     // ============================================================================
     // CONVERSION FUNCTIONS
     // ============================================================================
@@ -4187,6 +4250,7 @@ function attachPollHandlers(modernPoll, legacyPoll, pollData) {
             whenTippyReady(function () { autoTippyFromTitle(container); });
             waitForLightGallery();
             setTimeout(fixBrokenWeservImages, 300);
+            setTimeout(function () { scrollToHashAfterBuild(container); }, 100);
             console.log('[PostsModule] Messages ready - ' + postsData.length + ' messages converted');
         } catch (err) { console.error('[PostsModule] Messages conversion error:', err); }
         finally { conversionInProgress = false; if (conversionPending) convertMessages(); }
@@ -4316,6 +4380,7 @@ function attachPollHandlers(modernPoll, legacyPoll, pollData) {
             whenTippyReady(function () { autoTippyFromTitle(container); });
             waitForLightGallery();
             setTimeout(fixBrokenWeservImages, 300);
+            setTimeout(function () { scrollToHashAfterBuild(container); }, 100);
             console.log('[PostsModule] Ready - ' + (postsData.length + blogCount) + ' posts converted');
         } catch (err) { console.error('[PostsModule] Conversion error:', err); }
         finally { conversionInProgress = false; if (conversionPending) convertAllPosts(); }
@@ -4487,6 +4552,15 @@ function attachPollHandlers(modernPoll, legacyPoll, pollData) {
                     }
                 });
             }
+
+            // React to in-page hash changes so pasting #entry<postId>,
+            // #lastpost, or #newpost into an already-loaded tab also
+            // retargets the scroll. The fresh-load case is handled by
+            // scrollToHashAfterBuild inside convertAllPosts / convertMessages.
+            window.addEventListener('hashchange', function () {
+                var container = document.getElementById('modern-posts-container');
+                if (container) scrollToHashAfterBuild(container);
+            });
         }).catch(err => console.error('[PostsModule] Dependency wait failed:', err));
     }
 
