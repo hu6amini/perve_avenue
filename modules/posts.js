@@ -109,7 +109,7 @@ const ForumPostsModule = (function () {
         // is a blocked or errored legacy script, in which case no
         // amount of waiting would help. Raise if the forum ever adds
         // an AJAX round-trip to the fast-edit activation path.
-        FAST_EDIT_TIMEOUT: 500
+        FAST_EDIT_TIMEOUT: 3000
     });
 
     const OG_WORKER_URL = 'https://og-worker.nhristakiev.workers.dev/?url=';
@@ -2785,67 +2785,80 @@ if (data.availableActions?.delete) actionsHtml += '<button class="action-icon de
     //      never a dead end.
     //   3. If no .fastedit_button exists, navigate to CODE=08
     //      directly. This is the pre-v2.8 behaviour.
-    function handleEdit(pid) {
-    const originalPost = document.getElementById(CONFIG.POST_ID_PREFIX + pid);
-    if (!originalPost) return;
+        function handleEdit(pid) {
+        const originalPost = document.getElementById(CONFIG.POST_ID_PREFIX + pid);
+        if (!originalPost) return;
 
-    // Fast edit already open on this post. Presence alone isn't enough:
-    // some forum versions hide .fastedit on cancel rather than removing
-    // it, and a leftover hidden div would block every subsequent Edit
-    // click. Only treat .fastedit as "already open" when it's actually
-    // visible.
-    const existingFastEdit = originalPost.querySelector('.fastedit');
-    if (existingFastEdit) {
-        const style = window.getComputedStyle(existingFastEdit);
-        const isVisible = style.display !== 'none'
-                       && style.visibility !== 'hidden'
-                       && existingFastEdit.offsetHeight > 0;
-        if (isVisible) {
-            // Already open — put focus back in the editor so clicking
-            // Edit again lands the caret where it belongs.
+        // The legacy forum only supports one fastedit open at a time.
+        // If a different post is currently in fastedit mode, close it
+        // first. Otherwise, the legacy AJAX handler for the new post
+        // may silently fail (or return an error), triggering our
+        // fallback to the full editor.
+        document.querySelectorAll('.post .fastedit').forEach(function (fe) {
+            if (fe.closest('.post') !== originalPost) {
+                var cBtn = fe.querySelector('.fastedit_canc');
+                if (cBtn) cBtn.click();
+                fe.remove();
+            }
+        });
+
+        // Fast edit already open on this post. Presence alone isn't enough:
+        // some forum versions hide .fastedit on cancel rather than removing
+        // it, and a leftover hidden div would block every subsequent Edit
+        // click. Only treat .fastedit as "already open" when it's actually
+        // visible.
+        const existingFastEdit = originalPost.querySelector('.fastedit');
+        if (existingFastEdit) {
+            const style = window.getComputedStyle(existingFastEdit);
+            const isVisible = style.display !== 'none'
+                           && style.visibility !== 'hidden'
+                           && existingFastEdit.offsetHeight > 0;
+            if (isVisible) {
+                // Already open — put focus back in the editor so clicking
+                // Edit again lands the caret where it belongs.
+                focusFastEditEditor(originalPost);
+                return;
+            }
+            // Stale hidden .fastedit — clean it up so the button below can
+            // re-open it cleanly.
+            existingFastEdit.remove();
+        }
+
+        const fastEditBtn = originalPost.querySelector('.fastedit_button');
+        const editLink = originalPost.querySelector('a[href*="CODE=08"]');
+
+        if (fastEditBtn) {
+            fastEditBtn.click();
+
+            // Focus the fast-edit editor as soon as it mounts so users can
+            // start typing immediately. Waits for TipTap to replace the
+            // legacy textarea and re-focuses the ProseMirror surface when
+            // it does.
             focusFastEditEditor(originalPost);
+
+            setTimeout(function () {
+                if (!originalPost.querySelector('.fastedit')) {
+                    console.debug(
+                        '[PostsModule] Fast edit did not activate within ' +
+                        CONFIG.FAST_EDIT_TIMEOUT + 'ms, falling back to full editor'
+                    );
+                    if (editLink) {
+                        window.location.href = editLink.getAttribute('href');
+                    } else {
+                        console.warn(
+                            '[PostsModule] Edit button clicked but neither fast edit nor full editor available for post', pid
+                        );
+                    }
+                }
+            }, CONFIG.FAST_EDIT_TIMEOUT);
             return;
         }
-        // Stale hidden .fastedit — clean it up so the button below can
-        // re-open it cleanly.
-        existingFastEdit.remove();
+
+        // No fast-edit button — use the standard full-page editor.
+        if (editLink) {
+            window.location.href = editLink.getAttribute('href');
+        }
     }
-
-    const fastEditBtn = originalPost.querySelector('.fastedit_button');
-    const editLink = originalPost.querySelector('a[href*="CODE=08"]');
-
-    if (fastEditBtn) {
-        fastEditBtn.click();
-
-        // Focus the fast-edit editor as soon as it mounts so users can
-        // start typing immediately. Waits for TipTap to replace the
-        // legacy textarea and re-focuses the ProseMirror surface when
-        // it does.
-        focusFastEditEditor(originalPost);
-
-        setTimeout(function () {
-            if (!originalPost.querySelector('.fastedit')) {
-                console.debug(
-                    '[PostsModule] Fast edit did not activate within ' +
-                    CONFIG.FAST_EDIT_TIMEOUT + 'ms, falling back to full editor'
-                );
-                if (editLink) {
-                    window.location.href = editLink.getAttribute('href');
-                } else {
-                    console.warn(
-                        '[PostsModule] Edit button clicked but neither fast edit nor full editor available for post', pid
-                    );
-                }
-            }
-        }, CONFIG.FAST_EDIT_TIMEOUT);
-        return;
-    }
-
-    // No fast-edit button — use the standard full-page editor.
-    if (editLink) {
-        window.location.href = editLink.getAttribute('href');
-    }
-}
     // Focus the fast-edit editor as soon as it mounts so users can start
 // typing without first clicking into the textarea / TipTap surface.
 //
