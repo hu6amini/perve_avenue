@@ -101,15 +101,7 @@ const ForumPostsModule = (function () {
         AVATAR_SIZE: 60,
         WESERV_CDN: 'https://images.weserv.nl/',
         CACHE: '1y',
-        QUALITY: 80,
-        // How long to wait for .fastedit to appear after clicking the
-        // legacy fast-edit button before falling back to the full-page
-        // editor (CODE=08). Fast edit is normally a synchronous DOM
-        // swap, so 500ms is generous; the only realistic failure mode
-        // is a blocked or errored legacy script, in which case no
-        // amount of waiting would help. Raise if the forum ever adds
-        // an AJAX round-trip to the fast-edit activation path.
-        FAST_EDIT_TIMEOUT: 3000
+        QUALITY: 80
     });
 
     const OG_WORKER_URL = 'https://og-worker.nhristakiev.workers.dev/?url=';
@@ -2785,20 +2777,20 @@ if (data.availableActions?.delete) actionsHtml += '<button class="action-icon de
     //      never a dead end.
     //   3. If no .fastedit_button exists, navigate to CODE=08
     //      directly. This is the pre-v2.8 behaviour.
-        function handleEdit(pid) {
+            function handleEdit(pid) {
         const originalPost = document.getElementById(CONFIG.POST_ID_PREFIX + pid);
         if (!originalPost) return;
 
         // The legacy forum only supports one fastedit open at a time.
-        // If a different post is currently in fastedit mode, close it
-        // first. Otherwise, the legacy AJAX handler for the new post
-        // may silently fail (or return an error), triggering our
-        // fallback to the full editor.
+        // If a different post is currently in fastedit mode, click its
+        // legacy cancel button so the forum's internal state is reset.
+        // Do NOT remove the element manually (fe.remove()) — the legacy
+        // AJAX callback still needs the DOM node when it completes, and
+        // removing it prematurely can break subsequent fast edit clicks.
         document.querySelectorAll('.post .fastedit').forEach(function (fe) {
             if (fe.closest('.post') !== originalPost) {
                 var cBtn = fe.querySelector('.fastedit_canc');
                 if (cBtn) cBtn.click();
-                fe.remove();
             }
         });
 
@@ -2828,33 +2820,22 @@ if (data.availableActions?.delete) actionsHtml += '<button class="action-icon de
         const editLink = originalPost.querySelector('a[href*="CODE=08"]');
 
         if (fastEditBtn) {
+            // Click the legacy fast edit button. 
             fastEditBtn.click();
 
             // Focus the fast-edit editor as soon as it mounts so users can
-            // start typing immediately. Waits for TipTap to replace the
-            // legacy textarea and re-focuses the ProseMirror surface when
-            // it does.
+            // start typing immediately.
             focusFastEditEditor(originalPost);
-
-            setTimeout(function () {
-                if (!originalPost.querySelector('.fastedit')) {
-                    console.debug(
-                        '[PostsModule] Fast edit did not activate within ' +
-                        CONFIG.FAST_EDIT_TIMEOUT + 'ms, falling back to full editor'
-                    );
-                    if (editLink) {
-                        window.location.href = editLink.getAttribute('href');
-                    } else {
-                        console.warn(
-                            '[PostsModule] Edit button clicked but neither fast edit nor full editor available for post', pid
-                        );
-                    }
-                }
-            }, CONFIG.FAST_EDIT_TIMEOUT);
+            
+            // We do NOT use a setTimeout fallback here anymore. If the 
+            // legacy script is slow, we wait for it. Navigating to the 
+            // full editor while the fast edit is still loading causes
+            // state mismatches (like the editor being open when you go back).
             return;
         }
 
-        // No fast-edit button — use the standard full-page editor.
+        // Only use the full-page editor if the fast-edit button is entirely
+        // missing from the legacy post.
         if (editLink) {
             window.location.href = editLink.getAttribute('href');
         }
