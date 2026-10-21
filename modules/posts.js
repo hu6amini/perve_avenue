@@ -2869,7 +2869,7 @@ if (data.availableActions?.delete) actionsHtml += '<button class="action-icon de
 function focusFastEditEditor(originalPost) {
     if (!originalPost) return;
 
-    const FOCUS_TIMEOUT = 2000;
+    const FOCUS_TIMEOUT = 5000;
     let stopped = false;
 
     function findEditable(root) {
@@ -2927,9 +2927,6 @@ function focusFastEditEditor(originalPost) {
     function tryFocus() {
         if (stopped) return true;
 
-        // The editor mounts inside .fastedit. Fall back to a bare
-        // .modern-editor-container--fastedit in case a future
-        // editor-module version re-parents its surface.
         const root =
             originalPost.querySelector('.fastedit') ||
             originalPost.querySelector('.modern-editor-container--fastedit');
@@ -2939,19 +2936,22 @@ function focusFastEditEditor(originalPost) {
         const target = findEditable(root);
         if (!target) return false;
 
-        // Don't reposition a cursor the user has already placed.
         const active = document.activeElement;
         const alreadyFocused =
             active === target.el ||
             (target.el.contains && target.el.contains(active));
 
         if (!alreadyFocused) {
-            placeCursorAtEnd(target.el, target.type);
+            // Delay focus by 50ms so the browser finishes painting the new DOM.
+            // Browsers often silently reject focus() calls on elements that 
+            // were just injected into the DOM but haven't been painted yet.
+            setTimeout(function() {
+                if (!stopped && document.body.contains(target.el)) {
+                    placeCursorAtEnd(target.el, target.type);
+                }
+            }, 50);
         }
 
-        // If ProseMirror is present, it's the final surface — done.
-        // If we only found a textarea, keep watching for TipTap to
-        // mount over it and re-focus the ProseMirror surface.
         return target.type === 'prosemirror';
     }
 
@@ -2967,7 +2967,7 @@ function focusFastEditEditor(originalPost) {
     setTimeout(function () {
         stopped = true;
         observer.disconnect();
-    }, FOCUS_TIMEOUT);
+    }, 5000);
 }
 
     function showConfirmDialog(opts) {
