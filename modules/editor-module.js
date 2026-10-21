@@ -549,7 +549,7 @@ var EditorModule = (function (Utils, EventBus) {
             newChildren.forEach(n => container.appendChild(n));
 
             // Recurse into quotes and spoilers
-            Array.from(container.querySelectorAll('.quote-content, .spoiler-content-inner')).forEach(el => {
+            Array.from(container.querySelectorAll('blockquote, .quote-content, .spoiler-content-inner')).forEach(el => {
                 el.innerHTML = paragraphizeLegacyHtml(el.innerHTML);
             });
 
@@ -624,7 +624,22 @@ var EditorModule = (function (Utils, EventBus) {
         html = html.replace(/\[list=1\](.*?)\[\/list\]/gis, '<ol>$1</ol>');
         html = html.replace(/\[url=([^\]]+)\](.*?)\[\/url\]/gi, '<a href="$1" target="_blank">$2</a>');
         html = html.replace(/\[img\](.*?)\[\/img\]/gi, '<img src="$1" alt="image" loading="lazy" decoding="async">');
-        html = html.replace(/\[quote\](.*?)\[\/quote\]/gis, '<blockquote>$1</blockquote>');
+                // Replace the old [quote] rule with one that extracts the author
+        html = html.replace(/\[QUOTE(?:=([^\]]+))?\]([\s\S]*?)\[\/QUOTE\]/gi, function(match, params, body) {
+            var author = '';
+            if (params) {
+                // Params look like: "-JuNioR-,5/22/2026, 07:44 AM ?t=62378406..."
+                var parts = params.split(',');
+                if (parts.length > 0 && parts[0].trim()) {
+                    author = parts[0].trim();
+                }
+            }
+            
+            // If there's an author, prepend the "Author said:" header
+            var header = author ? '<p><strong>' + escapeHtml(author) + ' said:</strong></p>' : '';
+            
+            return '<blockquote>' + header + body + '</blockquote>';
+        });
         html = html.replace(/\[code\](.*?)\[\/code\]/gis, '<pre><code>$1</code></pre>');
         html = html.replace(/\[spoiler\](.*?)\[\/spoiler\]/gis, '<div class="spoiler">$1</div>');
         html = html.replace(/\[CENTER\](.*?)\[\/CENTER\]/gis, '<div style="text-align:center">$1</div>');
@@ -790,9 +805,19 @@ var EditorModule = (function (Utils, EventBus) {
                 }
             );
 
-            result = result.replace(/<blockquote[^>]*>([\s\S]*?)<\/blockquote>/gi, function (_, inner) {
+                        result = result.replace(/<blockquote[^>]*>([\s\S]*?)<\/blockquote>/gi, function(match, inner) {
                 var cleaned = inner.replace(/<p[^>]*>/gi, '').replace(/<\/p>\s*/gi, '\n');
-                return '[QUOTE]' + cleaned.replace(/\n+$/, '') + '[/QUOTE]';
+                cleaned = cleaned.replace(/\n+$/, '');
+                
+                // Check if the quote starts with our injected "Author said:" header
+                var authorMatch = cleaned.match(/^<strong>([^<]+) said:<\/strong>\n?/i);
+                if (authorMatch) {
+                    var author = authorMatch[1];
+                    var rest = cleaned.substring(authorMatch[0].length);
+                    return '[QUOTE=' + author + ']' + rest + '[/QUOTE]';
+                }
+                
+                return '[QUOTE]' + cleaned + '[/QUOTE]';
             });
 
             result = result.replace(/<div\b([^>]*\bclass="[^"]*\bspoiler\b[^"]*"[^>]*)>([\s\S]*?)<\/div>/gi, function (_, attrs, inner) {
