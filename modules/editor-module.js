@@ -3120,33 +3120,42 @@ var EditorModule = (function (Utils, EventBus) {
                     return false;
                 }
             },
-            onCreate: function ({ editor }) {
-    (function ensureTrailingParagraph() {
-        var doc = editor.state.doc;
-        var last = doc.lastChild;
-        if (!last) return;
-        var n = last.type.name;
-        if (n !== 'liteYouTube' && n !== 'liteVimeo' && n !== 'imageUploadPlaceholder') return;
-        var p = editor.schema.nodes.paragraph.create();
-        var tr = editor.state.tr.insert(doc.content.size, p);
-        tr.setSelection(TextSelection.near(tr.doc.resolve(tr.doc.content.size - 1)));
-        editor.view.dispatch(tr);
-    })();
+                        onCreate: function ({ editor }) {
+                // Keep the trailing paragraph logic
+                (function ensureTrailingParagraph() {
+                    var doc = editor.state.doc;
+                    var last = doc.lastChild;
+                    if (!last) return;
+                    var n = last.type.name;
+                    if (n !== 'liteYouTube' && n !== 'liteVimeo' && n !== 'imageUploadPlaceholder') return;
+                    var p = editor.schema.nodes.paragraph.create();
+                    var tr = editor.state.tr.insert(doc.content.size, p);
+                    tr.setSelection(TextSelection.near(tr.doc.resolve(tr.doc.content.size - 1)));
+                    editor.view.dispatch(tr);
+                })();
 
-    // Auto-focus only in modes where the user demonstrably wants to write.
-    // 'full'  → send page, user came to compose a post/message
-    // 'fastedit' → user explicitly clicked Edit on a post
-    // 'reply' → topic page; most visits are to read, not reply, so
-    //           auto-focus here scrolls the viewport on every page load.
-    //           Skip it entirely — the user will click the editor when
-    //           they actually want to type.
-    if (opts.mode === 'reply') return;
+                // 'reply' → skip. Most visits are to read, not reply.
+                if (opts.mode === 'reply') return;
 
-    if (!window.matchMedia('(hover: hover) and (pointer: fine)').matches) return;
-    var a = document.activeElement;
-    if (a && a !== document.body && a !== document.documentElement) return;
-    editor.commands.focus('end');
-},
+                // 'fastedit' → The user explicitly clicked the Edit button. 
+                // Don't check activeElement because the button IS the activeElement.
+                // Give the DOM a tick to finish layout, then focus.
+                if (opts.mode === 'fastedit') {
+                    setTimeout(function () {
+                        if (editor && !editor.isDestroyed && !editor.isFocused) {
+                            editor.commands.focus('end');
+                        }
+                    }, 50);
+                    return;
+                }
+
+                // 'full' → Don't steal focus if they are already typing elsewhere
+                if (!window.matchMedia('(hover: hover) and (pointer: fine)').matches) return;
+                var a = document.activeElement;
+                if (a && a !== document.body && a !== document.documentElement) return;
+                editor.commands.focus('end');
+            },
+           
             onUpdate: function ({ editor }) {
                 var html = editor.getHTML();
                 var legacy = editorContentIsEmpty(html) ? '' : htmlToLegacy(html);
