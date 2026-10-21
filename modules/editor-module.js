@@ -1,26 +1,5 @@
 /* ============================================================
    EditorModule – Modern editor for forum post / reply / fast-edit
-   Replaces:  body#topic .fast.send
-              body#send  .send
-              any .post  .fastedit  (dynamic)
-
-   Relies on ForumCoreObserver for dynamic fast-edit detection.
-   Mirrors the editor internals of messenger.js (toolbar, TipTap,
-   preview, modals, converters) without the messenger-specific
-   sections. Uses the same wrapper (.modern-forum-wrapper) as the
-   rest of the modern stack for placement.
-
-   Content parity with the messenger:
-     · lite YouTube / Vimeo embeds (nodes, paste detection, OG captions)
-     · link previews (OG card on URL paste)
-     · @-mentions (autocomplete popup, searchMentions)
-     · inline-code paste handler (collapses whitespace)
-     · transformPastedHTML (nbsp cleanup)
-     · live preview auto-refresh on typing
-
-   The legacy editor shells are hidden via CSS (section 27 in
-   modern-forum.css), not by JS, so this module makes no attempt
-   to set display: none anywhere.
    ============================================================ */
 'use strict';
 
@@ -464,7 +443,7 @@ var EditorModule = (function (Utils, EventBus) {
     // ========================================================================
     // HTML → LEGACY CONVERTERS
     // ========================================================================
-        function paragraphizeLegacyHtml(html) {
+    function paragraphizeLegacyHtml(html) {
         if (!html || typeof html !== 'string') return html;
         try {
             const BLOCK_TAGS = new Set([
@@ -488,11 +467,9 @@ var EditorModule = (function (Utils, EventBus) {
             }
 
             function flushBuffer() {
-                // Strip leading <br>
                 while (inlineBuffer.length > 0 && inlineBuffer[0].nodeType === 1 && inlineBuffer[0].tagName === 'BR') {
                     inlineBuffer.shift();
                 }
-                // Strip trailing <br>
                 while (inlineBuffer.length > 0 && inlineBuffer[inlineBuffer.length - 1].nodeType === 1 && inlineBuffer[inlineBuffer.length - 1].tagName === 'BR') {
                     inlineBuffer.pop();
                 }
@@ -507,7 +484,6 @@ var EditorModule = (function (Utils, EventBus) {
             }
 
             Array.from(container.childNodes).forEach(child => {
-                // Check for <br>
                 if (child.nodeType === 1 && child.tagName === 'BR') {
                     pendingBreaks++;
                     if (pendingBreaks >= 2) {
@@ -517,18 +493,15 @@ var EditorModule = (function (Utils, EventBus) {
                     return;
                 }
 
-                // Check for whitespace text nodes between <br>s
                 if (child.nodeType === 3 && !child.nodeValue.trim() && pendingBreaks > 0) {
                     return;
                 }
 
-                // If we had a single <br> pending, it was just a line break.
                 if (pendingBreaks === 1) {
                     inlineBuffer.push(document.createElement('br'));
                 }
                 pendingBreaks = 0;
 
-                // Block tags
                 if (child.nodeType === 1 && BLOCK_TAGS.has(child.tagName)) {
                     flushBuffer();
                     newChildren.push(child);
@@ -538,7 +511,6 @@ var EditorModule = (function (Utils, EventBus) {
                 inlineBuffer.push(child);
             });
 
-            // Handle any remaining single <br>
             if (pendingBreaks === 1) {
                 inlineBuffer.push(document.createElement('br'));
             }
@@ -548,7 +520,6 @@ var EditorModule = (function (Utils, EventBus) {
             container.innerHTML = '';
             newChildren.forEach(n => container.appendChild(n));
 
-            // Recurse into quotes and spoilers
             Array.from(container.querySelectorAll('blockquote, .quote-content, .spoiler-content-inner')).forEach(el => {
                 el.innerHTML = paragraphizeLegacyHtml(el.innerHTML);
             });
@@ -624,21 +595,20 @@ var EditorModule = (function (Utils, EventBus) {
         html = html.replace(/\[list=1\](.*?)\[\/list\]/gis, '<ol>$1</ol>');
         html = html.replace(/\[url=([^\]]+)\](.*?)\[\/url\]/gi, '<a href="$1" target="_blank">$2</a>');
         html = html.replace(/\[img\](.*?)\[\/img\]/gi, '<img src="$1" alt="image" loading="lazy" decoding="async">');
-                // Replace the old [quote] rule with one that extracts the author
+        
+        // Use data-author to avoid overlapping the CSS pseudo-elements
         html = html.replace(/\[QUOTE(?:=([^\]]+))?\]([\s\S]*?)\[\/QUOTE\]/gi, function(match, params, body) {
             var author = '';
             if (params) {
-                // Params look like: "-JuNioR-,5/22/2026, 07:44 AM ?t=62378406..."
                 var parts = params.split(',');
                 if (parts.length > 0 && parts[0].trim()) {
                     author = parts[0].trim();
                 }
             }
-            
-            // If there's an author, prepend the "Author said:" header
-            var header = author ? '<p><strong>' + escapeHtml(author) + ' said:</strong></p>' : '';
-            
-            return '<blockquote>' + header + body + '</blockquote>';
+            if (author) {
+                return '<blockquote data-author="' + escapeHtml(author) + '">' + body + '</blockquote>';
+            }
+            return '<blockquote>' + body + '</blockquote>';
         });
         html = html.replace(/\[code\](.*?)\[\/code\]/gis, '<pre><code>$1</code></pre>');
         html = html.replace(/\[spoiler\](.*?)\[\/spoiler\]/gis, '<div class="spoiler">$1</div>');
@@ -664,23 +634,7 @@ var EditorModule = (function (Utils, EventBus) {
         return html;
     }
 
-       // ========================================================================
-    // ASYNC LEGACY → HTML CONVERTER
-    //
-    // legacyToHtml is synchronous and handles the plain [img]url[/img]
-    // form. Some forum versions emit [IMG=format]url[/IMG] (format =
-    // png / jpg / gif / webp / svg / bmp), which the [img]…[/img] rule
-    // doesn't match because of the =format suffix. Left unconverted,
-    // that raw BBCode reaches the editor as a text node.
-    //
-    // This wrapper expands the =format variants into the plain form so
-    // legacyToHtml produces a real <img> element, then fetches natural
-    // dimensions for any image that still lacks width/height. The
-    // dimensions make the editor reserve layout space (no CLS while
-    // typing) and end up in the saved payload, so the reader side
-    // doesn't have to re-fetch them either.
-    // ========================================================================
-        async function legacyToHtmlAsync(legacy) {
+    async function legacyToHtmlAsync(legacy) {
         if (!legacy) return '';
 
         var expanded = legacy.replace(/\[IMG=([^\]]+)\]([^\[]+?)\[\/IMG\]/gi, function (_, altText, url) {
@@ -690,7 +644,6 @@ var EditorModule = (function (Utils, EventBus) {
 
         // If the text has raw newlines (\n) but no <br> tags, convert newlines to <br>
         if (!/<br\s*\/?>/i.test(expanded) && /\n/.test(expanded)) {
-            // Protect code blocks so we don't inject <br> inside them
             var codeBlocks = [];
             expanded = expanded.replace(/\[code\]([\s\S]*?)\[\/code\]/gi, function(match) {
                 var id = '\uE000CODE' + codeBlocks.length + 'Z\uE001';
@@ -732,8 +685,6 @@ var EditorModule = (function (Utils, EventBus) {
 
             var src = img.getAttribute('src') || '';
             if (!src) return;
-            // Already proxied — dimensions are baked into the URL; the
-            // natural-size fetch would just echo them back.
             if (src.indexOf('weserv.nl') !== -1 || src.indexOf('wsrv.nl') !== -1) return;
 
             if (!img.hasAttribute('loading')) img.setAttribute('loading', 'lazy');
@@ -742,10 +693,6 @@ var EditorModule = (function (Utils, EventBus) {
             promises.push(new Promise(function (resolve) {
                 var probe = new Image();
                 var done = false;
-                // 4s per-image cap so a hung request can't block editor
-                // construction. Images that fail or time out just keep
-                // the no-dimensions state — the reader-side
-                // fixMissingImageDimensions still gets a shot at them.
                 var timer = setTimeout(function () {
                     if (!done) { done = true; resolve(); }
                 }, 4000);
@@ -805,16 +752,15 @@ var EditorModule = (function (Utils, EventBus) {
                 }
             );
 
-                        result = result.replace(/<blockquote[^>]*>([\s\S]*?)<\/blockquote>/gi, function(match, inner) {
+            // Read from data-author
+            result = result.replace(/<blockquote([^>]*)>([\s\S]*?)<\/blockquote>/gi, function(match, attrs, inner) {
                 var cleaned = inner.replace(/<p[^>]*>/gi, '').replace(/<\/p>\s*/gi, '\n');
                 cleaned = cleaned.replace(/\n+$/, '');
                 
-                // Check if the quote starts with our injected "Author said:" header
-                var authorMatch = cleaned.match(/^<strong>([^<]+) said:<\/strong>\n?/i);
+                var authorMatch = attrs.match(/data-author="([^"]*)"/);
                 if (authorMatch) {
-                    var author = authorMatch[1];
-                    var rest = cleaned.substring(authorMatch[0].length);
-                    return '[QUOTE=' + author + ']' + rest + '[/QUOTE]';
+                    var author = decodeHtmlEntities(authorMatch[1]);
+                    return '[QUOTE=' + author + ']' + cleaned + '[/QUOTE]';
                 }
                 
                 return '[QUOTE]' + cleaned + '[/QUOTE]';
@@ -885,20 +831,12 @@ var EditorModule = (function (Utils, EventBus) {
         var temp = document.createElement('div');
         temp.innerHTML = html;
 
-                Array.from(temp.querySelectorAll('blockquote')).forEach(function (bq) {
+        Array.from(temp.querySelectorAll('blockquote')).forEach(function (bq) {
             var innerHtml = bq.innerHTML;
-            var authorName = null;
-
-            // Look for the injected author header from legacyToHtml
-            var authorMatch = innerHtml.match(/^<p><strong>([^<]+) said:<\/strong><\/p>/i);
-            if (authorMatch) {
-                authorName = authorMatch[1];
-                // Remove the paragraph from the content so it doesn't show up inside the quote body
-                innerHtml = innerHtml.replace(/^<p><strong>[^<]+ said:<\/strong><\/p>/i, '');
-            }
-
-            var quoteAuthorHtml = authorName
-                ? '<span class="quote-author">' + escapeHtml(authorName) + ' <span class="quote-said">said:</span></span>'
+            var author = bq.getAttribute('data-author');
+            
+            var quoteAuthorHtml = author
+                ? '<span class="quote-author">' + escapeHtml(author) + ' <span class="quote-said">said:</span></span>'
                 : '<span class="quote-author">Quote</span>';
 
             var modernHtml =
@@ -1425,6 +1363,7 @@ var EditorModule = (function (Utils, EventBus) {
         const lh = await import('https://esm.sh/lowlight@3');
         const ccl = await import('https://esm.sh/@tiptap/extension-character-count@2.5.2');
         const typo = await import('https://esm.sh/@tiptap/extension-typography@2.5.2');
+        const bq = await import('https://esm.sh/@tiptap/extension-blockquote@2.5.2');
 
         return {
             Editor, Node, Mark, Extension, InputRule,
@@ -1440,7 +1379,8 @@ var EditorModule = (function (Utils, EventBus) {
             createLowlight: lh.createLowlight,
             common: lh.common,
             CharacterCount: ccl.CharacterCount || (ccl.default && ccl.default.CharacterCount),
-            Typography: typo.Typography || (typo.default && typo.default.Typography)
+            Typography: typo.Typography || (typo.default && typo.default.Typography),
+            Blockquote: bq.Blockquote || (bq.default && bq.default.Blockquote)
         };
     }
 
@@ -1456,7 +1396,7 @@ var EditorModule = (function (Utils, EventBus) {
             Decoration, DecorationSet,
             StarterKit, Placeholder, Underline, BaseImage, Link,
             Mention, CodeBlockLowlight, createLowlight, common,
-            CharacterCount, Typography, InputRule
+            CharacterCount, Typography, InputRule, Blockquote
         } = deps;
 
         var lowlight = createLowlight(common);
@@ -2016,6 +1956,18 @@ var EditorModule = (function (Utils, EventBus) {
         blockquoteBtn.onclick = function () { exec(function () { editorRef.current.chain().focus().toggleBlockquote().run(); }); };
 
         // ---- Node definitions ----
+        const CustomBlockquote = Blockquote.extend({
+            addAttributes() {
+                return {
+                    author: {
+                        default: null,
+                        parseHTML: el => el.getAttribute('data-author') || null,
+                        renderHTML: attrs => attrs.author ? { 'data-author': attrs.author } : {},
+                    }
+                };
+            }
+        });
+
         const ImageUploadPlaceholder = Node.create({
             name: 'imageUploadPlaceholder',
             group: 'block', atom: true, draggable: false, selectable: true,
@@ -3025,7 +2977,8 @@ var EditorModule = (function (Utils, EventBus) {
         var editor = new Editor({
             element: editorEl,
             extensions: [
-                StarterKit.configure({ codeBlock: false }),
+                StarterKit.configure({ codeBlock: false, blockquote: false }),
+                CustomBlockquote,
                 CustomCodeBlock,
                 Placeholder.configure({
                     placeholder: ({ node }) => {
@@ -3159,7 +3112,7 @@ var EditorModule = (function (Utils, EventBus) {
                     return false;
                 }
             },
-                        onCreate: function ({ editor }) {
+            onCreate: function ({ editor }) {
                 // Keep the trailing paragraph logic
                 (function ensureTrailingParagraph() {
                     var doc = editor.state.doc;
@@ -3177,8 +3130,6 @@ var EditorModule = (function (Utils, EventBus) {
                 if (opts.mode === 'reply') return;
 
                 // 'fastedit' → The user explicitly clicked the Edit button. 
-                // Don't check activeElement because the button IS the activeElement.
-                // Give the DOM a tick to finish layout, then focus.
                 if (opts.mode === 'fastedit') {
                     setTimeout(function () {
                         if (editor && !editor.isDestroyed && !editor.isFocused) {
@@ -3194,7 +3145,6 @@ var EditorModule = (function (Utils, EventBus) {
                 if (a && a !== document.body && a !== document.documentElement) return;
                 editor.commands.focus('end');
             },
-           
             onUpdate: function ({ editor }) {
                 var html = editor.getHTML();
                 var legacy = editorContentIsEmpty(html) ? '' : htmlToLegacy(html);
@@ -3261,7 +3211,6 @@ var EditorModule = (function (Utils, EventBus) {
         });
 
         // Helper: image hover toolbar
-                // Helper: image hover toolbar
         function setupImageToolbar(root, ed) {
             var scrollContainer = root.parentNode; // This is the .modern-wysiwyg wrapper
             
@@ -3784,7 +3733,7 @@ var EditorModule = (function (Utils, EventBus) {
     // ========================================================================
     // FAST EDIT BUILDER (per-post)
     // ========================================================================
-        async function buildFastEdit(fasteditEl) {
+    async function buildFastEdit(fasteditEl) {
         if (!fasteditEl || _activeFastEdits.has(fasteditEl)) return;
         console.log('[EditorModule] buildFastEdit fired for:', fasteditEl.className || fasteditEl.tagName);
         _activeFastEdits.set(fasteditEl, 'pending');
@@ -3826,7 +3775,7 @@ var EditorModule = (function (Utils, EventBus) {
         var container = document.createElement('div');
         container.className = 'modern-editor-container modern-editor-container--fastedit';
 
-                var cardWasHidden = false;
+        var cardWasHidden = false;
         if (modernCard && modernCard.parentNode) {
             modernCard.classList.add('is-being-edited');
             cardWasHidden = true;
@@ -3852,30 +3801,19 @@ var EditorModule = (function (Utils, EventBus) {
                 submitLabel: 'Save changes',
                 onSync: function (legacy) { if (legacyTextarea) legacyTextarea.value = legacy; },
                 onCancel: function () {
-    _activeFastEdits.delete(fasteditEl);
-    restoreCard();
+                    _activeFastEdits.delete(fasteditEl);
+                    restoreCard();
 
-    // Remove our container explicitly. It's a sibling of the modern card,
-    // not a child of .fastedit, so the legacy cancel handler doesn't touch
-    // it — without this the editor stays visible below the post after
-    // cancel.
-    if (container.parentNode) container.remove();
+                    if (container.parentNode) container.remove();
 
-    // Dispatch the legacy cancel so the forum's own handler can run its
-    // teardown (removes/hides .fastedit, resets any internal state).
-    if (legacyCancelBtn) legacyCancelBtn.click();
+                    if (legacyCancelBtn) legacyCancelBtn.click();
 
-    // Some forum builds hide .fastedit on cancel rather than removing it.
-    // handleEdit in posts.js uses .fastedit presence as its "already open"
-    // signal, so a leftover hidden div would block the next Edit click.
-    // Deferred one tick so a synchronous legacy removal can win the race
-    // cleanly; if it already removed the div, the check below is a no-op.
-    setTimeout(function () {
-        if (fasteditEl && fasteditEl.parentNode) {
-            fasteditEl.remove();
-        }
-    }, 50);
-},
+                    setTimeout(function () {
+                        if (fasteditEl && fasteditEl.parentNode) {
+                            fasteditEl.remove();
+                        }
+                    }, 50);
+                },
                 onSubmit: function () {
                     if (!legacyTextarea) { showToast('Save failed — textarea missing', 'error'); return; }
                     if (legacySaveBtn) {
@@ -3975,12 +3913,6 @@ var EditorModule = (function (Utils, EventBus) {
             if (id3) _observerIds.push(id3);
         } catch (e) { console.error('[EditorModule] observer (fastedit) failed:', e); }
 
-               // Belt-and-braces: also react to .fastedit_button clicks. The
-        // observer registration above should catch .fastedit being added
-        // to the DOM, but if it ever misses (mid-batch, in-editor filter,
-        // observerOrigin marker on the .post during a posts-module run),
-        // this fallback catches it. The _activeFastEdits guard makes the
-        // build idempotent — safe to call twice.
         addGlobalListener(document, 'click', function (e) {
             var btn = e.target.closest('.fastedit_button');
             if (!btn) return;
