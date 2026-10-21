@@ -885,13 +885,27 @@ var EditorModule = (function (Utils, EventBus) {
         var temp = document.createElement('div');
         temp.innerHTML = html;
 
-        Array.from(temp.querySelectorAll('blockquote')).forEach(function (bq) {
+                Array.from(temp.querySelectorAll('blockquote')).forEach(function (bq) {
             var innerHtml = bq.innerHTML;
+            var authorName = null;
+
+            // Look for the injected author header from legacyToHtml
+            var authorMatch = innerHtml.match(/^<p><strong>([^<]+) said:<\/strong><\/p>/i);
+            if (authorMatch) {
+                authorName = authorMatch[1];
+                // Remove the paragraph from the content so it doesn't show up inside the quote body
+                innerHtml = innerHtml.replace(/^<p><strong>[^<]+ said:<\/strong><\/p>/i, '');
+            }
+
+            var quoteAuthorHtml = authorName
+                ? '<span class="quote-author">' + escapeHtml(authorName) + ' <span class="quote-said">said:</span></span>'
+                : '<span class="quote-author">Quote</span>';
+
             var modernHtml =
                 '<div class="modern-quote long-quote">' +
                     '<div class="quote-header"><div class="quote-meta">' +
                         '<div class="quote-icon"><i class="fa-regular fa-quote-left" aria-hidden="true"></i></div>' +
-                        '<div class="quote-info"><span class="quote-author">Quote</span></div>' +
+                        '<div class="quote-info">' + quoteAuthorHtml + '</div>' +
                     '</div></div>' +
                     '<div class="quote-content">' + innerHtml + '</div>' +
                     '<button class="quote-expand-btn" type="button" aria-expanded="false" aria-label="Show full quote">' +
