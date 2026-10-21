@@ -4356,6 +4356,10 @@ section.modern-stats { flex-direction: column; width: 100%; }
     pointer-events: none;
 }
 
+.modern-wysiwyg .ProseMirror blockquote[data-author]::after {
+    content: attr(data-author) " said:";
+}
+
 .modern-wysiwyg .ProseMirror blockquote p:first-child {
     margin-top: 0;
 }
