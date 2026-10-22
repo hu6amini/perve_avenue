@@ -158,6 +158,27 @@
 //      addition to the lite embeds it already covered. Both changes
 //      are cosmetic / discovery improvements; neither touches the
 //      serialized payload or the reader-side output.
+// v22: iframe / lite-embed parity with editor-module.js. Quotes that
+//      contain an <iframe> embed (the forum stores pasted YouTube and
+//      Vimeo as raw iframes), or a paragraph whose entire text is a
+//      bare YouTube/Vimeo URL (the forum's own BBCode renderer used
+//      to autoplay those), now become lite embeds inside quotes just
+//      like they do in the post editor. The pipeline lives in
+//      legacyToHtmlAsync: transformLegacyIframes walks every iframe
+//      (inside blockquotes included) and rewrites it into the same
+//      <div class="lite-embed-wrapper"><lite-youtube …></div> shape
+//      the editor emits; transformBareVideoUrls does the same for
+//      URL-only paragraphs; paragraphizeLegacyHtml wraps the loose
+//      inline runs left behind by the quote-cleaning regex so the
+//      result is valid block content. The initial-content load path
+//      in initTipTap now awaits legacyToHtmlAsync instead of calling
+//      legacyToHtml synchronously, so the transforms actually run —
+//      previously they were defined but never invoked. [QUOTE=author]
+//      is now parsed (and re-emitted) so quotes round-trip with the
+//      author header, matching the editor. The preview renderer
+//      surfaces the author as "Alice said:" instead of a generic
+//      "Quote". No new DOM contract — same tag names, same wrapper,
+//      same caption.
 var MessengerModule = (function(Utils, EventBus) {
     'use strict';
 
@@ -311,38 +332,38 @@ var MessengerModule = (function(Utils, EventBus) {
     }
 
     function sanitizeGroupName(name) {
-    if (!name) return 'member';
-    return name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '') || 'member';
-}
+        if (!name) return 'member';
+        return name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '') || 'member';
+    }
 
-function getGroupClass(user) {
-    if (!user || !user.group) return 'group-member';
-    var groupName  = (user.group.name || '').toLowerCase();
-    var groupClass = (user.group.class || '').toLowerCase();
-    var groupBody  = (user.group.bodyclass || '').toLowerCase();
-    var groupId    = user.group.id;
+    function getGroupClass(user) {
+        if (!user || !user.group) return 'group-member';
+        var groupName  = (user.group.name || '').toLowerCase();
+        var groupClass = (user.group.class || '').toLowerCase();
+        var groupBody  = (user.group.bodyclass || '').toLowerCase();
+        var groupId    = user.group.id;
 
-    if (groupClass.indexOf('founder') !== -1 || groupBody.indexOf('founder') !== -1 || groupName === 'founder') {
-        return 'group-founder';
+        if (groupClass.indexOf('founder') !== -1 || groupBody.indexOf('founder') !== -1 || groupName === 'founder') {
+            return 'group-founder';
+        }
+        if (groupName === 'administrator' || groupClass.indexOf('admin') !== -1 || groupId === 1) {
+            return 'group-administrator';
+        }
+        if (groupName === 'global moderator' || groupClass.indexOf('global_mod') !== -1) {
+            return 'group-global-moderator';
+        }
+        if (groupName === 'moderator' || groupClass.indexOf('mod') !== -1) {
+            return 'group-moderator';
+        }
+        if (groupName === 'developer' || groupClass.indexOf('developer') !== -1) {
+            return 'group-developer';
+        }
+        if (groupName === 'game dev' || groupClass.indexOf('game_dev') !== -1) {
+            return 'group-game-dev';
+        }
+        if (groupName === 'fan') return 'group-fan';
+        return 'group-' + sanitizeGroupName(user.group.name || 'member');
     }
-    if (groupName === 'administrator' || groupClass.indexOf('admin') !== -1 || groupId === 1) {
-        return 'group-administrator';
-    }
-    if (groupName === 'global moderator' || groupClass.indexOf('global_mod') !== -1) {
-        return 'group-global-moderator';
-    }
-    if (groupName === 'moderator' || groupClass.indexOf('mod') !== -1) {
-        return 'group-moderator';
-    }
-    if (groupName === 'developer' || groupClass.indexOf('developer') !== -1) {
-        return 'group-developer';
-    }
-    if (groupName === 'game dev' || groupClass.indexOf('game_dev') !== -1) {
-        return 'group-game-dev';
-    }
-    if (groupName === 'fan') return 'group-fan';
-    return 'group-' + sanitizeGroupName(user.group.name || 'member');
-}
 
     // ------------------------------------------------------------------------
     // HELPERS
@@ -400,7 +421,7 @@ function getGroupClass(user) {
 
     function escapeHtml(str) {
         if (!str) return '';
-        return str.replace(/[&<>"']/g, function(m) {
+        return String(str).replace(/[&<>"']/g, function(m) {
             return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[m];
         });
     }
@@ -458,6 +479,403 @@ function getGroupClass(user) {
             wrapper.parentNode.replaceChild(span, wrapper);
         });
         return temp.innerHTML;
+    }
+
+    // ------------------------------------------------------------------------
+    // VIDEO URL PARSERS
+    // Shared verbatim with editor-module.js so the same URL shapes get
+    // recognised regardless of which module parses them. Used by the
+    // iframe transform, the bare-URL transform, and the paste handler.
+    // ------------------------------------------------------------------------
+    function parseYouTubeUrl(url) {
+        if (!url || typeof url !== 'string') return null;
+        var m = url.match(/(?:youtube\.com\/(?:watch\?(?:.*&)?v=|embed\/|shorts\/)|youtu\.be\/)([A-Za-z0-9_-]{6,})/);
+        if (!m) return null;
+        var videoid = m[1];
+        var start = null;
+        var end = null;
+        var qIndex = url.indexOf('?');
+        if (qIndex >= 0) {
+            var hashIndex = url.indexOf('#', qIndex);
+            var queryStr = url.slice(qIndex + 1, hashIndex >= 0 ? hashIndex : undefined);
+            try {
+                var params = new URLSearchParams(queryStr);
+                var t = params.get('t') || params.get('start');
+                if (t) {
+                    var parsed = parseTimeString(t);
+                    if (parsed != null) start = parsed;
+                }
+                var e = params.get('end');
+                if (e) {
+                    var parsedEnd = parseInt(e, 10);
+                    if (!isNaN(parsedEnd) && parsedEnd > 0) end = parsedEnd;
+                }
+            } catch (err) {}
+        }
+        return { videoid: videoid, start: start, end: end };
+    }
+
+    function parseVimeoUrl(url) {
+        if (!url || typeof url !== 'string') return null;
+        var m = url.match(/vimeo\.com\/(?:[^\/\s]+\/)*?(\d+)/);
+        if (!m) return null;
+        var videoid = m[1];
+        var start = null;
+        try {
+            var hashIndex = url.indexOf('#');
+            if (hashIndex >= 0) {
+                var frag = url.slice(hashIndex + 1);
+                var fragMatch = frag.match(/^t=(.+)$/);
+                if (fragMatch) {
+                    var parsed = parseTimeString(fragMatch[1]);
+                    if (parsed != null) start = parsed;
+                }
+            }
+            if (start == null) {
+                var qIndex = url.indexOf('?');
+                if (qIndex >= 0) {
+                    var hashIndex2 = url.indexOf('#', qIndex);
+                    var queryStr = url.slice(qIndex + 1, hashIndex2 >= 0 ? hashIndex2 : undefined);
+                    var params = new URLSearchParams(queryStr);
+                    var t = params.get('t');
+                    if (t) {
+                        var parsed2 = parseTimeString(t);
+                        if (parsed2 != null) start = parsed2;
+                    }
+                }
+            }
+        } catch (err) {}
+        return { videoid: videoid, start: start };
+    }
+
+    function isYouTubeHostname(url) {
+        try {
+            var h = new URL(url).hostname.toLowerCase();
+            return h === 'youtube.com' || h === 'www.youtube.com' ||
+                   h === 'm.youtube.com' || h === 'youtu.be';
+        } catch (e) { return false; }
+    }
+
+    function isVimeoHostname(url) {
+        try {
+            var h = new URL(url).hostname.toLowerCase();
+            return h === 'vimeo.com' || h === 'www.vimeo.com';
+        } catch (e) { return false; }
+    }
+
+    function parseLegacyIframeProvider(src) {
+        if (!src) return null;
+
+        var m = src.match(/(?:youtube(?:-nocookie)?\.com\/(?:embed\/|v\/)|youtu\.be\/)([A-Za-z0-9_-]{6,})/);
+        if (m) {
+            var result = { kind: 'youtube', videoid: m[1], start: null, end: null };
+            try {
+                var qIndex = src.indexOf('?');
+                if (qIndex >= 0) {
+                    var hashIndex = src.indexOf('#', qIndex);
+                    var queryStr = src.slice(qIndex + 1, hashIndex >= 0 ? hashIndex : undefined);
+                    var params = new URLSearchParams(queryStr);
+                    var start = params.get('start');
+                    var end   = params.get('end');
+                    if (start) {
+                        var parsed = parseTimeString(start);
+                        if (parsed != null) result.start = parsed;
+                    }
+                    if (end) {
+                        var parsedEnd = parseInt(end, 10);
+                        if (!isNaN(parsedEnd) && parsedEnd > 0) result.end = parsedEnd;
+                    }
+                }
+            } catch (e) {}
+            return result;
+        }
+
+        m = src.match(/player\.vimeo\.com\/video\/(\d+)/);
+        if (m) {
+            var result2 = { kind: 'vimeo', videoid: m[1], start: null };
+            try {
+                var hashIndex2 = src.indexOf('#');
+                if (hashIndex2 >= 0) {
+                    var frag = src.slice(hashIndex2 + 1);
+                    var fragMatch = frag.match(/^t=(.+)$/);
+                    if (fragMatch) {
+                        var parsedStart = parseTimeString(fragMatch[1]);
+                        if (parsedStart != null) result2.start = parsedStart;
+                    }
+                }
+            } catch (e) {}
+            return result2;
+        }
+
+        return null;
+    }
+
+    function transformLegacyIframes(htmlContent) {
+        if (!htmlContent || typeof htmlContent !== 'string') return htmlContent;
+        if (htmlContent.indexOf('<iframe') === -1) return htmlContent;
+
+        var tempDiv = document.createElement('div');
+        tempDiv.innerHTML = htmlContent;
+
+        var iframes = tempDiv.querySelectorAll('iframe[src]');
+        iframes.forEach(function(iframe) {
+            var src = iframe.getAttribute('src') || '';
+            var parsed = parseLegacyIframeProvider(src);
+            if (!parsed) return; // Non-media iframe — leave as-is
+
+            var wrapper = document.createElement('div');
+            wrapper.className = 'lite-embed-wrapper';
+            wrapper.setAttribute('data-videoid', parsed.videoid);
+            if (parsed.start != null) wrapper.setAttribute('data-start', String(parsed.start));
+            if (parsed.end   != null) wrapper.setAttribute('data-end',   String(parsed.end));
+
+            var lite = document.createElement(
+                parsed.kind === 'youtube' ? 'lite-youtube' : 'lite-vimeo'
+            );
+            lite.setAttribute('videoid', parsed.videoid);
+            if (parsed.start != null) lite.setAttribute('start', String(parsed.start));
+            if (parsed.end   != null) lite.setAttribute('end',   String(parsed.end));
+            wrapper.appendChild(lite);
+
+            var parent = iframe.parentNode;
+            var target = (
+                parent && parent.tagName === 'DIV' &&
+                parent.getAttribute('align') === 'center' &&
+                parent.children.length === 1
+            ) ? parent : iframe;
+
+            target.parentNode.replaceChild(wrapper, target);
+        });
+
+        return tempDiv.innerHTML;
+    }
+
+    // A paragraph whose entire text content is a bare YouTube/Vimeo URL
+    // is a video embed in disguise — the forum stored the URL as BBCode
+    // text and relied on its own renderer to autoplay the iframe. Once
+    // the content flows through TipTap (quoting a post, opening the
+    // editor with a URL-only quote, etc.), the URL just becomes a plain
+    // link. Convert those standalone paragraphs to lite-embed wrappers
+    // so the user sees the same facade they see in the post.
+    //
+    // Only paragraphs whose textContent is EXACTLY a single URL qualify.
+    // "Check out https://youtube.com/…" is left alone. Nor does this
+    // touch inline links, images, or any other element — it only
+    // matches <p>…</p> whose entire trimmed text is a URL with a
+    // recognized hostname.
+    function transformBareVideoUrls(html) {
+        if (!html || typeof html !== 'string') return html;
+        if (html.indexOf('http') === -1) return html;
+
+        var tempDiv = document.createElement('div');
+        tempDiv.innerHTML = html;
+
+        var paragraphs = tempDiv.querySelectorAll('p');
+        paragraphs.forEach(function(p) {
+            var text = (p.textContent || '').trim();
+            // Must be exactly one URL — no surrounding prose
+            if (!/^https?:\/\/\S+$/.test(text)) return;
+
+            if (isYouTubeHostname(text)) {
+                var yt = parseYouTubeUrl(text);
+                if (!yt || !yt.videoid) return;
+
+                var wrapper = document.createElement('div');
+                wrapper.className = 'lite-embed-wrapper';
+                wrapper.setAttribute('data-videoid', yt.videoid);
+                if (yt.start != null) wrapper.setAttribute('data-start', String(yt.start));
+                if (yt.end   != null) wrapper.setAttribute('data-end',   String(yt.end));
+
+                var lite = document.createElement('lite-youtube');
+                lite.setAttribute('videoid', yt.videoid);
+                if (yt.start != null) lite.setAttribute('start', String(yt.start));
+                if (yt.end   != null) lite.setAttribute('end',   String(yt.end));
+                wrapper.appendChild(lite);
+
+                p.parentNode.replaceChild(wrapper, p);
+                return;
+            }
+
+            if (isVimeoHostname(text)) {
+                var vm = parseVimeoUrl(text);
+                if (!vm || !vm.videoid) return;
+
+                var wrapper2 = document.createElement('div');
+                wrapper2.className = 'lite-embed-wrapper';
+                wrapper2.setAttribute('data-videoid', vm.videoid);
+                if (vm.start != null) wrapper2.setAttribute('data-start', String(vm.start));
+
+                var lite2 = document.createElement('lite-vimeo');
+                lite2.setAttribute('videoid', vm.videoid);
+                if (vm.start != null) lite2.setAttribute('start', String(vm.start));
+                wrapper2.appendChild(lite2);
+
+                p.parentNode.replaceChild(wrapper2, p);
+            }
+        });
+
+        return tempDiv.innerHTML;
+    }
+
+    // Wraps loose inline runs in <p> elements, strips redundant <br>s,
+    // and recurses into blockquotes / spoiler content so that the
+    // inner paragraphs are also normalised. The quote-cleaning regexes
+    // in legacyToHtml produce content like "line1\nline2" — this turns
+    // that into " <p>line1</p><p>line2</p> " so TipTap's paragraph
+    // schema accepts it. Also handles the case where the legacy body
+    // was a single continuous run of inline content between two block
+    // elements — a very common shape for old forum posts.
+    function paragraphizeLegacyHtml(html) {
+        if (!html || typeof html !== 'string') return html;
+        try {
+            var BLOCK_TAGS = {
+                H1: 1, H2: 1, H3: 1, H4: 1, H5: 1, H6: 1, DIV: 1, P: 1, UL: 1, OL: 1, LI: 1,
+                BLOCKQUOTE: 1, PRE: 1, TABLE: 1, HR: 1, SECTION: 1, ARTICLE: 1, FIGURE: 1,
+                HEADER: 1, FOOTER: 1, ASIDE: 1, NAV: 1, DL: 1, DT: 1, DD: 1, FORM: 1
+            };
+
+            var container = document.createElement('div');
+            container.innerHTML = html;
+            var newChildren = [];
+            var inlineBuffer = [];
+            var pendingBreaks = 0;
+
+            function hasVisibleContent(nodes) {
+                return nodes.some(function(n) {
+                    if (n.nodeType === 3) return (n.nodeValue || '').trim().length > 0;
+                    if (n.nodeType === 1) return n.tagName !== 'BR';
+                    return false;
+                });
+            }
+
+            function flushBuffer() {
+                while (inlineBuffer.length > 0 && inlineBuffer[0].nodeType === 1 && inlineBuffer[0].tagName === 'BR') {
+                    inlineBuffer.shift();
+                }
+                while (inlineBuffer.length > 0 && inlineBuffer[inlineBuffer.length - 1].nodeType === 1 && inlineBuffer[inlineBuffer.length - 1].tagName === 'BR') {
+                    inlineBuffer.pop();
+                }
+                if (!hasVisibleContent(inlineBuffer)) {
+                    inlineBuffer = [];
+                    return;
+                }
+                var p = document.createElement('p');
+                inlineBuffer.forEach(function(n) { p.appendChild(n); });
+                newChildren.push(p);
+                inlineBuffer = [];
+            }
+
+            Array.prototype.forEach.call(container.childNodes, function(child) {
+                if (child.nodeType === 1 && child.tagName === 'BR') {
+                    pendingBreaks++;
+                    if (pendingBreaks >= 2) {
+                        flushBuffer();
+                        pendingBreaks = 0;
+                    }
+                    return;
+                }
+
+                if (child.nodeType === 3 && !(child.nodeValue || '').trim() && pendingBreaks > 0) {
+                    return;
+                }
+
+                if (pendingBreaks === 1) {
+                    inlineBuffer.push(document.createElement('br'));
+                }
+                pendingBreaks = 0;
+
+                if (child.nodeType === 1 && BLOCK_TAGS[child.tagName]) {
+                    flushBuffer();
+                    newChildren.push(child);
+                    return;
+                }
+
+                inlineBuffer.push(child);
+            });
+
+            if (pendingBreaks === 1) {
+                inlineBuffer.push(document.createElement('br'));
+            }
+
+            flushBuffer();
+
+            container.innerHTML = '';
+            newChildren.forEach(function(n) { container.appendChild(n); });
+
+            Array.prototype.forEach.call(
+                container.querySelectorAll('blockquote, .quote-content, .spoiler-content-inner'),
+                function(el) {
+                    el.innerHTML = paragraphizeLegacyHtml(el.innerHTML);
+                }
+            );
+
+            return container.innerHTML;
+        } catch (e) {
+            console.warn('[MessengerModule] paragraphizeLegacyHtml failed:', e);
+            return html;
+        }
+    }
+
+    // Walk every <img> in the HTML and add width/height attributes for
+    // any that don't already declare them. Runs in parallel; capped at
+    // 4 seconds per image so a dead URL can't stall the whole load. The
+    // browser reserves layout space as soon as width/height are present,
+    // which prevents the cumulative-layout-shift spike you get when
+    // images pop in one by one after the text has already reflowed.
+    function enrichImageDimensions(html) {
+        if (!html || html.indexOf('<img') === -1) return Promise.resolve(html);
+
+        return new Promise(function(resolve) {
+            var temp = document.createElement('div');
+            temp.innerHTML = html;
+
+            var promises = [];
+
+            temp.querySelectorAll('img').forEach(function(img) {
+                var w = img.getAttribute('width');
+                var h = img.getAttribute('height');
+                if (w && h && parseInt(w, 10) > 0 && parseInt(h, 10) > 0) return;
+
+                if (img.classList.contains('twemoji')) return;
+                var alt = img.getAttribute('alt') || '';
+                if (alt.charAt(0) === ':' && alt.charAt(alt.length - 1) === ':') return;
+
+                var src = img.getAttribute('src') || '';
+                if (!src) return;
+                if (src.indexOf('weserv.nl') !== -1 || src.indexOf('wsrv.nl') !== -1) return;
+
+                if (!img.hasAttribute('loading')) img.setAttribute('loading', 'lazy');
+                if (!img.hasAttribute('decoding')) img.setAttribute('decoding', 'async');
+
+                promises.push(new Promise(function(resolveImg) {
+                    var probe = new Image();
+                    var done = false;
+                    var timer = setTimeout(function() {
+                        if (!done) { done = true; resolveImg(); }
+                    }, 4000);
+                    probe.onload = function() {
+                        if (done) return;
+                        done = true;
+                        clearTimeout(timer);
+                        if (probe.naturalWidth > 0 && probe.naturalHeight > 0) {
+                            img.setAttribute('width', probe.naturalWidth);
+                            img.setAttribute('height', probe.naturalHeight);
+                        }
+                        resolveImg();
+                    };
+                    probe.onerror = function() {
+                        if (done) return;
+                        done = true;
+                        clearTimeout(timer);
+                        resolveImg();
+                    };
+                    probe.src = src;
+                }));
+            });
+
+            if (promises.length === 0) { resolve(temp.innerHTML); return; }
+            Promise.all(promises).then(function() { resolve(temp.innerHTML); });
+        });
     }
 
     // ------------------------------------------------------------------------
@@ -1030,64 +1448,64 @@ function getGroupClass(user) {
     }
 
     function buildReplyingAsHeader(user) {
-    if (!user) return null;
+        if (!user) return null;
 
-    var username = decodeHtmlEntities(user.nickname) || 'You';
-    var mid = user.mid;
-    var profileUrl = '/?act=Profile&MID=' + mid;
-    var avatarUrl = optimizeAvatarUrl(user.avatar, 36, 36);
-    var groupClass = getGroupClass(user);                                    // ← new
+        var username = decodeHtmlEntities(user.nickname) || 'You';
+        var mid = user.mid;
+        var profileUrl = '/?act=Profile&MID=' + mid;
+        var avatarUrl = optimizeAvatarUrl(user.avatar, 36, 36);
+        var groupClass = getGroupClass(user);
 
-    var header = document.createElement('div');
-    header.className = 'modern-replying-as ' + groupClass;                   // ← changed from 'modern-replying-as'
+        var header = document.createElement('div');
+        header.className = 'modern-replying-as ' + groupClass;
 
-    var avatarHtml;
-    if (avatarUrl) {
-        avatarHtml = '<img class="modern-replying-avatar" ' +
-            'src="' + escapeHtml(avatarUrl) + '" ' +
-            'alt="" width="36" height="36" loading="lazy" decoding="async">';
-    } else {
-        var initial = getInitialFromName(username);
-        var bgColor = getColorFromNickname(username, mid);
-        avatarHtml = '<span class="modern-replying-avatar modern-replying-avatar--initial" ' +
-            'style="background-color:#' + bgColor + ';">' +
-            escapeHtml(initial) + '</span>';
+        var avatarHtml;
+        if (avatarUrl) {
+            avatarHtml = '<img class="modern-replying-avatar" ' +
+                'src="' + escapeHtml(avatarUrl) + '" ' +
+                'alt="" width="36" height="36" loading="lazy" decoding="async">';
+        } else {
+            var initial = getInitialFromName(username);
+            var bgColor = getColorFromNickname(username, mid);
+            avatarHtml = '<span class="modern-replying-avatar modern-replying-avatar--initial" ' +
+                'style="background-color:#' + bgColor + ';">' +
+                escapeHtml(initial) + '</span>';
+        }
+
+        header.innerHTML =
+            '<span class="modern-replying-label">Replying as:</span>' +
+            '<a href="' + escapeHtml(profileUrl) + '" class="modern-replying-user" rel="nofollow">' +
+                avatarHtml +
+                '<span class="modern-replying-name">' + escapeHtml(username) + '</span>' +
+            '</a>';
+
+        return header;
     }
 
-    header.innerHTML =
-        '<span class="modern-replying-label">Replying as:</span>' +
-        '<a href="' + escapeHtml(profileUrl) + '" class="modern-replying-user" rel="nofollow">' +
-            avatarHtml +
-            '<span class="modern-replying-name">' + escapeHtml(username) + '</span>' +
-        '</a>';
-
-    return header;
-}
-
     function attachProfileTip(header, user) {
-    if (!header || !user) return;
-    var tryAttach = function () {
-        if (!window.ForumPostsModule ||
-            typeof window.ForumPostsModule.attachProfileTip !== 'function') {
-            return false;
-        }
-        var username = decodeHtmlEntities(user.nickname) || 'You';
-        var data = {
-            mid: user.mid,
-            username: username,
-            apiUser: user,
-            groupText: (user.group && user.group.name) || 'Member',
-            postCount: user.messages != null ? user.messages : 0,
-            reputation: user.reputation != null ? user.reputation : 0,
-            isOnline: user.status === 'online'
+        if (!header || !user) return;
+        var tryAttach = function () {
+            if (!window.ForumPostsModule ||
+                typeof window.ForumPostsModule.attachProfileTip !== 'function') {
+                return false;
+            }
+            var username = decodeHtmlEntities(user.nickname) || 'You';
+            var data = {
+                mid: user.mid,
+                username: username,
+                apiUser: user,
+                groupText: (user.group && user.group.name) || 'Member',
+                postCount: user.messages != null ? user.messages : 0,
+                reputation: user.reputation != null ? user.reputation : 0,
+                isOnline: user.status === 'online'
+            };
+            var userLink = header.querySelector('.modern-replying-user');
+            if (userLink) window.ForumPostsModule.attachProfileTip(userLink, data);
+            return true;
         };
-        var userLink = header.querySelector('.modern-replying-user');
-        if (userLink) window.ForumPostsModule.attachProfileTip(userLink, data);
-        return true;
-    };
-    if (tryAttach()) return;
-    setTimeout(tryAttach, 200);
-}
+        if (tryAttach()) return;
+        setTimeout(tryAttach, 200);
+    }
 
     // ------------------------------------------------------------------------
     // SENDER AVATAR RESOLUTION (messages list)
@@ -1600,7 +2018,24 @@ function getGroupClass(user) {
         html = html.replace(/\[list=1\](.*?)\[\/list\]/gis, '<ol>$1</ol>');
         html = html.replace(/\[url=([^\]]+)\](.*?)\[\/url\]/gi, '<a href="$1" target="_blank">$2</a>');
         html = html.replace(/\[img\](.*?)\[\/img\]/gi, '<img src="$1" alt="image" loading="lazy" decoding="async">');
-        html = html.replace(/\[quote\](.*?)\[\/quote\]/gis, '<blockquote>$1</blockquote>');
+
+        // Use data-author to avoid overlapping the CSS pseudo-elements.
+        // Handles both [QUOTE]body[/QUOTE] and [QUOTE=Alice]body[/QUOTE].
+        // The optional comma-separated second part of [QUOTE=Alice,123]
+        // is ignored — only the first segment (the author name) matters.
+        html = html.replace(/\[QUOTE(?:=([^\]]+))?\]([\s\S]*?)\[\/QUOTE\]/gi, function(match, params, body) {
+            var author = '';
+            if (params) {
+                var parts = params.split(',');
+                if (parts.length > 0 && parts[0].trim()) {
+                    author = parts[0].trim();
+                }
+            }
+            if (author) {
+                return '<blockquote data-author="' + escapeHtml(author) + '">' + body + '</blockquote>';
+            }
+            return '<blockquote>' + body + '</blockquote>';
+        });
         html = html.replace(/\[code\](.*?)\[\/code\]/gis, '<pre><code>$1</code></pre>');
         html = html.replace(/\[spoiler\](.*?)\[\/spoiler\]/gis, '<div class="spoiler">$1</div>');
         html = html.replace(/\[CENTER\](.*?)\[\/CENTER\]/gis, '<div style="text-align:center">$1</div>');
@@ -1632,7 +2067,7 @@ function getGroupClass(user) {
         return html;
     }
 
-        async function legacyToHtmlAsync(legacy) {
+    async function legacyToHtmlAsync(legacy) {
         if (!legacy) return '';
 
         var expanded = legacy.replace(/\[IMG=([^\]]+)\]([^\[]+?)\[\/IMG\]/gi, function (_, altText, url) {
@@ -1654,10 +2089,10 @@ function getGroupClass(user) {
         }
 
         var html = legacyToHtml(expanded);
-        html = transformLegacyIframes(html);      // <-- ADD THIS LINE
-        html = paragraphizeLegacyHtml(html);
-
-        return await enrichImageDimensions(html);
+        html = transformLegacyIframes(html);       // <iframe> → lite-embed wrapper
+        html = paragraphizeLegacyHtml(html);       // wrap loose inline runs
+        html = transformBareVideoUrls(html);       // URL-only <p> → lite embed
+        return await enrichImageDimensions(html);  // reserve width/height
     }
 
     function htmlToLegacy(html) {
@@ -1702,9 +2137,23 @@ function getGroupClass(user) {
                 }
             );
 
-            result = result.replace(/<blockquote[^>]*>([\s\S]*?)<\/blockquote>/gi, function(match, inner) {
+            // Read from data-author. The injected header paragraph (added
+            // by CustomBlockquote on the editor side) is stripped here so
+            // an authored quote round-trips as [QUOTE=Author] rather than
+            // [QUOTE]Author said:\n…
+            result = result.replace(/<blockquote([^>]*)>([\s\S]*?)<\/blockquote>/gi, function(match, attrs, inner) {
+                // Remove the injected author header paragraph
+                inner = inner.replace(/<p class="quote-author-header">[\s\S]*?<\/p>/gi, '');
+
                 var cleaned = inner.replace(/<p[^>]*>/gi, '').replace(/<\/p>\s*/gi, '\n');
                 cleaned = cleaned.replace(/\n+$/, '');
+
+                var authorMatch = attrs.match(/data-author="([^"]*)"/);
+                if (authorMatch) {
+                    var author = decodeHtmlEntities(authorMatch[1]);
+                    return '[QUOTE=' + author + ']' + cleaned + '[/QUOTE]';
+                }
+
                 return '[QUOTE]' + cleaned + '[/QUOTE]';
             });
 
@@ -1758,14 +2207,24 @@ function getGroupClass(user) {
         temp.innerHTML = html;
 
         Array.from(temp.querySelectorAll('blockquote')).forEach(function(bq) {
+            var author = bq.getAttribute('data-author');
+
+            // Strip the injected header paragraph (added by CustomBlockquote)
+            var headerPara = bq.querySelector('.quote-author-header');
+            if (headerPara) headerPara.remove();
+
             var innerHtml = bq.innerHTML;
+            var quoteAuthorHtml = author
+                ? '<span class="quote-author">' + escapeHtml(author) + ' <span class="quote-said">said:</span></span>'
+                : '<span class="quote-author">Quote</span>';
+
             var modernHtml =
                 '<div class="modern-quote long-quote">' +
                     '<div class="quote-header">' +
                         '<div class="quote-meta">' +
                             '<div class="quote-icon"><i class="fa-regular fa-quote-left" aria-hidden="true"></i></div>' +
                             '<div class="quote-info">' +
-                                '<span class="quote-author">Quote</span>' +
+                                quoteAuthorHtml +
                             '</div>' +
                         '</div>' +
                     '</div>' +
@@ -2331,12 +2790,12 @@ function getGroupClass(user) {
 
         function focusTrailingEmbedParagraph() {
             if (!editor) return;
-            const doc = editor.state.doc;
+            var doc = editor.state.doc;
             if (doc.childCount < 2) return;
-            const last = doc.child(doc.childCount - 1);
-            const secondLast = doc.child(doc.childCount - 2);
+            var last = doc.child(doc.childCount - 1);
+            var secondLast = doc.child(doc.childCount - 2);
             if (last.type.name !== 'paragraph' || last.content.size !== 0) return;
-            const atomName = secondLast.type.name;
+            var atomName = secondLast.type.name;
             if (atomName !== 'liteYouTube' && atomName !== 'liteVimeo' && atomName !== 'imageUploadPlaceholder') return;
             editor.chain().focus().setTextSelection(doc.content.size - 1).run();
         }
@@ -2828,36 +3287,36 @@ function getGroupClass(user) {
         }
 
         fetchCurrentUserData().then(function (user) {
-    if (!user) {
-        if (!currentHeader && replyingAsPlaceholder.parentNode) {
-            replyingAsPlaceholder.remove();
-        }
-        return;
-    }
+            if (!user) {
+                if (!currentHeader && replyingAsPlaceholder.parentNode) {
+                    replyingAsPlaceholder.remove();
+                }
+                return;
+            }
 
-    // Rebuild the header rather than mutating it in place. The sync-
-    // built header has no group info — user.group isn't part of the
-    // menuwrap DOM — so its wrapper class is always 'group-member'.
-    // Mutating name / href / avatar on that header leaves the class
-    // stale. Building a fresh header and swapping it in carries the
-    // correct group class, the correct avatar, and the correct
-    // profile link all at once. There are no event listeners on the
-    // header, so replacing it is safe.
-    var newHeader = buildReplyingAsHeader(user);
-    if (!newHeader) return;
+            // Rebuild the header rather than mutating it in place. The sync-
+            // built header has no group info — user.group isn't part of the
+            // menuwrap DOM — so its wrapper class is always 'group-member'.
+            // Mutating name / href / avatar on that header leaves the class
+            // stale. Building a fresh header and swapping it in carries the
+            // correct group class, the correct avatar, and the correct
+            // profile link all at once. There are no event listeners on the
+            // header, so replacing it is safe.
+            var newHeader = buildReplyingAsHeader(user);
+            if (!newHeader) return;
 
-    if (currentHeader && currentHeader.parentNode) {
-        currentHeader.parentNode.replaceChild(newHeader, currentHeader);
-    } else if (replyingAsPlaceholder.parentNode) {
-        replyingAsPlaceholder.parentNode.replaceChild(newHeader, replyingAsPlaceholder);
-    } else {
-        // Header position is gone — shouldn't fire, but don't crash.
-        return;
-    }
+            if (currentHeader && currentHeader.parentNode) {
+                currentHeader.parentNode.replaceChild(newHeader, currentHeader);
+            } else if (replyingAsPlaceholder.parentNode) {
+                replyingAsPlaceholder.parentNode.replaceChild(newHeader, replyingAsPlaceholder);
+            } else {
+                // Header position is gone — shouldn't fire, but don't crash.
+                return;
+            }
 
-    currentHeader = newHeader;
-    attachProfileTip(currentHeader, user);
-});
+            currentHeader = newHeader;
+            attachProfileTip(currentHeader, user);
+        });
 
         var editorElement = document.createElement('div');
         editorElement.id = 'tiptap-editor';
@@ -3631,20 +4090,6 @@ function getGroupClass(user) {
             toolbarEl.appendChild(deleteBtn);
             document.body.appendChild(toolbarEl);
 
-            // Keep editor focus when a toolbar button is pressed. The
-            // default action of mousedown on a <button> is to move focus
-            // to it, which fires blur on the editor — and the editor's
-            // blur handler clears hoveredImg, so the click handler that
-            // follows sees null and bails. That is why the buttons work
-            // with a mouse but not on a touch device: on desktop the
-            // editor is often not focused at all when hovering the
-            // image, so there is no blur to lose; tapping inside a
-            // contenteditable on mobile always focuses it, so the
-            // subsequent button tap always triggers the blur. Calling
-            // preventDefault on mousedown cancels the focus move
-            // without affecting the click itself; the buttons still
-            // fire, and the editor keeps focus so typing can continue
-            // immediately after.
             [nsfwBtn, editBtn, deleteBtn].forEach(function (btn) {
                 btn.addEventListener('mousedown', function (e) {
                     e.preventDefault();
@@ -3830,13 +4275,6 @@ function getGroupClass(user) {
                 if (hoveredImg && toolbarEl.style.display === 'flex') positionToolbar(hoveredImg);
             });
 
-            // Hide immediately when the hovered image leaves the document.
-            // Deleting an image — via the toolbar button, keyboard, or a
-            // programmatic delete — detaches the DOM node without firing a
-            // reliable mouseout, because the pointer never crossed a
-            // boundary. Nothing would otherwise hide the toolbar until the
-            // next mousemove or the editor blur. A transaction listener
-            // catches every removal path in one place.
             editorInstance.on('transaction', function() {
                 if (!hoveredImg) return;
                 if (!document.body.contains(hoveredImg)) {
@@ -3855,12 +4293,6 @@ function getGroupClass(user) {
         function setupSpoilerTitleEdit(editorRoot, editorInstance) {
             if (!editorRoot || !editorInstance) return;
 
-            // Resolve the position of the spoiler node containing the
-            // given DOM element. posAtDOM(el, 0) returns the position at
-            // the start of el's first child — inside the first paragraph
-            // of the spoiler. Walk up the ancestor chain until we hit the
-            // spoiler node, then before(depth) gives the spoiler's own
-            // position in the doc.
             function findSpoilerPos(el) {
                 var pos;
                 try { pos = editorInstance.view.posAtDOM(el, 0); } catch (e) { return null; }
@@ -3880,15 +4312,8 @@ function getGroupClass(user) {
 
                 var rect = spoiler.getBoundingClientRect();
                 var yInSpoiler = e.clientY - rect.top;
-                // Header band is the top 60px of the spoiler (padding-top:
-                // 3.75rem in the CSS). Clicks below that land in the
-                // spoiler's content — let them through so the caret can
-                // still be placed in the body.
                 if (yInSpoiler > 60) return;
 
-                // Prevent ProseMirror from processing the mousedown so the
-                // selection doesn't move into the spoiler content before
-                // the modal opens.
                 e.preventDefault();
                 e.stopPropagation();
 
@@ -3907,7 +4332,7 @@ function getGroupClass(user) {
                     );
                     editorInstance.view.dispatch(tr);
                 });
-            }, true); // capture phase — runs before ProseMirror's handler
+            }, true);
         }
 
         function setupEmoticonAutocomplete(editorInstance, editorRoot) {
@@ -4220,20 +4645,6 @@ function getGroupClass(user) {
                     },
                 });
 
-                // ------------------------------------------------------------------
-                // Upload placeholder. A block atom that renders as either
-                // an idle dropzone ("Click to upload or drag and drop /
-                // insert by URL") or a progress card, and replaces itself
-                // with a real `image` node on success. The File object
-                // itself lives in `_uploadRegistry`, keyed by uploadId — a
-                // File can't be a ProseMirror attribute because it
-                // wouldn't survive serialization, and the node view needs
-                // to be able to restart the upload on retry.
-                //
-                // `renderHTML` produces a marker span that htmlToLegacy
-                // strips. The node never survives to the saved payload,
-                // so this is purely defensive.
-                // ------------------------------------------------------------------
                 const ImageUploadPlaceholder = Node.create({
                     name: 'imageUploadPlaceholder',
                     group: 'block',
@@ -4246,7 +4657,7 @@ function getGroupClass(user) {
                             filename:     { default: '' },
                             filesize:     { default: 0 },
                             progress:     { default: 0 },
-                            status:       { default: 'idle' }, // 'idle' | 'uploading' | 'failed'
+                            status:       { default: 'idle' },
                             errorMessage: { default: '' },
                         };
                     },
@@ -4261,15 +4672,10 @@ function getGroupClass(user) {
                     },
                     addNodeView() {
                         return ({ node, editor, getPos }) => {
-                            // =====================================================
-                            // DOM scaffold — two sibling views, one for each
-                            // top-level state. render() toggles their display.
-                            // =====================================================
                             const dom = document.createElement('div');
                             dom.className = 'ff-upload-placeholder';
                             dom.setAttribute('contenteditable', 'false');
 
-                            // ---------- idle dropzone ----------
                             const dropzoneView = document.createElement('div');
                             dropzoneView.className = 'ff-upload-dropzone';
                             dropzoneView.innerHTML = ''
@@ -4281,7 +4687,6 @@ function getGroupClass(user) {
                                 + '</div>'
                                 + '<button type="button" class="ff-upload-btn is-danger ff-upload-dismiss-btn" aria-label="Remove"><i class="fa-regular fa-xmark" aria-hidden="true"></i></button>';
 
-                            // ---------- uploading / failed ----------
                             const progressView = document.createElement('div');
                             progressView.className = 'ff-upload-progress';
                             progressView.innerHTML = ''
@@ -4300,7 +4705,6 @@ function getGroupClass(user) {
                             dom.appendChild(dropzoneView);
                             dom.appendChild(progressView);
 
-                            // ---------- element refs ----------
                             const dismissBtn = dropzoneView.querySelector('.ff-upload-dismiss-btn');
                             const urlBtn     = dropzoneView.querySelector('.ff-upload-by-url');
 
@@ -4314,9 +4718,6 @@ function getGroupClass(user) {
 
                             let currentXhr = null;
 
-                            // =====================================================
-                            // Helpers
-                            // =====================================================
                             function findSelf() {
                                 const pos = getPos();
                                 if (typeof pos !== 'number') return null;
@@ -4353,14 +4754,6 @@ function getGroupClass(user) {
                                     _uploadRegistry.delete(located.node.attrs.uploadId);
                                 }
 
-                                // The image is now an inline node (v18+), so it belongs inside a
-                                // paragraph. Build that paragraph here rather than letting
-                                // ProseMirror wrap the inline content implicitly — implicit
-                                // wrapping has no opinion about what happens to the empty
-                                // paragraphs around the block placeholder, and the resulting
-                                // structure has several "start of line" positions competing for
-                                // the caret. Building the paragraph explicitly gives us a single
-                                // clean target for the selection.
                                 const imageNode = editor.schema.nodes.image.create(imageAttrs);
                                 const paragraph = editor.schema.nodes.paragraph.create(null, imageNode);
 
@@ -4370,13 +4763,6 @@ function getGroupClass(user) {
                                     paragraph
                                 );
 
-                                // Collapse any empty paragraphs immediately before the new one.
-                                // The idle-placeholder flow tends to leave one or two behind
-                                // (from the original textblock split, and from
-                                // TrailingEmbedParagraph having fired on the placeholder before
-                                // the replacement). They serve no purpose once the image is in
-                                // place and they produce the phantom caret positions above the
-                                // image that were the visible symptom.
                                 let newPos = located.pos;
                                 while (newPos > 0) {
                                     const prev = tr.doc.resolve(newPos).nodeBefore;
@@ -4388,11 +4774,6 @@ function getGroupClass(user) {
                                     }
                                 }
 
-                                // Set the caret inside the new paragraph, right after the image.
-                                // Paragraph content starts at newPos + 1; the image is a leaf with
-                                // nodeSize 1, so the position immediately after it is newPos + 2.
-                                // TextSelection.create is used (not .near) so the position is
-                                // exact — .near can drift toward adjacent paragraphs.
                                 const afterImage = newPos + 2;
                                 tr.setSelection(TextSelection.create(tr.doc, afterImage));
 
@@ -4490,11 +4871,6 @@ function getGroupClass(user) {
 
                             function handleFileChosen(file) {
                                 if (file.size > MAX_UPLOAD_BYTES) {
-                                    // Reject before touching the registry or the XHR. The
-                                    // placeholder flips to a failed state with a clear message;
-                                    // the retry button is hidden because there's nothing to
-                                    // retry — the file simply can't be accepted. The user
-                                    // dismisses with the trash icon and tries a smaller one.
                                     patchAttrs({
                                         status: 'failed',
                                         filename: file.name || 'image',
@@ -4527,9 +4903,6 @@ function getGroupClass(user) {
                                 input.click();
                             }
 
-                            // =====================================================
-                            // Dropzone interactions
-                            // =====================================================
                             dropzoneView.addEventListener('click', function(e) {
                                 if (e.target.closest('.ff-upload-by-url')) return;
                                 if (e.target.closest('.ff-upload-dismiss-btn')) return;
@@ -4596,9 +4969,6 @@ function getGroupClass(user) {
                                 handleFileChosen(file);
                             });
 
-                            // =====================================================
-                            // Progress interactions
-                            // =====================================================
                             cancelBtn.addEventListener('click', function(e) {
                                 e.preventDefault();
                                 e.stopPropagation();
@@ -4620,9 +4990,6 @@ function getGroupClass(user) {
                                 startUpload();
                             });
 
-                            // =====================================================
-                            // Initial render + optional upload
-                            // =====================================================
                             render(node);
                             if (node.attrs.status === 'uploading') {
                                 startUpload();
@@ -4737,159 +5104,6 @@ function getGroupClass(user) {
                         ];
                     }
                 });
-
-                function parseYouTubeUrl(url) {
-                    if (!url || typeof url !== 'string') return null;
-                    const m = url.match(/(?:youtube\.com\/(?:watch\?(?:.*&)?v=|embed\/|shorts\/)|youtu\.be\/)([A-Za-z0-9_-]{6,})/);
-                    if (!m) return null;
-                    const videoid = m[1];
-
-                    let start = null;
-                    let end = null;
-
-                    const qIndex = url.indexOf('?');
-                    if (qIndex >= 0) {
-                        const hashIndex = url.indexOf('#', qIndex);
-                        const queryStr = url.slice(qIndex + 1, hashIndex >= 0 ? hashIndex : undefined);
-                        try {
-                            const params = new URLSearchParams(queryStr);
-                            const t = params.get('t') || params.get('start');
-                            if (t) {
-                                const parsed = parseTimeString(t);
-                                if (parsed != null) start = parsed;
-                            }
-                            const e = params.get('end');
-                            if (e) {
-                                const parsed = parseInt(e, 10);
-                                if (!isNaN(parsed) && parsed > 0) end = parsed;
-                            }
-                        } catch (err) { }
-                    }
-
-                    return { videoid, start, end };
-                }
-                function parseVimeoUrl(url) {
-                    if (!url || typeof url !== 'string') return null;
-                    const m = url.match(/vimeo\.com\/(?:[^\/\s]+\/)*?(\d+)/);
-                    if (!m) return null;
-                    const videoid = m[1];
-
-                    let start = null;
-
-                    try {
-                        const hashIndex = url.indexOf('#');
-                        if (hashIndex >= 0) {
-                            const frag = url.slice(hashIndex + 1);
-                            const fragMatch = frag.match(/^t=(.+)$/);
-                            if (fragMatch) {
-                                const parsed = parseTimeString(fragMatch[1]);
-                                if (parsed != null) start = parsed;
-                            }
-                        }
-                        if (start == null) {
-                            const qIndex = url.indexOf('?');
-                            if (qIndex >= 0) {
-                                const hashIndex2 = url.indexOf('#', qIndex);
-                                const queryStr = url.slice(qIndex + 1, hashIndex2 >= 0 ? hashIndex2 : undefined);
-                                const params = new URLSearchParams(queryStr);
-                                const t = params.get('t');
-                                if (t) {
-                                    const parsed = parseTimeString(t);
-                                    if (parsed != null) start = parsed;
-                                }
-                            }
-                        }
-                    } catch (err) { }
-
-                    return { videoid, start };
-                }
-
-                    function parseLegacyIframeProvider(src) {
-        if (!src) return null;
-
-        let m = src.match(/(?:youtube(?:-nocookie)?\.com\/(?:embed\/|v\/)|youtu\.be\/)([A-Za-z0-9_-]{6,})/);
-        if (m) {
-            const result = { kind: 'youtube', videoid: m[1], start: null, end: null };
-            try {
-                const qIndex = src.indexOf('?');
-                if (qIndex >= 0) {
-                    const hashIndex = src.indexOf('#', qIndex);
-                    const queryStr = src.slice(qIndex + 1, hashIndex >= 0 ? hashIndex : undefined);
-                    const params = new URLSearchParams(queryStr);
-                    const start = params.get('start');
-                    const end   = params.get('end');
-                    if (start) {
-                        const parsed = parseTimeString(start);
-                        if (parsed != null) result.start = parsed;
-                    }
-                    if (end) {
-                        const parsed = parseInt(end, 10);
-                        if (!isNaN(parsed) && parsed > 0) result.end = parsed;
-                    }
-                }
-            } catch (e) {}
-            return result;
-        }
-
-        m = src.match(/player\.vimeo\.com\/video\/(\d+)/);
-        if (m) {
-            const result = { kind: 'vimeo', videoid: m[1], start: null };
-            try {
-                const hashIndex = src.indexOf('#');
-                if (hashIndex >= 0) {
-                    const frag = src.slice(hashIndex + 1);
-                    const fragMatch = frag.match(/^t=(.+)$/);
-                    if (fragMatch) {
-                        const parsed = parseTimeString(fragMatch[1]);
-                        if (parsed != null) result.start = parsed;
-                    }
-                }
-            } catch (e) {}
-            return result;
-        }
-
-        return null;
-    }
-
-    function transformLegacyIframes(htmlContent) {
-        if (!htmlContent || typeof htmlContent !== 'string') return htmlContent;
-        if (htmlContent.indexOf('<iframe') === -1) return htmlContent;
-
-        const tempDiv = document.createElement('div');
-        tempDiv.innerHTML = htmlContent;
-
-        const iframes = tempDiv.querySelectorAll('iframe[src]');
-        iframes.forEach(iframe => {
-            const src = iframe.getAttribute('src') || '';
-            const parsed = parseLegacyIframeProvider(src);
-            if (!parsed) return; // Non-media iframe — leave as-is
-
-            const wrapper = document.createElement('div');
-            wrapper.className = 'lite-embed-wrapper';
-            wrapper.setAttribute('data-videoid', parsed.videoid);
-            if (parsed.start != null) wrapper.setAttribute('data-start', String(parsed.start));
-            if (parsed.end   != null) wrapper.setAttribute('data-end',   String(parsed.end));
-
-            const lite = document.createElement(
-                parsed.kind === 'youtube' ? 'lite-youtube' : 'lite-vimeo'
-            );
-            lite.setAttribute('videoid', parsed.videoid);
-            if (parsed.start != null) lite.setAttribute('start', String(parsed.start));
-            if (parsed.end   != null) lite.setAttribute('end',   String(parsed.end));
-            wrapper.appendChild(lite);
-
-            const parent = iframe.parentNode;
-            const target = (
-                parent && parent.tagName === 'DIV' &&
-                parent.getAttribute('align') === 'center' &&
-                parent.children.length === 1
-            ) ? parent : iframe;
-
-            target.parentNode.replaceChild(wrapper, target);
-        });
-
-        return tempDiv.innerHTML;
-    }
 
                 const LinkPreview = Node.create({
                     name: 'linkPreview',
@@ -5582,13 +5796,6 @@ function getGroupClass(user) {
                 const DeleteAdjacentAtom = Extension.create({
                     name: 'deleteAdjacentAtom',
                     addProseMirrorPlugins() {
-                        // Both name sets live at plugin-factory scope rather than
-                        // inside handleKeyDown. handleKeyDown fires on every Backspace
-                        // and Delete press; allocating a fresh Set on each of those
-                        // calls is wasteful and inconsistent with how
-                        // BLOCK_ATOM_NAMES is already handled. Closing over the sets
-                        // here also means a future addition to either list is a
-                        // single-line change.
                         const BLOCK_ATOM_NAMES = new Set([
                             'liteYouTube', 'liteVimeo', 'horizontalRule',
                             'imageUploadPlaceholder',
@@ -5613,17 +5820,6 @@ function getGroupClass(user) {
                                         const { state } = view;
                                         const { selection } = state;
 
-                                        // ---- Range selection --------------------------------
-                                        // If the user has highlighted a range spanning an
-                                        // inline atom, delete it ourselves rather than
-                                        // letting the browser's native contenteditable
-                                        // delete run. The native path on
-                                        // contenteditable="false" atoms is inconsistent
-                                        // across engines — it can leave the atom in the
-                                        // DOM while removing siblings, and ProseMirror's
-                                        // observer then re-syncs from the partially-
-                                        // mutated DOM, restoring the image as though
-                                        // nothing happened.
                                         if (!selection.empty) {
                                             let spansInlineAtom = false;
                                             state.doc.nodesBetween(selection.from, selection.to, (node) => {
@@ -5640,30 +5836,14 @@ function getGroupClass(user) {
                                             return false;
                                         }
 
-                                        // ---- NodeSelection on a block atom -------------------
-                                        // Clicking a lite embed produces a NodeSelection.
-                                        // TipTap 2.x does not install prosemirror-commands'
-                                        // baseKeymap, so nothing else is bound to consume
-                                        // it.
                                         if (selection instanceof NodeSelection) {
                                             view.dispatch(state.tr.delete(selection.from, selection.to));
                                             return true;
                                         }
 
-                                        // ---- Empty selection ---------------------------------
                                         const $from = selection.$from;
 
                                         if (key === 'Backspace') {
-                                            // Inline atom immediately before the cursor.
-                                            // This is the position the caret lands in
-                                            // after an image insert, and ProseMirror's
-                                            // default handling doesn't cover it — the
-                                            // only built-in path is selectNodeBackward,
-                                            // which fires exclusively at position 0 of
-                                            // a textblock. From the just-inserted
-                                            // position parentOffset > 0, so nothing in
-                                            // the default keymap responds and the user
-                                            // sees a no-op.
                                             if ($from.parentOffset > 0) {
                                                 const nodeBefore = $from.nodeBefore;
                                                 if (nodeBefore && INLINE_ATOM_NAMES.has(nodeBefore.type.name)) {
@@ -5674,7 +5854,6 @@ function getGroupClass(user) {
                                                 }
                                             }
 
-                                            // Block atom at the start of a textblock.
                                             if ($from.parentOffset !== 0) return false;
                                             if ($from.depth === 0) return false;
 
@@ -5689,9 +5868,6 @@ function getGroupClass(user) {
                                         }
 
                                         if (key === 'Delete') {
-                                            // Inline atom immediately after the cursor.
-                                            // Symmetric to the Backspace case above — same
-                                            // default-keymap gap.
                                             if ($from.parentOffset < $from.parent.content.size) {
                                                 const nodeAfter = $from.nodeAfter;
                                                 if (nodeAfter && INLINE_ATOM_NAMES.has(nodeAfter.type.name)) {
@@ -5702,7 +5878,6 @@ function getGroupClass(user) {
                                                 }
                                             }
 
-                                            // Block atom at the end of a textblock.
                                             if ($from.parentOffset !== $from.parent.content.size) return false;
 
                                             const blockEnd = $from.after($from.depth);
@@ -5750,12 +5925,6 @@ function getGroupClass(user) {
                     },
                 });
 
-                // Paints a ring around every atom the current range
-                // selection overlaps. The class names split by atom kind
-                // so the CSS can pick different radii / colors for
-                // embeds vs inline atoms if it wants to; today both
-                // resolve to the same focus ring, matching the existing
-                // reader-side treatment.
                 const BlockAtomSelection = Extension.create({
                     name: 'blockAtomSelection',
                     addProseMirrorPlugins() {
@@ -5796,8 +5965,13 @@ function getGroupClass(user) {
                     },
                 });
 
+                // Load initial content through the async pipeline so the
+                // iframe / bare-URL transforms run. Previously this used
+                // legacyToHtml (sync) which skipped the transforms — a quote
+                // containing a YouTube iframe would render as a raw iframe
+                // tag inside the blockquote, and the editor would drop it.
                 var textareaRaw = originalTextarea ? (originalTextarea.value || '') : '';
-                var initialHtml = textareaRaw ? legacyToHtml(textareaRaw) : '';
+                var initialHtml = textareaRaw ? await legacyToHtmlAsync(textareaRaw) : '';
 
                 if (!textareaRaw.trim()) {
                     var initDraft = getDraft(getCurrentDraftKey());
@@ -5903,9 +6077,7 @@ function getGroupClass(user) {
                                 }
                             }
 
-                            // 3. Shift+paste (plain text override — runs before
-                            // the image-URL branch so shift-pasting an image URL
-                            // still produces the URL as text)
+                            // 3. Shift+paste (plain text override)
                             if (event.shiftKey) {
                                 var text = event.clipboardData.getData('text/plain');
                                 if (text) {
@@ -5915,19 +6087,7 @@ function getGroupClass(user) {
                                 }
                             }
 
-                            // 4. Image URL paste. A pasted URL that points at
-                            // an image file is almost certainly meant to be
-                            // embedded rather than linked. If it were allowed to
-                            // fall through to the link preview pipeline, the OG
-                            // worker would fetch the URL, get binary image data
-                            // instead of HTML, extract nothing, and return a
-                            // card whose only content is a favicon — which is
-                            // not what the user wanted. Detect image URLs here
-                            // and insert an image node directly. The inserted
-                            // node has no explicit width/height; the browser
-                            // lays it out from the image's natural dimensions
-                            // once loaded, and the CSS max-width rules keep it
-                            // inside the paragraph.
+                            // 4. Image URL paste
                             if (view.state.selection.empty) {
                                 var imageUrlText = event.clipboardData
                                     ? event.clipboardData.getData('text/plain')
@@ -5937,14 +6097,6 @@ function getGroupClass(user) {
                                     if (/^https?:\/\/\S+$/.test(imageUrl) && isImageUrl(imageUrl)) {
                                         event.preventDefault();
 
-                                        // Resolve natural dimensions before inserting. Without
-                                        // width/height the reader-side post renders the image
-                                        // at zero height, then jumps to its real size once it
-                                        // decodes — a CLS spike that the resize reservation
-                                        // would otherwise prevent. Same pattern the URL-modal
-                                        // path uses. If the fetch fails, fall through with the
-                                        // image inserted sans dimensions; better to show it at
-                                        // whatever size the browser lays out than to drop it.
                                         var img = new Image();
                                         img.onload = function () {
                                             editor.chain().focus().insertContent({
@@ -6034,16 +6186,6 @@ function getGroupClass(user) {
                         },
                     },
                     onCreate: function({ editor }) {
-                        // The appendTransaction hook on TrailingEmbedParagraph does not
-                        // fire on the initial setContent — ProseMirror builds the starting
-                        // state directly via EditorState.create(), bypassing the
-                        // transaction pipeline entirely. So when the editor is
-                        // constructed with content that ends in a block atom (an image
-                        // restored from a draft, or from a saved textarea value), there
-                        // is no paragraph after it and the caret collapses to position 0
-                        // — visually to the left of the image, with no valid slot to the
-                        // right. Insert the paragraph here, once, before anything else
-                        // touches the doc.
                         (function ensureTrailingParagraph() {
                             var doc = editor.state.doc;
                             var last = doc.lastChild;
@@ -6089,10 +6231,6 @@ function getGroupClass(user) {
                     }
                 });
 
-                // Store the instance at module scope so reset() can
-                // call destroy() on it. Without this the editor keeps
-                // its own listeners and ProseMirror plugins alive after
-                // the messenger section is torn down.
                 _editorInstance = editor;
 
                 modernSubmitBtnRef = container.querySelector('#modern-submit');
@@ -6193,10 +6331,6 @@ function getGroupClass(user) {
                     });
                 };
 
-                // v17: image button inserts an idle upload placeholder.
-                // The placeholder's own dropzone carries the file picker,
-                // the drag-and-drop target, and the "insert by URL" link,
-                // so this handler only needs to drop the node in place.
                 imageBtn.onclick = function() {
                     if (!editor) return;
                     editor.chain().focus().insertContent({
@@ -6544,8 +6678,6 @@ function getGroupClass(user) {
                             img.loading = 'lazy';
                             img.decoding = 'async';
                             avatarEl.innerHTML = '';
-                            // Clear the hash color so transparent pixels in
-                            // the image don't show the initial's background.
                             avatarEl.style.backgroundColor = '';
                             avatarEl.appendChild(img);
                             if (result.group) {
@@ -6705,9 +6837,6 @@ function getGroupClass(user) {
             var updateContactsBtn = container.querySelector('#update-contacts');
             if (updateContactsBtn && updateButton) {
                 updateContactsBtn.addEventListener('click', function() {
-                    // The chip inputs already keep their hidden textareas
-                    // in sync on every add/remove, so only the privacy
-                    // radio needs an explicit copy across.
                     var checkedPrivacy = container.querySelector('input[name="privacy"]:checked');
                     if (privacySelect && checkedPrivacy) privacySelect.value = checkedPrivacy.value;
                     updateButton.click();
