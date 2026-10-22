@@ -223,7 +223,7 @@ var EditorModule = (function (Utils, EventBus) {
         return { videoid: videoid, start: start };
     }
 
-       function parseLegacyIframeProvider(src) {
+    function parseLegacyIframeProvider(src) {
         if (!src) return null;
 
         let m = src.match(/(?:youtube(?:-nocookie)?\.com\/(?:embed\/|v\/)|youtu\.be\/)([A-Za-z0-9_-]{6,})/);
@@ -305,6 +305,88 @@ var EditorModule = (function (Utils, EventBus) {
             ) ? parent : iframe;
 
             target.parentNode.replaceChild(wrapper, target);
+        });
+
+        return tempDiv.innerHTML;
+    }
+
+    function isYouTubeHostname(url) {
+        try {
+            var h = new URL(url).hostname.toLowerCase();
+            return h === 'youtube.com' || h === 'www.youtube.com' ||
+                   h === 'm.youtube.com' || h === 'youtu.be';
+        } catch (e) { return false; }
+    }
+
+    function isVimeoHostname(url) {
+        try {
+            var h = new URL(url).hostname.toLowerCase();
+            return h === 'vimeo.com' || h === 'www.vimeo.com';
+        } catch (e) { return false; }
+    }
+
+    // A paragraph whose entire text content is a bare YouTube/Vimeo URL
+    // is a video embed in disguise — the forum stored the URL as BBCode
+    // text and relied on its own renderer to autoplay the iframe. Once
+    // the content flows through TipTap (quoting a post, opening the
+    // editor with a URL-only quote, etc.), the URL just becomes a plain
+    // link. Convert those standalone paragraphs to lite-embed wrappers
+    // so the user sees the same facade they see in the post.
+    //
+    // Only paragraphs whose textContent is EXACTLY a single URL qualify.
+    // "Check out https://youtube.com/…" is left alone. Nor does this
+    // touch inline links, images, or any other element — it only
+    // matches <p>…</p> whose entire trimmed text is a URL with a
+    // recognized hostname.
+    function transformBareVideoUrls(html) {
+        if (!html || typeof html !== 'string') return html;
+        if (html.indexOf('http') === -1) return html;
+
+        var tempDiv = document.createElement('div');
+        tempDiv.innerHTML = html;
+
+        var paragraphs = tempDiv.querySelectorAll('p');
+        paragraphs.forEach(function (p) {
+            var text = (p.textContent || '').trim();
+            // Must be exactly one URL — no surrounding prose
+            if (!/^https?:\/\/\S+$/.test(text)) return;
+
+            if (isYouTubeHostname(text)) {
+                var yt = parseYouTubeUrl(text);
+                if (!yt || !yt.videoid) return;
+
+                var wrapper = document.createElement('div');
+                wrapper.className = 'lite-embed-wrapper';
+                wrapper.setAttribute('data-videoid', yt.videoid);
+                if (yt.start != null) wrapper.setAttribute('data-start', String(yt.start));
+                if (yt.end   != null) wrapper.setAttribute('data-end',   String(yt.end));
+
+                var lite = document.createElement('lite-youtube');
+                lite.setAttribute('videoid', yt.videoid);
+                if (yt.start != null) lite.setAttribute('start', String(yt.start));
+                if (yt.end   != null) lite.setAttribute('end',   String(yt.end));
+                wrapper.appendChild(lite);
+
+                p.parentNode.replaceChild(wrapper, p);
+                return;
+            }
+
+            if (isVimeoHostname(text)) {
+                var vm = parseVimeoUrl(text);
+                if (!vm || !vm.videoid) return;
+
+                var wrapper = document.createElement('div');
+                wrapper.className = 'lite-embed-wrapper';
+                wrapper.setAttribute('data-videoid', vm.videoid);
+                if (vm.start != null) wrapper.setAttribute('data-start', String(vm.start));
+
+                var lite = document.createElement('lite-vimeo');
+                lite.setAttribute('videoid', vm.videoid);
+                if (vm.start != null) lite.setAttribute('start', String(vm.start));
+                wrapper.appendChild(lite);
+
+                p.parentNode.replaceChild(wrapper, p);
+            }
         });
 
         return tempDiv.innerHTML;
@@ -617,7 +699,7 @@ var EditorModule = (function (Utils, EventBus) {
             return html;
         }
     }
-   
+
     function legacyToHtml(legacy) {
         if (!legacy) return '';
         var html = legacy;
@@ -746,38 +828,10 @@ var EditorModule = (function (Utils, EventBus) {
         }
 
         var html = legacyToHtml(expanded);
-        
-        // Convert double <br> tags into proper <p> paragraphs
+        html = transformLegacyIframes(html);
         html = paragraphizeLegacyHtml(html);
+        html = transformBareVideoUrls(html);
         
-        return await enrichImageDimensions(html);
-    }
-
-       async function legacyToHtmlAsync(legacy) {
-        if (!legacy) return '';
-
-        var expanded = legacy.replace(/\[IMG=([^\]]+)\]([^\[]+?)\[\/IMG\]/gi, function (_, altText, url) {
-            var safeAlt = escapeHtml(altText.trim());
-            return '<img src="' + url.trim() + '" alt="' + safeAlt + '" loading="lazy" decoding="async">';
-        });
-
-        if (!/<br\s*\/?>/i.test(expanded) && /\n/.test(expanded)) {
-            var codeBlocks = [];
-            expanded = expanded.replace(/\[code\]([\s\S]*?)\[\/code\]/gi, function(match) {
-                var id = '\uE000CODE' + codeBlocks.length + 'Z\uE001';
-                codeBlocks.push(match);
-                return id;
-            });
-            expanded = expanded.replace(/\r\n/g, '\n').replace(/\n/g, '<br>');
-            expanded = expanded.replace(/\uE000CODE(\d+)Z\uE001/g, function(m, idx) {
-                return codeBlocks[parseInt(idx, 10)];
-            });
-        }
-
-        var html = legacyToHtml(expanded);
-        html = transformLegacyIframes(html);      // <-- ADD THIS LINE
-        html = paragraphizeLegacyHtml(html);
-
         return await enrichImageDimensions(html);
     }
 
