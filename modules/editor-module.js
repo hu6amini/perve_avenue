@@ -1956,7 +1956,7 @@ var EditorModule = (function (Utils, EventBus) {
         blockquoteBtn.onclick = function () { exec(function () { editorRef.current.chain().focus().toggleBlockquote().run(); }); };
 
         // ---- Node definitions ----
-        const CustomBlockquote = Blockquote.extend({
+                const CustomBlockquote = Blockquote.extend({
             addAttributes() {
                 return {
                     author: {
@@ -1965,6 +1965,24 @@ var EditorModule = (function (Utils, EventBus) {
                         renderHTML: attrs => attrs.author ? { 'data-author': attrs.author } : {},
                     }
                 };
+            },
+            renderHTML({ HTMLAttributes, node }) {
+                const hasAuthor = !!node.attrs.author;
+                
+                const headerHtml = hasAuthor ? [
+                    'p', 
+                    { class: 'quote-author-header' }, 
+                    ['i', { class: 'fa-regular fa-quote-left', style: 'margin-right: 6px; color: var(--primary-color);' }],
+                    ['strong', {}, node.attrs.author],
+                    ['span', { class: 'quote-said' }, ' said:']
+                ] : '';
+
+                return [
+                    'blockquote', 
+                    Object.assign({}, HTMLAttributes, { class: hasAuthor ? 'has-author' : '' }), 
+                    headerHtml,
+                    0
+                ];
             }
         });
 
