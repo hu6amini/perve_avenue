@@ -754,20 +754,20 @@ var EditorModule = (function (Utils, EventBus) {
 
             // Read from data-author
             result = result.replace(/<blockquote([^>]*)>([\s\S]*?)<\/blockquote>/gi, function(match, attrs, inner) {
-    // Remove the injected author header paragraph (added by CustomBlockquote)
-    inner = inner.replace(/<p class="quote-author-header">[\s\S]*?<\/p>/gi, '');
+                // Remove the injected author header paragraph (added by CustomBlockquote)
+                inner = inner.replace(/<p class="quote-author-header">[\s\S]*?<\/p>/gi, '');
 
-    var cleaned = inner.replace(/<p[^>]*>/gi, '').replace(/<\/p>\s*/gi, '\n');
-    cleaned = cleaned.replace(/\n+$/, '');
+                var cleaned = inner.replace(/<p[^>]*>/gi, '').replace(/<\/p>\s*/gi, '\n');
+                cleaned = cleaned.replace(/\n+$/, '');
 
-    var authorMatch = attrs.match(/data-author="([^"]*)"/);
-    if (authorMatch) {
-        var author = decodeHtmlEntities(authorMatch[1]);
-        return '[QUOTE=' + author + ']' + cleaned + '[/QUOTE]';
-    }
+                var authorMatch = attrs.match(/data-author="([^"]*)"/);
+                if (authorMatch) {
+                    var author = decodeHtmlEntities(authorMatch[1]);
+                    return '[QUOTE=' + author + ']' + cleaned + '[/QUOTE]';
+                }
 
-    return '[QUOTE]' + cleaned + '[/QUOTE]';
-});
+                return '[QUOTE]' + cleaned + '[/QUOTE]';
+            });
 
             result = result.replace(/<div\b([^>]*\bclass="[^"]*\bspoiler\b[^"]*"[^>]*)>([\s\S]*?)<\/div>/gi, function (_, attrs, inner) {
                 var cleaned = inner.replace(/<p[^>]*>/gi, '').replace(/<\/p>\s*/gi, '\n').replace(/\n+$/, '');
@@ -835,16 +835,16 @@ var EditorModule = (function (Utils, EventBus) {
         temp.innerHTML = html;
 
         Array.from(temp.querySelectorAll('blockquote')).forEach(function (bq) {
-    var author = bq.getAttribute('data-author');
+            var author = bq.getAttribute('data-author');
 
-    // Strip the injected header paragraph (added by CustomBlockquote)
-    var headerPara = bq.querySelector('.quote-author-header');
-    if (headerPara) headerPara.remove();
+            // Strip the injected header paragraph (added by CustomBlockquote)
+            var headerPara = bq.querySelector('.quote-author-header');
+            if (headerPara) headerPara.remove();
 
-    var innerHtml = bq.innerHTML;
-    var quoteAuthorHtml = author
-        ? '<span class="quote-author">' + escapeHtml(author) + ' <span class="quote-said">said:</span></span>'
-        : '<span class="quote-author">Quote</span>';
+            var innerHtml = bq.innerHTML;
+            var quoteAuthorHtml = author
+                ? '<span class="quote-author">' + escapeHtml(author) + ' <span class="quote-said">said:</span></span>'
+                : '<span class="quote-author">Quote</span>';
 
             var modernHtml =
                 '<div class="modern-quote long-quote">' +
@@ -1372,6 +1372,11 @@ var EditorModule = (function (Utils, EventBus) {
         const typo = await import('https://esm.sh/@tiptap/extension-typography@2.5.2');
         const bq = await import('https://esm.sh/@tiptap/extension-blockquote@2.5.2');
 
+        const BlockquoteClass = bq.Blockquote
+            || (bq.default && bq.default.Blockquote)
+            || bq.default
+            || bq;
+
         return {
             Editor, Node, Mark, Extension, InputRule,
             Plugin, PluginKey, TextSelection, NodeSelection,
@@ -1387,7 +1392,7 @@ var EditorModule = (function (Utils, EventBus) {
             common: lh.common,
             CharacterCount: ccl.CharacterCount || (ccl.default && ccl.default.CharacterCount),
             Typography: typo.Typography || (typo.default && typo.default.Typography),
-            Blockquote: bq.Blockquote || (bq.default && bq.default.Blockquote)
+            Blockquote: BlockquoteClass
         };
     }
 
@@ -1963,34 +1968,16 @@ var EditorModule = (function (Utils, EventBus) {
         blockquoteBtn.onclick = function () { exec(function () { editorRef.current.chain().focus().toggleBlockquote().run(); }); };
 
         // ---- Node definitions ----
-                const CustomBlockquote = Blockquote.extend({
+        const CustomBlockquote = Blockquote.extend({
             addAttributes() {
                 return {
                     author: {
                         default: null,
                         parseHTML: el => el.getAttribute('data-author') || null,
                         renderHTML: attrs => attrs.author ? { 'data-author': attrs.author } : {},
-                    }
+                    },
                 };
             },
-            renderHTML({ HTMLAttributes, node }) {
-                const hasAuthor = !!node.attrs.author;
-                
-                const headerHtml = hasAuthor ? [
-                    'p', 
-                    { class: 'quote-author-header' }, 
-                    ['i', { class: 'fa-regular fa-quote-left', style: 'margin-right: 6px; color: var(--primary-color);' }],
-                    ['strong', {}, node.attrs.author],
-                    ['span', { class: 'quote-said' }, ' said:']
-                ] : '';
-
-                return [
-                    'blockquote', 
-                    Object.assign({}, HTMLAttributes, { class: hasAuthor ? 'has-author' : '' }), 
-                    headerHtml,
-                    0
-                ];
-            }
         });
 
         const ImageUploadPlaceholder = Node.create({
