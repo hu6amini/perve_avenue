@@ -223,6 +223,93 @@ var EditorModule = (function (Utils, EventBus) {
         return { videoid: videoid, start: start };
     }
 
+       function parseLegacyIframeProvider(src) {
+        if (!src) return null;
+
+        let m = src.match(/(?:youtube(?:-nocookie)?\.com\/(?:embed\/|v\/)|youtu\.be\/)([A-Za-z0-9_-]{6,})/);
+        if (m) {
+            const result = { kind: 'youtube', videoid: m[1], start: null, end: null };
+            try {
+                const qIndex = src.indexOf('?');
+                if (qIndex >= 0) {
+                    const hashIndex = src.indexOf('#', qIndex);
+                    const queryStr = src.slice(qIndex + 1, hashIndex >= 0 ? hashIndex : undefined);
+                    const params = new URLSearchParams(queryStr);
+                    const start = params.get('start');
+                    const end   = params.get('end');
+                    if (start) {
+                        const parsed = parseTimeString(start);
+                        if (parsed != null) result.start = parsed;
+                    }
+                    if (end) {
+                        const parsed = parseInt(end, 10);
+                        if (!isNaN(parsed) && parsed > 0) result.end = parsed;
+                    }
+                }
+            } catch (e) {}
+            return result;
+        }
+
+        m = src.match(/player\.vimeo\.com\/video\/(\d+)/);
+        if (m) {
+            const result = { kind: 'vimeo', videoid: m[1], start: null };
+            try {
+                const hashIndex = src.indexOf('#');
+                if (hashIndex >= 0) {
+                    const frag = src.slice(hashIndex + 1);
+                    const fragMatch = frag.match(/^t=(.+)$/);
+                    if (fragMatch) {
+                        const parsed = parseTimeString(fragMatch[1]);
+                        if (parsed != null) result.start = parsed;
+                    }
+                }
+            } catch (e) {}
+            return result;
+        }
+
+        return null;
+    }
+
+    function transformLegacyIframes(htmlContent) {
+        if (!htmlContent || typeof htmlContent !== 'string') return htmlContent;
+        if (htmlContent.indexOf('<iframe') === -1) return htmlContent;
+
+        const tempDiv = document.createElement('div');
+        tempDiv.innerHTML = htmlContent;
+
+        const iframes = tempDiv.querySelectorAll('iframe[src]');
+        iframes.forEach(iframe => {
+            const src = iframe.getAttribute('src') || '';
+            const parsed = parseLegacyIframeProvider(src);
+            if (!parsed) return; // Non-media iframe — leave as-is
+
+            const wrapper = document.createElement('div');
+            wrapper.className = 'lite-embed-wrapper';
+            wrapper.setAttribute('data-videoid', parsed.videoid);
+            if (parsed.start != null) wrapper.setAttribute('data-start', String(parsed.start));
+            if (parsed.end   != null) wrapper.setAttribute('data-end',   String(parsed.end));
+
+            const lite = document.createElement(
+                parsed.kind === 'youtube' ? 'lite-youtube' : 'lite-vimeo'
+            );
+            lite.setAttribute('videoid', parsed.videoid);
+            if (parsed.start != null) lite.setAttribute('start', String(parsed.start));
+            if (parsed.end   != null) lite.setAttribute('end',   String(parsed.end));
+            wrapper.appendChild(lite);
+
+            const parent = iframe.parentNode;
+            const target = (
+                parent && parent.tagName === 'DIV' &&
+                parent.getAttribute('align') === 'center' &&
+                parent.children.length === 1
+            ) ? parent : iframe;
+
+            target.parentNode.replaceChild(wrapper, target);
+        });
+
+        return tempDiv.innerHTML;
+    }
+
     // ========================================================================
     // MENTION SEARCH
     // ========================================================================
@@ -663,6 +750,34 @@ var EditorModule = (function (Utils, EventBus) {
         // Convert double <br> tags into proper <p> paragraphs
         html = paragraphizeLegacyHtml(html);
         
+        return await enrichImageDimensions(html);
+    }
+
+       async function legacyToHtmlAsync(legacy) {
+        if (!legacy) return '';
+
+        var expanded = legacy.replace(/\[IMG=([^\]]+)\]([^\[]+?)\[\/IMG\]/gi, function (_, altText, url) {
+            var safeAlt = escapeHtml(altText.trim());
+            return '<img src="' + url.trim() + '" alt="' + safeAlt + '" loading="lazy" decoding="async">';
+        });
+
+        if (!/<br\s*\/?>/i.test(expanded) && /\n/.test(expanded)) {
+            var codeBlocks = [];
+            expanded = expanded.replace(/\[code\]([\s\S]*?)\[\/code\]/gi, function(match) {
+                var id = '\uE000CODE' + codeBlocks.length + 'Z\uE001';
+                codeBlocks.push(match);
+                return id;
+            });
+            expanded = expanded.replace(/\r\n/g, '\n').replace(/\n/g, '<br>');
+            expanded = expanded.replace(/\uE000CODE(\d+)Z\uE001/g, function(m, idx) {
+                return codeBlocks[parseInt(idx, 10)];
+            });
+        }
+
+        var html = legacyToHtml(expanded);
+        html = transformLegacyIframes(html);      // <-- ADD THIS LINE
+        html = paragraphizeLegacyHtml(html);
+
         return await enrichImageDimensions(html);
     }
 
