@@ -4360,6 +4360,36 @@ section.modern-stats { flex-direction: column; width: 100%; }
     content: attr(data-author) " said:";
 }
 
+/* Hide the default pseudo-elements when a real author header is present */
+.modern-wysiwyg .ProseMirror blockquote.has-author {
+    padding-top: var(--pad-5); /* Reset the 3.75rem top padding */
+}
+.modern-wysiwyg .ProseMirror blockquote.has-author::before,
+.modern-wysiwyg .ProseMirror blockquote.has-author::after {
+    display: none;
+}
+
+/* Style the injected author header to match the reader exactly */
+.modern-wysiwyg .ProseMirror blockquote.has-author .quote-author-header {
+    margin-top: 0;
+    margin-bottom: var(--space-sm);
+    font-size: var(--text-sm);
+    border-bottom: 1px solid var(--border-color);
+    padding-bottom: var(--space-xs);
+    display: flex;
+    align-items: center;
+}
+
+.modern-wysiwyg .ProseMirror blockquote.has-author .quote-author-header strong {
+    font-weight: 600;
+    color: var(--text-primary);
+}
+
+.modern-wysiwyg .ProseMirror blockquote.has-author .quote-author-header .quote-said {
+    font-weight: 400;
+    color: var(--text-secondary);
+}
+
 .modern-wysiwyg .ProseMirror blockquote p:first-child {
     margin-top: 0;
 }
