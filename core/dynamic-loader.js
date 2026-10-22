@@ -291,5 +291,5 @@ async function bootSystem() {
     }
 }
 
-// Start the boot process
+// Start the boot process.
 bootSystem();
