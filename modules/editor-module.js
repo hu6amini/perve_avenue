@@ -754,17 +754,20 @@ var EditorModule = (function (Utils, EventBus) {
 
             // Read from data-author
             result = result.replace(/<blockquote([^>]*)>([\s\S]*?)<\/blockquote>/gi, function(match, attrs, inner) {
-                var cleaned = inner.replace(/<p[^>]*>/gi, '').replace(/<\/p>\s*/gi, '\n');
-                cleaned = cleaned.replace(/\n+$/, '');
-                
-                var authorMatch = attrs.match(/data-author="([^"]*)"/);
-                if (authorMatch) {
-                    var author = decodeHtmlEntities(authorMatch[1]);
-                    return '[QUOTE=' + author + ']' + cleaned + '[/QUOTE]';
-                }
-                
-                return '[QUOTE]' + cleaned + '[/QUOTE]';
-            });
+    // Remove the injected author header paragraph (added by CustomBlockquote)
+    inner = inner.replace(/<p class="quote-author-header">[\s\S]*?<\/p>/gi, '');
+
+    var cleaned = inner.replace(/<p[^>]*>/gi, '').replace(/<\/p>\s*/gi, '\n');
+    cleaned = cleaned.replace(/\n+$/, '');
+
+    var authorMatch = attrs.match(/data-author="([^"]*)"/);
+    if (authorMatch) {
+        var author = decodeHtmlEntities(authorMatch[1]);
+        return '[QUOTE=' + author + ']' + cleaned + '[/QUOTE]';
+    }
+
+    return '[QUOTE]' + cleaned + '[/QUOTE]';
+});
 
             result = result.replace(/<div\b([^>]*\bclass="[^"]*\bspoiler\b[^"]*"[^>]*)>([\s\S]*?)<\/div>/gi, function (_, attrs, inner) {
                 var cleaned = inner.replace(/<p[^>]*>/gi, '').replace(/<\/p>\s*/gi, '\n').replace(/\n+$/, '');
@@ -832,12 +835,16 @@ var EditorModule = (function (Utils, EventBus) {
         temp.innerHTML = html;
 
         Array.from(temp.querySelectorAll('blockquote')).forEach(function (bq) {
-            var innerHtml = bq.innerHTML;
-            var author = bq.getAttribute('data-author');
-            
-            var quoteAuthorHtml = author
-                ? '<span class="quote-author">' + escapeHtml(author) + ' <span class="quote-said">said:</span></span>'
-                : '<span class="quote-author">Quote</span>';
+    var author = bq.getAttribute('data-author');
+
+    // Strip the injected header paragraph (added by CustomBlockquote)
+    var headerPara = bq.querySelector('.quote-author-header');
+    if (headerPara) headerPara.remove();
+
+    var innerHtml = bq.innerHTML;
+    var quoteAuthorHtml = author
+        ? '<span class="quote-author">' + escapeHtml(author) + ' <span class="quote-said">said:</span></span>'
+        : '<span class="quote-author">Quote</span>';
 
             var modernHtml =
                 '<div class="modern-quote long-quote">' +
