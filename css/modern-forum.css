@@ -5732,15 +5732,6 @@ body#topic #fastreply {
 .modern-replying-as.group-member .modern-replying-avatar,
 .modern-replying-as.group-member .modern-replying-avatar--initial { border-color: var(--primary-color) !important; }
 
-/* ------------------------------------------------------------------
-   Hide the legacy editor shells. EditorModule no longer sets
-   display: none in JS — these rules are the sole mechanism.
-   ------------------------------------------------------------------ */
-body#topic .fast.send,
-body#send .send {
-  display: none !important;
-}
-
 /* Inside fastedit: hide everything except our modern container.
    The forum stylesheet gives input[type=button], textarea and the
    toolbar div their own display values, so !important is required. */
@@ -5748,13 +5739,12 @@ body#topic .post .fastedit > :not(.modern-editor-container--fastedit) {
   display: none !important;
 }
 
-/* ------------------------------------------------------------------
-   Fast edit active state — while the modern editor is open for a
-   given post, the corresponding modern card is hidden (editor takes
-   its visual place). Restored on cancel; rebuilt via reconversion
-   on successful save.
-   ------------------------------------------------------------------ */
-.post-card.is-being-edited {
+/* While the modern editor is open in a post's slot, hide the card it
+   replaces. In the primary path the card is the modern .post-card.
+   In the rare fallback where posts.js didn't convert (no modern card
+   exists), the legacy .post element carries the class instead. */
+.post-card.is-being-edited,
+.post.is-being-edited {
   display: none;
 }
 
