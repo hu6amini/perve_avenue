@@ -34,8 +34,6 @@ var EditorModule = (function (Utils, EventBus) {
             'pbs.twimg.com', 'i.redd.it', 'lh3.googleusercontent.com'
         ],
         MAX_MESSAGE_LENGTH: 0,
-        FAST_EDIT_REMOVAL_POLL_MS: 100,
-        FAST_EDIT_REMOVAL_TIMEOUT_MS: 5000,
         LIVE_PREVIEW_DEBOUNCE_MS: 800
     };
 
@@ -3658,8 +3656,16 @@ var EditorModule = (function (Utils, EventBus) {
         }
 
         // Send-state
+                // Send-state
         function updateSendState() {
             if (!submitBtn) return;
+            // While a save is in flight, keep the button disabled even if
+            // the editor produces more transactions (e.g. the user types
+            // a character while waiting for the response).
+            if (submitBtn.hasAttribute('data-saving')) {
+                submitBtn.disabled = true;
+                return;
+            }
             var empty = editorContentIsEmpty(editor.getHTML());
             var hasPlaceholder = false;
             editor.state.doc.descendants(function (n) {
@@ -3912,67 +3918,174 @@ var EditorModule = (function (Utils, EventBus) {
     }
 
     // ========================================================================
-    // FAST EDIT BUILDER (per-post)
+    // FAST EDIT — protocol owned by EditorModule
+    //
+    // Wire format (reverse-engineered from bored.js / FastLife v2.1 and
+    // verified against the forum's own fastedit):
+    //
+    //   LOAD:  GET  ?act=Post&CODE=08&t=<topic>&p=<postId>&…
+    //          → HTML response; extract form#REPLIER #Post.value (BBCode)
+    //          → also extract every <input type="hidden"> (st, f, t, p, …)
+    //
+    //   SAVE:  POST /   (Content-Type: application/x-www-form-urlencoded)
+    //          body: <hidden fields>&act=Post&CODE=09
+    //                &Post=<url-encoded BBCode>
+    //                &enablesig=1
+    //          → HTML response (the topic page); extract #ee<id> .color
+    //          → swap innerHTML into the live DOM
+    //
+    // No .fastedit, .fastedit_text, .fastedit_send, .fastedit_canc,
+    // .fastedit_button, or any other forum-injected element is consumed.
+    // FastLife's tag(), send_fastedit() and the CODE=08 link's onclick
+    // are all bypassed — the modern editor calls fetch directly.
     // ========================================================================
-    async function buildFastEdit(fasteditEl) {
-        if (!fasteditEl || _activeFastEdits.has(fasteditEl)) return;
-        console.log('[EditorModule] buildFastEdit fired for:', fasteditEl.className || fasteditEl.tagName);
-        _activeFastEdits.set(fasteditEl, 'pending');
 
-        var legacyTextarea = fasteditEl.querySelector('.fastedit_text');
-        var legacySaveBtn = fasteditEl.querySelector('.fastedit_send');
-        var legacyCancelBtn = fasteditEl.querySelector('.fastedit_canc');
-        var legacyHidden = fasteditEl.querySelector('input[type="hidden"]');
+    // Locate the post content element. Mirrors posts.js's getCleanContent
+    // selectors — the forum renders the body inside
+    // table.color under .right.Item or td.Item.
+    function findPostContent(scope) {
+        if (!scope) return null;
+        return scope.querySelector('.right.Item table.color') ||
+               scope.querySelector('td.Item table.color') ||
+               scope.querySelector('.color');
+    }
 
-        if (!legacyTextarea) {
-            _activeFastEdits.delete(fasteditEl);
+    // Look up the edit URL from the CODE=08 link. The forum emits one
+    // for every post the current user can edit — bored.js uses the exact
+    // same link as its source.
+    function findEditLink(postEl) {
+        if (!postEl) return null;
+        return postEl.querySelector('.mini_buttons > a[href*="act=Post&CODE=08"]') ||
+               postEl.querySelector('a[href*="act=Post&CODE=08"]');
+    }
+
+    function cleanupFastEditEntry(entry) {
+        if (!entry) return;
+        var container = entry.container;
+        if (container && container.parentNode) {
+            if (typeof container.__editorDestroy === 'function') {
+                try { container.__editorDestroy(); } catch (e) {}
+            } else if (container.__editorInstance && !container.__editorInstance.isDestroyed) {
+                try { container.__editorInstance.destroy(); } catch (e) {}
+            }
+            container.remove();
+        }
+        if (entry.modernCard) entry.modernCard.classList.remove('is-being-edited');
+        if (entry.legacyPost && entry.legacyPost.classList.contains('is-being-edited')) {
+            entry.legacyPost.classList.remove('is-being-edited');
+        }
+    }
+
+    async function startFastEdit(postEl) {
+        if (!postEl) return;
+
+        var existing = _activeFastEdits.get(postEl);
+        if (existing) {
+            if (existing.state === 'active') focusFastEdit(postEl);
             return;
         }
 
+        var postId = (postEl.id || '').replace(/^ee/, '');
+        if (!postId) return;
+
+        // Cancel any other open or in-progress edit — the forum's own
+        // fastedit only allows one at a time, so we match that.
+        var others = [];
+        _activeFastEdits.forEach(function (_entry, pe) {
+            if (pe !== postEl) others.push(pe);
+        });
+        others.forEach(function (pe) { cancelFastEdit(pe); });
+
+        // Single mutable entry — the pending / active states share the
+        // same object so mutation (container, modernCard) is visible from
+        // every closure that holds a reference to it.
+        var entry = {
+            state: 'pending',
+            controller: new AbortController(),
+            container: null,
+            modernCard: null,
+            legacyPost: null
+        };
+        _activeFastEdits.set(postEl, entry);
+
+        function isStillPending() {
+            return entry.state === 'pending' && _activeFastEdits.get(postEl) === entry;
+        }
+
+        var editLink = findEditLink(postEl);
+        if (!editLink) {
+            _activeFastEdits.delete(postEl);
+            showToast('Edit link not found on this post', 'error');
+            return;
+        }
+
+        // ---- LOAD: fetch the full editor page ----
+        var html;
+        try {
+            var resp = await fetch(editLink.href, {
+                credentials: 'include',
+                signal: entry.controller.signal
+            });
+            if (!resp.ok) throw new Error('HTTP ' + resp.status);
+            html = await resp.text();
+        } catch (err) {
+            _activeFastEdits.delete(postEl);
+            if (err && err.name === 'AbortError') return;
+            showToast('Could not load the editor', 'error');
+            return;
+        }
+
+        if (!isStillPending()) return;
+
+        // ---- PARSE: extract BBCode + hidden form fields ----
+        var doc = new DOMParser().parseFromString(html, 'text/html');
+        var form = doc.querySelector('form[name="REPLIER"]');
+        var postArea = form && form.querySelector('#Post');
+        if (!form || !postArea) {
+            _activeFastEdits.delete(postEl);
+            showToast('Session expired — please log in again', 'error');
+            return;
+        }
+
+        var bbcode = postArea.value || '';
+        var hidden = {};
+        form.querySelectorAll('input[type="hidden"]').forEach(function (i) {
+            if (i.name) hidden[i.name] = i.value;
+        });
+
+        // ---- Convert BBCode → HTML for TipTap ----
         var initialHtml = '';
-        var textareaVal = legacyTextarea.value ? legacyTextarea.value.trim() : '';
-        if (textareaVal) {
-            initialHtml = await legacyToHtmlAsync(textareaVal);
-        } else if (legacyHidden && legacyHidden.value) {
-            initialHtml = await legacyToHtmlAsync(extractFastEditBody(legacyHidden.value));
-        } else {
-            var postEl = fasteditEl.closest('.post');
-            if (postEl) {
-                var contentTable = postEl.querySelector('.right.Item table.color') || postEl.querySelector('td.Item table.color');
-                if (contentTable) {
-                    var clone = contentTable.cloneNode(true);
-                    clone.querySelectorAll('.edit, .bottomborder, .signature').forEach(function (el) { el.remove(); });
-                    initialHtml = await legacyToHtmlAsync(clone.innerHTML);
-                }
+        if (bbcode.trim()) {
+            try {
+                initialHtml = await legacyToHtmlAsync(bbcode);
+            } catch (e) {
+                console.warn('[EditorModule] legacyToHtmlAsync failed:', e);
+                initialHtml = '';
             }
         }
 
-        var legacyPost = fasteditEl.closest('.post');
-        var legacyPostId = legacyPost ? legacyPost.getAttribute('id') : null;
-        var modernCard = legacyPostId
-            ? document.querySelector('.post-card[data-original-id="' + legacyPostId + '"]')
-            : null;
+        if (!isStillPending()) return;
 
+        // ---- Locate modern card (if posts.js converted this post) ----
+        entry.modernCard = document.querySelector(
+            '.post-card[data-original-id="' + postEl.id + '"]'
+        );
+
+        // ---- Build container ----
         var container = document.createElement('div');
         container.className = 'modern-editor-container modern-editor-container--fastedit';
+        entry.container = container;
 
-        var cardWasHidden = false;
-        if (modernCard && modernCard.parentNode) {
-            modernCard.classList.add('is-being-edited');
-            cardWasHidden = true;
-            modernCard.parentNode.insertBefore(container, modernCard.nextSibling);
-            console.log('[EditorModule] fast edit: inserted after modern card (modernCard found)');
+        if (entry.modernCard && entry.modernCard.parentNode) {
+            entry.modernCard.classList.add('is-being-edited');
+            entry.modernCard.parentNode.insertBefore(container, entry.modernCard.nextSibling);
         } else {
-            fasteditEl.appendChild(container);
-            console.log('[EditorModule] fast edit: inserted inside .fastedit (modernCard NOT found)');
+            entry.legacyPost = postEl;
+            postEl.classList.add('is-being-edited');
+            postEl.parentNode.insertBefore(container, postEl.nextSibling);
         }
 
-        function restoreCard() {
-            if (cardWasHidden && modernCard) {
-                modernCard.classList.remove('is-being-edited');
-            }
-        }
-
+        // ---- Build the editor ----
         try {
             await buildEditorInto(container, {
                 mode: 'fastedit',
@@ -3980,69 +4093,124 @@ var EditorModule = (function (Utils, EventBus) {
                 placeholder: 'Edit your post…',
                 headerLabel: 'Editing as:',
                 submitLabel: 'Save changes',
-                onSync: function (legacy) { if (legacyTextarea) legacyTextarea.value = legacy; },
                 onCancel: function () {
-                    _activeFastEdits.delete(fasteditEl);
-                    restoreCard();
-
-                    if (container.parentNode) container.remove();
-
-                    if (legacyCancelBtn) legacyCancelBtn.click();
-
-                    setTimeout(function () {
-                        if (fasteditEl && fasteditEl.parentNode) {
-                            fasteditEl.remove();
-                        }
-                    }, 50);
+                    _activeFastEdits.delete(postEl);
+                    cleanupFastEditEntry(entry);
                 },
-                onSubmit: function () {
-                    if (!legacyTextarea) { showToast('Save failed — textarea missing', 'error'); return; }
-                    if (legacySaveBtn) {
-                        legacySaveBtn.click();
-                    } else {
-                        showToast('Save button missing', 'error');
+                onSubmit: async function () {
+                    var editorInst = container.__editorInstance;
+                    if (!editorInst) return;
+
+                    var submitBtn = container.querySelector('.modern-editor-submit-btn');
+                    var origLabel = submitBtn ? submitBtn.innerHTML : '';
+                    if (submitBtn) {
+                        submitBtn.setAttribute('data-saving', '1');
+                        submitBtn.disabled = true;
+                        submitBtn.innerHTML = '<i class="fa-regular fa-spinner fa-spin"></i> Saving…';
+                    }
+
+                    var newBbcode = htmlToLegacy(editorInst.getHTML());
+
+                    var body = new URLSearchParams();
+                    Object.keys(hidden).forEach(function (k) {
+                        body.set(k, hidden[k]);
+                    });
+                    body.set('act', 'Post');
+                    body.set('CODE', '09');
+                    body.set('Post', newBbcode);
+                    body.set('enablesig', '1');
+
+                    var saveText;
+                    try {
+                        var saveResp = await fetch('/', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                            body: body.toString(),
+                            credentials: 'include'
+                        });
+                        saveText = await saveResp.text();
+                    } catch (err) {
+                        if (submitBtn) {
+                            submitBtn.removeAttribute('data-saving');
+                            submitBtn.disabled = false;
+                            submitBtn.innerHTML = origLabel;
+                        }
+                        showToast('Save failed — network error', 'error');
                         return;
                     }
-                    waitForFastEditRemoval(fasteditEl, function () {
-                        _activeFastEdits.delete(fasteditEl);
-                        triggerPostReconversion();
-                    });
+
+                    var saveDoc = new DOMParser().parseFromString(saveText, 'text/html');
+                    var responsePost = saveDoc.getElementById(postEl.id);
+                    var newColor = findPostContent(responsePost);
+                    var liveColor = findPostContent(postEl);
+
+                    if (!newColor || !liveColor) {
+                        if (submitBtn) {
+                            submitBtn.removeAttribute('data-saving');
+                            submitBtn.disabled = false;
+                            submitBtn.innerHTML = origLabel;
+                        }
+                        showToast('Save failed — please try again', 'error');
+                        return;
+                    }
+
+                    // Swap the updated body into the live legacy post so
+                    // any subsequent reconversion reads fresh content.
+                    liveColor.innerHTML = newColor.innerHTML;
+
+                    // Success — tear down editor, unhide card, rebuild
+                    // modern cards from the updated legacy DOM.
+                    _activeFastEdits.delete(postEl);
+                    cleanupFastEditEntry(entry);
+                    showToast('Post updated', 'success');
+                    triggerPostReconversion();
                 }
             });
-            _activeFastEdits.set(fasteditEl, 'active');
-            console.log('[EditorModule] Fast edit editor built for post');
         } catch (err) {
             console.error('[EditorModule] Fast edit build failed:', err);
-            _activeFastEdits.delete(fasteditEl);
-            restoreCard();
-            container.innerHTML = '<div style="color:red;padding:1rem;">Editor failed to load.</div>';
+            _activeFastEdits.delete(postEl);
+            cleanupFastEditEntry(entry);
+            showToast('Failed to load editor', 'error');
+            return;
         }
+
+        if (!isStillPending()) {
+            // Canceled during build — clean up the orphaned container.
+            cleanupFastEditEntry(entry);
+            _activeFastEdits.delete(postEl);
+            return;
+        }
+
+        entry.state = 'active';
     }
 
-    function extractFastEditBody(html) {
-        if (!html) return '';
-        var temp = document.createElement('div');
-        temp.innerHTML = html;
-        var td = temp.querySelector('td');
-        var src = td || temp;
-        src.querySelectorAll('.edit, .signature, .bottomborder').forEach(function (el) { el.remove(); });
-        src.querySelectorAll('td:empty').forEach(function (el) { el.remove(); });
-        return src.innerHTML.trim();
+    function cancelFastEdit(postEl) {
+        var entry = _activeFastEdits.get(postEl);
+        if (!entry) return false;
+        if (entry.controller) {
+            try { entry.controller.abort(); } catch (e) {}
+        }
+        cleanupFastEditEntry(entry);
+        _activeFastEdits.delete(postEl);
+        return true;
     }
 
-    function waitForFastEditRemoval(fasteditEl, callback) {
-        var start = Date.now();
-        var poll = setInterval(function () {
-            if (!document.body.contains(fasteditEl)) {
-                clearInterval(poll);
-                callback();
-                return;
-            }
-            if (Date.now() - start > CONFIG.FAST_EDIT_REMOVAL_TIMEOUT_MS) {
-                clearInterval(poll);
-                callback();
-            }
-        }, CONFIG.FAST_EDIT_REMOVAL_POLL_MS);
+    function isFastEditActive(postEl) {
+        var entry = _activeFastEdits.get(postEl);
+        return !!(entry && entry.state === 'active');
+    }
+
+    function focusFastEdit(postEl) {
+        var entry = _activeFastEdits.get(postEl);
+        if (!entry || entry.state !== 'active') return false;
+        var container = entry.container;
+        if (!container || !container.__editorInstance) return false;
+        try {
+            container.__editorInstance.commands.focus('end');
+            return true;
+        } catch (e) {
+            return false;
+        }
     }
 
     function triggerPostReconversion() {
@@ -4083,28 +4251,6 @@ var EditorModule = (function (Utils, EventBus) {
             });
             if (id2) _observerIds.push(id2);
         } catch (e) { console.error('[EditorModule] observer (full) failed:', e); }
-
-        try {
-            var id3 = globalThis.forumObserver.register({
-                id: 'editor-module-fastedit',
-                selector: '.fastedit',
-                priority: 'high',
-                callback: function (node) { if (node) buildFastEdit(node); }
-            });
-            if (id3) _observerIds.push(id3);
-        } catch (e) { console.error('[EditorModule] observer (fastedit) failed:', e); }
-
-        addGlobalListener(document, 'click', function (e) {
-            var btn = e.target.closest('.fastedit_button');
-            if (!btn) return;
-            setTimeout(function () {
-                document.querySelectorAll('.post .fastedit').forEach(function (fe) {
-                    if (_activeFastEdits.has(fe)) return;
-                    if (fe.querySelector('.modern-editor-container--fastedit')) return;
-                    buildFastEdit(fe);
-                });
-            }, 50);
-        });
     }
 
     // ========================================================================
@@ -4139,11 +4285,13 @@ var EditorModule = (function (Utils, EventBus) {
         });
     }
 
-    function reset() {
+        function reset() {
         isInitialized = false;
-        _activeFastEdits.forEach(function (state, el) {
-            var host = el.querySelector('.modern-editor-container--fastedit');
-            if (host && host.__editorDestroy) host.__editorDestroy();
+        _activeFastEdits.forEach(function (entry) {
+            if (entry && entry.controller) {
+                try { entry.controller.abort(); } catch (e) {}
+            }
+            cleanupFastEditEntry(entry);
         });
         _activeFastEdits.clear();
         _observerIds.forEach(function (id) {
@@ -4164,9 +4312,13 @@ var EditorModule = (function (Utils, EventBus) {
         _currentUserCache = null;
     }
 
-    return {
+        return {
         initialize: initialize,
-        reset: reset
+        reset: reset,
+        startFastEdit: startFastEdit,
+        cancelFastEdit: cancelFastEdit,
+        isFastEditActive: isFastEditActive,
+        focusFastEdit: focusFastEdit
     };
 })(
     typeof ForumDOMUtils !== 'undefined' ? ForumDOMUtils : window.ForumDOMUtils,
