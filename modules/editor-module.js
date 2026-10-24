@@ -17,6 +17,7 @@ var EditorModule = (function (Utils, EventBus) {
     var _activeFastEdits = new Map();
     var _observerIds = [];
     var _mentionSearchAbort = null;
+    var _quoteQueue = Promise.resolve();
 
     // ========================================================================
     // CONFIG
@@ -4407,6 +4408,99 @@ saveText = decodeHtmlBuffer(saveBuf, saveResp.headers.get('content-type') || '')
         }
     }
 
+        // ========================================================================
+    // QUOTE — fetch-and-inject, real-time
+    //
+    // GET ?act=Post&CODE=02&p=<postId> → server returns the reply page with
+    // #Post.value pre-filled with one or more [QUOTE=Author,date,url]…[/QUOTE]
+    // blocks (session-tracked checkbox selections are folded in server-side).
+    // We extract the BBCode, convert it, and append it to the fast reply
+    // editor at the bottom of the topic. No navigation.
+    //
+    // Multiple rapid clicks are queued in order so the resulting quotes
+    // stack in the same order the user clicked, not in network-response
+    // order.
+    // ========================================================================
+
+    var _quoteQueue = Promise.resolve();
+
+    function startQuote(postEl) {
+        _quoteQueue = _quoteQueue
+            .then(function () { return doStartQuote(postEl); })
+            .catch(function (err) {
+                console.warn('[EditorModule] Quote queue error:', err);
+            });
+        return _quoteQueue;
+    }
+
+    async function doStartQuote(postEl) {
+        if (!postEl) return;
+
+        var quoteLink =
+            postEl.querySelector('.mini_buttons a[href*="CODE=02"]') ||
+            postEl.querySelector('a[href*="CODE=02"]');
+
+        if (!quoteLink) {
+            showToast('Quote link not found on this post', 'error');
+            return;
+        }
+
+        // Fast reply editor must exist. If it doesn't (locked topic,
+        // reply disabled, editor module failed to mount), fall back to
+        // the legacy navigation so the user still gets their quote.
+        var fastReplyHost = document.getElementById('modern-editor-fastreply');
+        if (!fastReplyHost || !fastReplyHost.__editorInstance) {
+            console.info('[EditorModule] Quote: falling back to full editor (no fast reply editor present)');
+            window.location.href = quoteLink.href;
+            return;
+        }
+
+        // ---- LOAD: fetch the quote page, extract BBCode ----
+        var bbcode;
+        try {
+            var decoded = await fetchHtmlDecoded(quoteLink.href, {
+                credentials: 'include'
+            });
+            var doc = new DOMParser().parseFromString(decoded.text, 'text/html');
+            var form = doc.querySelector('form[name="REPLIER"]');
+            var postArea = form && form.querySelector('#Post');
+            bbcode = postArea ? postArea.value : '';
+        } catch (err) {
+            console.warn('[EditorModule] Quote fetch failed:', err);
+            showToast('Could not load the quote', 'error');
+            return;
+        }
+
+        if (!bbcode || !bbcode.trim()) {
+            showToast('Quote came back empty', 'warning');
+            return;
+        }
+
+        // ---- CONVERT: BBCode → TipTap-ready HTML ----
+        var html;
+        try {
+            html = await legacyToHtmlAsync(bbcode);
+        } catch (err) {
+            console.warn('[EditorModule] Quote conversion failed:', err);
+            showToast('Could not convert the quote', 'error');
+            return;
+        }
+
+        // ---- INJECT: append to the reply editor at cursor end ----
+        var editorInst = fastReplyHost.__editorInstance;
+        try {
+            editorInst.chain().focus('end').insertContent(html).run();
+        } catch (err) {
+            console.warn('[EditorModule] Quote insert failed:', err);
+            showToast('Could not insert the quote', 'error');
+            return;
+        }
+
+        // ---- SCROLL: bring the editor into view ----
+        fastReplyHost.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        showToast('Quote added', 'success');
+    }
+
     // ========================================================================
     // OBSERVER REGISTRATION
     // ========================================================================
@@ -4501,7 +4595,8 @@ saveText = decodeHtmlBuffer(saveBuf, saveResp.headers.get('content-type') || '')
         startFastEdit: startFastEdit,
         cancelFastEdit: cancelFastEdit,
         isFastEditActive: isFastEditActive,
-        focusFastEdit: focusFastEdit
+        focusFastEdit: focusFastEdit,
+        startQuote: startQuote
     };
 })(
     typeof ForumDOMUtils !== 'undefined' ? ForumDOMUtils : window.ForumDOMUtils,
