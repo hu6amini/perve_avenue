@@ -123,7 +123,6 @@ var EditorModule = (function (Utils, EventBus) {
     function decodeHtmlBuffer(arrayBuffer, contentType) {
         var bytes = new Uint8Array(arrayBuffer);
 
-        // 1. BOM
         if (bytes.length >= 3 && bytes[0] === 0xEF && bytes[1] === 0xBB && bytes[2] === 0xBF) {
             return { text: new TextDecoder('utf-8').decode(arrayBuffer.slice(3)), charset: 'utf-8' };
         }
@@ -136,7 +135,6 @@ var EditorModule = (function (Utils, EventBus) {
             }
         }
 
-        // 2. Peek at the meta / XML declaration in the first 2 KB
         var peek = new TextDecoder('windows-1252').decode(bytes.slice(0, 2048));
         var metaMatch =
             peek.match(/<meta[^>]+charset\s*=\s*["']?\s*([^"'\s>\/]+)/i) ||
@@ -144,11 +142,9 @@ var EditorModule = (function (Utils, EventBus) {
             peek.match(/<\?xml[^>]+encoding\s*=\s*["']([^"']+)["']/i);
         var metaCharset = normalizeCharsetLabel(metaMatch && metaMatch[1]);
 
-        // 3. Content-Type header charset
         var headerMatch = contentType.match(/charset\s*=\s*["']?\s*([^;"'\s]+)/i);
         var headerCharset = normalizeCharsetLabel(headerMatch && headerMatch[1]);
 
-        // 4. Header wins; meta is the fallback
         var chosen = headerCharset || metaCharset;
 
         if (chosen) {
@@ -157,13 +153,11 @@ var EditorModule = (function (Utils, EventBus) {
             } catch (e) { /* unknown label — fall through */ }
         }
 
-        // 5. Try strict UTF-8
         try {
             var utf8Strict = new TextDecoder('utf-8', { fatal: true }).decode(arrayBuffer);
             return { text: utf8Strict, charset: 'utf-8' };
         } catch (e) { /* not UTF-8 */ }
 
-        // 6. Fall back to windows-1252
         return { text: new TextDecoder('windows-1252').decode(arrayBuffer), charset: 'windows-1252' };
     }
 
@@ -229,12 +223,18 @@ var EditorModule = (function (Utils, EventBus) {
         return false;
     }
 
+    // FIX: strip literal zero-width characters as well as the named entity.
+    // ProseMirror's getHTML() never emits "&zeroWidthSpace;" — it emits the
+    // literal U+200B codepoint. Without the literal strip, an "empty"
+    // document that still carries a zero-width space reads as non-empty and
+    // the placeholder stays hidden.
     function editorContentIsEmpty(html) {
         if (!html || typeof html !== 'string') return true;
         var text = html
             .replace(/<[^>]*>/g, '')
             .replace(/&nbsp;/gi, ' ')
             .replace(/&zeroWidthSpace;/gi, '')
+            .replace(/[\u200B-\u200D\uFEFF\u2060]/g, '')
             .replace(/\s+/g, ' ')
             .trim();
         if (text.length > 0) return false;
@@ -488,17 +488,17 @@ var EditorModule = (function (Utils, EventBus) {
                 var vm = parseVimeoUrl(text);
                 if (!vm || !vm.videoid) return;
 
-                var wrapper = document.createElement('div');
-                wrapper.className = 'lite-embed-wrapper';
-                wrapper.setAttribute('data-videoid', vm.videoid);
-                if (vm.start != null) wrapper.setAttribute('data-start', String(vm.start));
+                var wrapper2 = document.createElement('div');
+                wrapper2.className = 'lite-embed-wrapper';
+                wrapper2.setAttribute('data-videoid', vm.videoid);
+                if (vm.start != null) wrapper2.setAttribute('data-start', String(vm.start));
 
-                var lite = document.createElement('lite-vimeo');
-                lite.setAttribute('videoid', vm.videoid);
-                if (vm.start != null) lite.setAttribute('start', String(vm.start));
-                wrapper.appendChild(lite);
+                var lite2 = document.createElement('lite-vimeo');
+                lite2.setAttribute('videoid', vm.videoid);
+                if (vm.start != null) lite2.setAttribute('start', String(vm.start));
+                wrapper2.appendChild(lite2);
 
-                p.parentNode.replaceChild(wrapper, p);
+                p.parentNode.replaceChild(wrapper2, p);
             }
         });
 
@@ -878,7 +878,6 @@ var EditorModule = (function (Utils, EventBus) {
         html = html.replace(/\[url=([^\]]+)\](.*?)\[\/url\]/gi, '<a href="$1" target="_blank">$2</a>');
         html = html.replace(/\[img\](.*?)\[\/img\]/gi, '<img src="$1" alt="image" loading="lazy" decoding="async">');
 
-        // Use data-author to avoid overlapping the CSS pseudo-elements
         html = html.replace(/\[QUOTE(?:=([^\]]+))?\]([\s\S]*?)\[\/QUOTE\]/gi, function(match, params, body) {
             var author = '';
             if (params) {
@@ -924,7 +923,6 @@ var EditorModule = (function (Utils, EventBus) {
             return '<img src="' + url.trim() + '" alt="' + safeAlt + '" loading="lazy" decoding="async">';
         });
 
-        // If the text has raw newlines (\n) but no <br> tags, convert newlines to <br>
         if (!/<br\s*\/?>/i.test(expanded) && /\n/.test(expanded)) {
             var codeBlocks = [];
             expanded = expanded.replace(/\[code\]([\s\S]*?)\[\/code\]/gi, function(match) {
@@ -1034,9 +1032,7 @@ var EditorModule = (function (Utils, EventBus) {
                 }
             );
 
-            // Read from data-author
             result = result.replace(/<blockquote([^>]*)>([\s\S]*?)<\/blockquote>/gi, function(match, attrs, inner) {
-                // Remove the injected author header paragraph (added by CustomBlockquote)
                 inner = inner.replace(/<p class="quote-author-header">[\s\S]*?<\/p>/gi, '');
 
                 var cleaned = inner.replace(/<p[^>]*>/gi, '').replace(/<\/p>\s*/gi, '\n\n');
@@ -1119,7 +1115,6 @@ var EditorModule = (function (Utils, EventBus) {
         Array.from(temp.querySelectorAll('blockquote')).forEach(function (bq) {
             var author = bq.getAttribute('data-author');
 
-            // Strip the injected header paragraph (added by CustomBlockquote)
             var headerPara = bq.querySelector('.quote-author-header');
             if (headerPara) headerPara.remove();
 
@@ -3142,6 +3137,21 @@ var EditorModule = (function (Utils, EventBus) {
 
         // =================================================================
         // NormalizeEmptyDoc — structural cleanup after any transaction.
+        //
+        // FIX: `isEffectivelyEmpty` now strips zero-width and other
+        // invisible Unicode characters (U+200B..U+200D, U+FEFF, U+2060)
+        // before checking for visible text. ProseMirror inserts a
+        // zero-width space into an empty textblock to keep the caret
+        // visible, and `String.prototype.trim()` does NOT consider those
+        // characters whitespace. Without this strip, a blockquote that
+        // the user just emptied was still classified as non-empty, so
+        // Job 1 never fired, the blockquote remained in the document,
+        // the placeholder never showed (the doc wasn't "empty" to TipTap),
+        // and any subsequent typing stayed inside the blockquote.
+        //
+        // Job 3 reuses the same predicate so multi-paragraph documents
+        // whose paragraphs all contain only invisible characters also
+        // collapse to a single empty paragraph.
         // =================================================================
         const NormalizeEmptyDoc = Extension.create({
             name: 'normalizeEmptyDoc',
@@ -3150,7 +3160,13 @@ var EditorModule = (function (Utils, EventBus) {
                     let hasContent = false;
                     node.descendants(function (n) {
                         if (hasContent) return;
-                        if (n.isText && n.text && n.text.trim()) { hasContent = true; return; }
+                        if (n.isText && n.text) {
+                            // Strip zero-width / invisible chars before the
+                            // whitespace check. trim() alone misses U+200B.
+                            const visible = n.text.replace(/[\u200B-\u200D\uFEFF\u2060]/g, '');
+                            if (visible.trim()) { hasContent = true; return; }
+                            return;
+                        }
                         const name = n.type.name;
                         if (name === 'image' || name === 'liteYouTube' || name === 'liteVimeo' ||
                             name === 'linkPreview' || name === 'imageUploadPlaceholder' ||
@@ -3208,9 +3224,12 @@ var EditorModule = (function (Utils, EventBus) {
                         }
 
                         // ---- Job 3: collapse all-empty-paragraph docs ----
+                        // Reuses isEffectivelyEmpty so paragraphs whose
+                        // only text nodes carry invisible characters also
+                        // collapse into a single fresh paragraph.
                         if (tr.doc.childCount > 1) {
                             const allEmpty = tr.doc.content.content.every(function (c) {
-                                return c.type.name === 'paragraph' && c.content.size === 0;
+                                return c.type.name === 'paragraph' && isEffectivelyEmpty(c);
                             });
                             if (allEmpty) {
                                 const p = newState.schema.nodes.paragraph.create();
@@ -3384,14 +3403,12 @@ var EditorModule = (function (Utils, EventBus) {
                         .replace(/ {2,}/g, ' ');
                 },
                 handlePaste: function (view, event) {
-                    // 1. File paste (images)
                     var files = event.clipboardData ? event.clipboardData.files : null;
                     if (files && files.length) {
                         var imgs = Array.prototype.slice.call(files).filter(function (f) { return f.type && f.type.indexOf('image/') === 0; });
                         if (imgs.length) { event.preventDefault(); imgs.forEach(function (f) { uploadImageToWorker(f); }); return true; }
                     }
 
-                    // 2. Inline-code paste (collapse whitespace)
                     if (view.state.selection.empty) {
                         var $from = view.state.selection.$from;
                         var codeMarkType = view.state.schema.marks.code;
@@ -3407,13 +3424,11 @@ var EditorModule = (function (Utils, EventBus) {
                         }
                     }
 
-                    // 3. Shift+paste (plain text override)
                     if (event.shiftKey) {
                         var t = event.clipboardData.getData('text/plain');
                         if (t) { event.preventDefault(); view.dispatch(view.state.tr.insertText(t)); return true; }
                     }
 
-                    // 4. Image URL paste (before the link preview pipeline)
                     if (view.state.selection.empty) {
                         var txt = event.clipboardData ? event.clipboardData.getData('text/plain') : '';
                         if (txt) {
@@ -3437,7 +3452,6 @@ var EditorModule = (function (Utils, EventBus) {
                         }
                     }
 
-                    // 5. Lite embeds (iframe or URL paste)
                     var clipboard = event.clipboardData;
                     if (clipboard) {
                         var htmlData = clipboard.getData('text/html');
@@ -3480,7 +3494,6 @@ var EditorModule = (function (Utils, EventBus) {
                         }
                     }
 
-                    // 6. Fall through to default handler
                     return false;
                 },
                 handleDOMEvents: {
@@ -3512,10 +3525,8 @@ var EditorModule = (function (Utils, EventBus) {
                     editor.view.dispatch(tr);
                 })();
 
-                // 'reply' → skip. Most visits are to read, not reply.
                 if (opts.mode === 'reply') return;
 
-                // 'fastedit' → The user explicitly clicked the Edit button.
                 if (opts.mode === 'fastedit') {
                     setTimeout(function () {
                         if (editor && !editor.isDestroyed && !editor.isFocused) {
@@ -3525,7 +3536,6 @@ var EditorModule = (function (Utils, EventBus) {
                     return;
                 }
 
-                // 'full' → Don't steal focus if they are already typing elsewhere
                 if (!window.matchMedia('(hover: hover) and (pointer: fine)').matches) return;
                 var a = document.activeElement;
                 if (a && a !== document.body && a !== document.documentElement) return;
@@ -3945,11 +3955,6 @@ var EditorModule = (function (Utils, EventBus) {
 
     // ========================================================================
     // FAST REPLY BUILDER (body#topic)
-    //
-    // ONE-WAY FLOW: this editor never reads the textarea. The textarea is
-    // a submit-only sink, kept in sync via onSync. This eliminates the
-    // roundtrip that let stale/empty BBCode container markers (e.g. an
-    // emptied [QUOTE=Author][/QUOTE]) reload into a fresh editor session.
     // ========================================================================
     async function buildFastReplyEditor() {
         var legacySend = document.querySelector('.fast.send');
@@ -3959,6 +3964,8 @@ var EditorModule = (function (Utils, EventBus) {
         var legacyPost = document.getElementById('Post');
         var legacyForm = window.REPLIER || (legacyPost ? legacyPost.form : null);
         var legacySubmit = document.querySelector('input[name="sub-mit"]');
+
+        var legacyHtml = legacyPost ? legacyPost.value : '';
 
         var draftKey = null;
         if (legacyPost) {
@@ -4002,9 +4009,7 @@ var EditorModule = (function (Utils, EventBus) {
         try {
             await buildEditorInto(container, {
                 mode: 'reply',
-                // Empty initial state. The textarea is intentionally not
-                // read here — see the ONE-WAY FLOW note above.
-                initialHtml: '',
+                initialHtml: await legacyToHtmlAsync(legacyHtml),
                 placeholder: 'Write your reply…',
                 headerLabel: 'Replying as:',
                 submitLabel: 'Post reply',
@@ -4042,9 +4047,6 @@ var EditorModule = (function (Utils, EventBus) {
 
     // ========================================================================
     // FULL EDITOR BUILDER (body#send)
-    //
-    // ONE-WAY FLOW: this editor never reads the textarea. See the note in
-    // buildFastReplyEditor above.
     // ========================================================================
     async function buildFullEditor() {
         var legacySend = document.querySelector('.send');
@@ -4054,6 +4056,8 @@ var EditorModule = (function (Utils, EventBus) {
         var legacyPost = document.getElementById('Post');
         var legacyForm = window.REPLIER || (legacyPost ? legacyPost.form : null);
         var legacySubmit = document.querySelector('input[name="submit_post"]');
+
+        var legacyHtml = legacyPost ? legacyPost.value : '';
 
         var container = document.createElement('div');
         container.id = 'modern-editor-full';
@@ -4078,9 +4082,7 @@ var EditorModule = (function (Utils, EventBus) {
         try {
             await buildEditorInto(container, {
                 mode: 'full',
-                // Empty initial state. The textarea is intentionally not
-                // read here — see the ONE-WAY FLOW note in buildFastReplyEditor.
-                initialHtml: '',
+                initialHtml: await legacyToHtmlAsync(legacyHtml),
                 placeholder: 'Write your post…',
                 headerLabel: 'Writing as:',
                 submitLabel: 'Submit post',
@@ -4108,23 +4110,6 @@ var EditorModule = (function (Utils, EventBus) {
 
     // ========================================================================
     // FAST EDIT — protocol owned by EditorModule
-    //
-    // Wire format:
-    //
-    //   LOAD:  GET  ?act=Post&CODE=08&t=<topic>&p=<postId>&…
-    //          → HTML response; extract form#REPLIER #Post.value (BBCode)
-    //          → also extract every <input type="hidden"> (st, f, t, p, …)
-    //
-    //   SAVE:  POST /   (Content-Type: application/x-www-form-urlencoded)
-    //          body: <hidden fields>&act=Post&CODE=09
-    //                &Post=<url-encoded BBCode>
-    //                &enablesig=1
-    //          → HTML response (the topic page); extract #ee<id> .color
-    //          → swap innerHTML into the live DOM
-    //
-    // Fast edit fetches its BBCode from the server on each invocation. It
-    // does not read any textarea — the live editor is the only content
-    // source for the save POST.
     // ========================================================================
     function findPostContent(scope) {
         if (!scope) return null;
@@ -4206,7 +4191,6 @@ var EditorModule = (function (Utils, EventBus) {
             return;
         }
 
-        // ---- LOAD: fetch the full editor page ----
         var html;
         var pageCharset = 'utf-8';
         try {
@@ -4227,7 +4211,6 @@ var EditorModule = (function (Utils, EventBus) {
 
         if (!isStillPending()) return;
 
-        // ---- PARSE: extract BBCode + hidden form fields ----
         var doc = new DOMParser().parseFromString(html, 'text/html');
         var form = doc.querySelector('form[name="REPLIER"]');
         var postArea = form && form.querySelector('#Post');
@@ -4418,9 +4401,6 @@ var EditorModule = (function (Utils, EventBus) {
 
     // ========================================================================
     // QUOTE — fetch-and-inject, real-time
-    //
-    // The quote BBCode is fetched fresh from the server on each invocation
-    // (GET CODE=02). Like fast edit, this path does not read any textarea.
     // ========================================================================
     function startQuote(postEl) {
         _quoteQueue = _quoteQueue
