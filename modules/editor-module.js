@@ -3217,7 +3217,7 @@ var EditorModule = (function (Utils, EventBus) {
                     appendTransaction(trs, oldState, newState) {
                         if (!trs.some(t => t.docChanged)) return null;
 
-                        const beforeDoc = trs[0].before;
+                        const beforeDoc = oldState.doc;
                         const doc = newState.doc;
                         const tr = newState.tr;
                         let changed = false;
