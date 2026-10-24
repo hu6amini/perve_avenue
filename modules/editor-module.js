@@ -3167,20 +3167,118 @@ var EditorModule = (function (Utils, EventBus) {
             },
         });
 
+                // =================================================================
+        // NormalizeEmptyDoc — structural cleanup after any transaction.
+        //
+        // Three jobs, all serving the same goal: the doc should never
+        // be left in a state where the user is "trapped" in a container
+        // they can't type their way out of.
+        //
+        //   1. Remove top-level blockquotes/spoilers that BECAME empty
+        //      in this transaction. If the user empties a quote by
+        //      deleting its text, the quote wrapper has to go — otherwise
+        //      the cursor stays inside it and typing adds text back into
+        //      the quote instead of in a fresh paragraph below.
+        //      Only removes containers that were non-empty before and
+        //      empty now — so a freshly-inserted empty blockquote (via
+        //      the toolbar button) survives until the user actually
+        //      types into it, then starts empty.
+        //
+        //   2. Ensure the doc always has at least one block. Deleting
+        //      the last node can leave ProseMirror with childCount 0;
+        //      some browsers render that as a truly empty <div>, and the
+        //      Placeholder extension then has nothing to attach to.
+        //
+        //   3. Collapse a doc that ends up as multiple empty paragraphs
+        //      down to a single paragraph — the original behaviour.
+        // =================================================================
         const NormalizeEmptyDoc = Extension.create({
             name: 'normalizeEmptyDoc',
             addProseMirrorPlugins() {
+                function isEffectivelyEmpty(node) {
+                    let hasContent = false;
+                    node.descendants(function (n) {
+                        if (hasContent) return;
+                        if (n.isText && n.text && n.text.trim()) { hasContent = true; return; }
+                        const name = n.type.name;
+                        if (name === 'image' || name === 'liteYouTube' || name === 'liteVimeo' ||
+                            name === 'linkPreview' || name === 'imageUploadPlaceholder' ||
+                            name === 'horizontalRule') {
+                            hasContent = true;
+                        }
+                    });
+                    return !hasContent;
+                }
+
+                const CONTAINER_TYPES = new Set(['blockquote', 'spoiler']);
+
                 return [new Plugin({
                     key: new PluginKey('normalizeEmptyDoc'),
-                    appendTransaction(trs, old, nw) {
+                    appendTransaction(trs, oldState, newState) {
                         if (!trs.some(t => t.docChanged)) return null;
-                        const doc = nw.doc;
-                        if (doc.childCount === 0) return null;
-                        const allEmpty = doc.content.content.every(c => c.type.name === 'paragraph' && c.content.size === 0);
-                        if (!allEmpty || doc.childCount === 1) return null;
-                        const p = nw.schema.nodes.paragraph.create();
-                        const tr = nw.tr; tr.replaceWith(0, doc.content.size, p);
-                        tr.setSelection(TextSelection.near(tr.doc.resolve(1)));
+
+                        const beforeDoc = trs[0].before;
+                        const doc = newState.doc;
+                        const tr = newState.tr;
+                        let changed = false;
+
+                        // ---- Job 1: remove containers that just emptied ----
+                        let beforeNonEmpty = 0;
+                        beforeDoc.forEach(function (node) {
+                            if (CONTAINER_TYPES.has(node.type.name) && !isEffectivelyEmpty(node)) {
+                                beforeNonEmpty++;
+                            }
+                        });
+                        let afterNonEmpty = 0;
+                        doc.forEach(function (node) {
+                            if (CONTAINER_TYPES.has(node.type.name) && !isEffectivelyEmpty(node)) {
+                                afterNonEmpty++;
+                            }
+                        });
+
+                        if (afterNonEmpty < beforeNonEmpty) {
+                            const toRemove = [];
+                            doc.forEach(function (node, offset) {
+                                if (CONTAINER_TYPES.has(node.type.name) && isEffectivelyEmpty(node)) {
+                                    toRemove.push({ pos: offset, size: node.nodeSize });
+                                }
+                            });
+                            for (let i = toRemove.length - 1; i >= 0; i--) {
+                                tr.delete(toRemove[i].pos, toRemove[i].pos + toRemove[i].size);
+                                changed = true;
+                            }
+                        }
+
+                        // ---- Job 2: guarantee at least one block ----
+                        if (tr.doc.childCount === 0) {
+                            const p = newState.schema.nodes.paragraph.create();
+                            tr.insert(0, p);
+                            changed = true;
+                        }
+
+                        // ---- Job 3: collapse all-empty-paragraph docs ----
+                        if (tr.doc.childCount > 1) {
+                            const allEmpty = tr.doc.content.content.every(function (c) {
+                                return c.type.name === 'paragraph' && c.content.size === 0;
+                            });
+                            if (allEmpty) {
+                                const p = newState.schema.nodes.paragraph.create();
+                                tr.replaceWith(0, tr.doc.content.size, p);
+                                changed = true;
+                            }
+                        }
+
+                        if (!changed) return null;
+
+                        try {
+                            const safePos = Math.max(1, Math.min(tr.selection.from, tr.doc.content.size - 1));
+                            tr.setSelection(TextSelection.near(tr.doc.resolve(safePos)));
+                        } catch (e) {
+                            try {
+                                tr.setSelection(TextSelection.near(tr.doc.resolve(1)));
+                            } catch (e2) {}
+                        }
+
                         return tr;
                     }
                 })];
