@@ -5773,6 +5773,28 @@ body#topic .post .fastedit > :not(.modern-editor-container--fastedit) {
 .post.is-being-edited {
   display: none;
 }
+/* Inline fast edit — the toolbar sits directly below .post-card-body,
+   which deliberately has no bottom padding. Give the editor a top
+   inset that matches the card's own vertical rhythm (space-lg, the
+   same value the body uses on top) so the author info has room to
+   breathe above the toolbar. The WYSIWYG's own margin-left/right
+   already matches .post-card-body's horizontal padding, so only
+   the top and bottom need adjusting. */
+.post-card.is-fast-editing .modern-editor-container--fastedit .modern-editor-toolbar {
+  padding-top: 0;
+  margin-top: var(--space-lg);
+}
+
+.post-card.is-fast-editing .modern-editor-container--fastedit .modern-editor-toolbar:first-child {
+  margin-top: var(--space-lg);
+}
+
+/* Bottom side: the editor's .modern-actions already supplies
+   var(--pad-5) on top of its own padding, and .post-footer has
+   border-top + pad-4 above it, so bottom spacing is already
+   correct. No override needed — the frame-strip rule that removed
+   .modern-editor-container--fastedit's margin did not remove
+   .modern-actions' own padding. */
 
 /* ------------------------------------------------------------------
    Mobile
