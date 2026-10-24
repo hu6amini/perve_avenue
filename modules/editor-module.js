@@ -4022,12 +4022,12 @@ var EditorModule = (function (Utils, EventBus) {
         // ---- LOAD: fetch the full editor page ----
         var html;
         try {
-            var resp = await fetch(editLink.href, {
-                credentials: 'include',
-                signal: entry.controller.signal
-            });
-            if (!resp.ok) throw new Error('HTTP ' + resp.status);
-            html = await resp.text();
+            var decoded = await fetchHtmlDecoded(editLink.href, {
+    credentials: 'include',
+    signal: entry.controller.signal
+});
+html = decoded.text;
+pageCharset = decoded.charset;
         } catch (err) {
             _activeFastEdits.delete(postEl);
             if (err && err.name === 'AbortError') return;
@@ -4122,13 +4122,16 @@ var EditorModule = (function (Utils, EventBus) {
 
                     var saveText;
                     try {
-                        var saveResp = await fetch('/', {
-                            method: 'POST',
-                            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-                            body: body.toString(),
-                            credentials: 'include'
-                        });
-                        saveText = await saveResp.text();
+                        var saveCharset = entry.pageCharset || 'utf-8';
+var bodyString = buildFormBody(Array.from(body.entries()), saveCharset);
+var saveResp = await fetch('/', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded; charset=' + saveCharset },
+    body: bodyString,
+    credentials: 'include'
+});
+var saveBuf = await saveResp.arrayBuffer();
+saveText = decodeHtmlBuffer(saveBuf, saveResp.headers.get('content-type') || '').text;
                     } catch (err) {
                         if (submitBtn) {
                             submitBtn.removeAttribute('data-saving');
