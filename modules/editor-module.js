@@ -1724,29 +1724,30 @@ var EditorModule = (function (Utils, EventBus) {
         var lowlight = createLowlight(common);
 
         // ---- Replying-as header ----
-        var syncUser = getCurrentUserSync();
-        var currentHeader = null;
-        if (syncUser) {
-            currentHeader = buildUserHeader(syncUser, opts.headerLabel || 'Replying as:');
-            if (currentHeader) host.appendChild(currentHeader);
-        }
-
-        fetchCurrentUserData().then(function (user) {
-            if (!user) return;
-            var newHeader = buildUserHeader(user, opts.headerLabel || 'Replying as:');
-            if (!newHeader) return;
-
-            if (currentHeader && currentHeader.parentNode) {
-                currentHeader.parentNode.replaceChild(newHeader, currentHeader);
-            } else if (host.firstChild) {
-                host.insertBefore(newHeader, host.firstChild);
-            } else {
-                host.appendChild(newHeader);
+        if (!opts.hideHeader) {
+            var syncUser = getCurrentUserSync();
+            var currentHeader = null;
+            if (syncUser) {
+                currentHeader = buildUserHeader(syncUser, opts.headerLabel || 'Replying as:');
+                if (currentHeader) host.appendChild(currentHeader);
             }
-            currentHeader = newHeader;
-            attachProfileTip(currentHeader, user);
-        });
 
+            fetchCurrentUserData().then(function (user) {
+                if (!user) return;
+                var newHeader = buildUserHeader(user, opts.headerLabel || 'Replying as:');
+                if (!newHeader) return;
+
+                if (currentHeader && currentHeader.parentNode) {
+                    currentHeader.parentNode.replaceChild(newHeader, currentHeader);
+                } else if (host.firstChild) {
+                    host.insertBefore(newHeader, host.firstChild);
+                } else {
+                    host.appendChild(newHeader);
+                }
+                currentHeader = newHeader;
+                attachProfileTip(currentHeader, user);
+            });
+        }
         // ---- Toolbar ----
         var toolbar = document.createElement('div');
         toolbar.className = 'modern-editor-toolbar';
@@ -4102,8 +4103,15 @@ var EditorModule = (function (Utils, EventBus) {
                postEl.querySelector('a[href*="act=Post&CODE=08"]');
     }
 
-    function cleanupFastEditEntry(entry) {
+        function cleanupFastEditEntry(entry) {
         if (!entry) return;
+
+        // Restore the original content area if we hid it for inline edit.
+        if (entry.contentArea) {
+            entry.contentArea.style.display = '';
+            entry.contentArea = null;
+        }
+
         var container = entry.container;
         if (container && container.parentNode) {
             if (typeof container.__editorDestroy === 'function') {
@@ -4113,7 +4121,11 @@ var EditorModule = (function (Utils, EventBus) {
             }
             container.remove();
         }
-        if (entry.modernCard) entry.modernCard.classList.remove('is-being-edited');
+
+        if (entry.modernCard) {
+            entry.modernCard.classList.remove('is-being-edited');
+            entry.modernCard.classList.remove('is-fast-editing');
+        }
         if (entry.legacyPost && entry.legacyPost.classList.contains('is-being-edited')) {
             entry.legacyPost.classList.remove('is-being-edited');
         }
@@ -4214,7 +4226,7 @@ var EditorModule = (function (Utils, EventBus) {
         if (!isStillPending()) return;
 
         // ---- Locate modern card (if posts.js converted this post) ----
-        entry.modernCard = document.querySelector(
+                entry.modernCard = document.querySelector(
             '.post-card[data-original-id="' + postEl.id + '"]'
         );
 
@@ -4224,21 +4236,42 @@ var EditorModule = (function (Utils, EventBus) {
         entry.container = container;
 
         if (entry.modernCard && entry.modernCard.parentNode) {
-            entry.modernCard.classList.add('is-being-edited');
-            entry.modernCard.parentNode.insertBefore(container, entry.modernCard.nextSibling);
+            // INLINE MODE: hide .post-content and insert the editor as
+            // its next sibling inside the card. The card's header,
+            // body (avatar + author info), and anchor stay visible —
+            // only the content area is replaced. The original node is
+            // kept in the DOM (display: none) rather than having its
+            // innerHTML swapped, so Tippy instances, delegated
+            // listeners, and image load state survive cancel intact.
+            var contentArea = entry.modernCard.querySelector('.post-content');
+            if (contentArea) {
+                entry.contentArea = contentArea;
+                contentArea.style.display = 'none';
+                entry.modernCard.classList.add('is-fast-editing');
+                contentArea.parentNode.insertBefore(container, contentArea.nextSibling);
+            } else {
+                // Defensive: card without .post-content (shouldn't
+                // happen with the current generateModernPost, but if
+                // it ever does, fall back to the old sibling behaviour).
+                entry.modernCard.classList.add('is-being-edited');
+                entry.modernCard.parentNode.insertBefore(container, entry.modernCard.nextSibling);
+            }
         } else {
+            // FALLBACK: no modern card exists (posts.js hasn't converted
+            // this post). Hide the legacy element and slot the editor
+            // beside it, same as before. Inline replacement doesn't
+            // apply to the raw legacy table markup.
             entry.legacyPost = postEl;
             postEl.classList.add('is-being-edited');
             postEl.parentNode.insertBefore(container, postEl.nextSibling);
         }
-
         // ---- Build the editor ----
         try {
-            await buildEditorInto(container, {
+                        await buildEditorInto(container, {
                 mode: 'fastedit',
                 initialHtml: initialHtml,
                 placeholder: 'Edit your post…',
-                headerLabel: 'Editing as:',
+                hideHeader: true,
                 submitLabel: 'Save changes',
                 onCancel: function () {
                     _activeFastEdits.delete(postEl);
