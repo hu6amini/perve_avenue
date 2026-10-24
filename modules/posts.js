@@ -2764,11 +2764,22 @@ if (data.availableActions?.delete) actionsHtml += '<button class="action-icon de
     // ============================================================================
     // EVENT HANDLERS
     // ============================================================================
-    function handleQuote(pid) {
+        function handleQuote(pid) {
         const originalPost = document.getElementById(CONFIG.POST_ID_PREFIX + pid);
         if (!originalPost) return;
-        const quoteLink = originalPost.querySelector('a[href*="CODE=02"]');
-        if (quoteLink) window.location.href = quoteLink.getAttribute('href');
+
+        const EM = window.EditorModule;
+        if (!EM || typeof EM.startQuote !== 'function') {
+            console.warn(
+                '[PostsModule] EditorModule.startQuote unavailable — falling back to full editor. ' +
+                'keys:', EM ? Object.keys(EM) : null
+            );
+            const quoteLink = originalPost.querySelector('a[href*="CODE=02"]');
+            if (quoteLink) window.location.href = quoteLink.getAttribute('href');
+            return;
+        }
+
+        EM.startQuote(originalPost);
     }
 
         // Edit handler — hands off to EditorModule.startFastEdit, which owns
