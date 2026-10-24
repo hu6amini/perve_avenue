@@ -87,7 +87,7 @@ var EditorModule = (function (Utils, EventBus) {
         return fetch(url, merged).finally(function () { clearTimeout(timer); });
     }
 
-       // ========================================================================
+    // ========================================================================
     // CHARSET-AWARE HTML FETCH
     //
     // Response.text() is hardcoded to UTF-8 decode and ignores the
@@ -1067,7 +1067,7 @@ var EditorModule = (function (Utils, EventBus) {
                 // Remove the injected author header paragraph (added by CustomBlockquote)
                 inner = inner.replace(/<p class="quote-author-header">[\s\S]*?<\/p>/gi, '');
 
-                var cleaned = inner.replace(/<p[^>]*>/gi, '').replace(/<\/p>\s*/gi, '\n\n');   // ← \n → \n\n
+                var cleaned = inner.replace(/<p[^>]*>/gi, '').replace(/<\/p>\s*/gi, '\n\n');
                 cleaned = cleaned.replace(/\n+$/, '');
 
                 var authorMatch = attrs.match(/data-author="([^"]*)"/);
@@ -1080,7 +1080,7 @@ var EditorModule = (function (Utils, EventBus) {
             });
 
             result = result.replace(/<div\b([^>]*\bclass="[^"]*\bspoiler\b[^"]*"[^>]*)>([\s\S]*?)<\/div>/gi, function (_, attrs, inner) {
-                var cleaned = inner.replace(/<p[^>]*>/gi, '').replace(/<\/p>\s*/gi, '\n\n').replace(/\n+$/, '');   // ← \n → \n\n
+                var cleaned = inner.replace(/<p[^>]*>/gi, '').replace(/<\/p>\s*/gi, '\n\n').replace(/\n+$/, '');
                 var t = attrs.match(/data-title="([^"]*)"/);
                 var title = t ? decodeHtmlEntities(t[1]).trim() : '';
                 var prefix = title ? '<span class="ff-spoiler-title">' + escapeHtml(title) + '</span>' : '';
@@ -1748,6 +1748,7 @@ var EditorModule = (function (Utils, EventBus) {
                 attachProfileTip(currentHeader, user);
             });
         }
+
         // ---- Toolbar ----
         var toolbar = document.createElement('div');
         toolbar.className = 'modern-editor-toolbar';
@@ -3167,30 +3168,8 @@ var EditorModule = (function (Utils, EventBus) {
             },
         });
 
-                // =================================================================
+        // =================================================================
         // NormalizeEmptyDoc — structural cleanup after any transaction.
-        //
-        // Three jobs, all serving the same goal: the doc should never
-        // be left in a state where the user is "trapped" in a container
-        // they can't type their way out of.
-        //
-        //   1. Remove top-level blockquotes/spoilers that BECAME empty
-        //      in this transaction. If the user empties a quote by
-        //      deleting its text, the quote wrapper has to go — otherwise
-        //      the cursor stays inside it and typing adds text back into
-        //      the quote instead of in a fresh paragraph below.
-        //      Only removes containers that were non-empty before and
-        //      empty now — so a freshly-inserted empty blockquote (via
-        //      the toolbar button) survives until the user actually
-        //      types into it, then starts empty.
-        //
-        //   2. Ensure the doc always has at least one block. Deleting
-        //      the last node can leave ProseMirror with childCount 0;
-        //      some browsers render that as a truly empty <div>, and the
-        //      Placeholder extension then has nothing to attach to.
-        //
-        //   3. Collapse a doc that ends up as multiple empty paragraphs
-        //      down to a single paragraph — the original behaviour.
         // =================================================================
         const NormalizeEmptyDoc = Extension.create({
             name: 'normalizeEmptyDoc',
@@ -3531,10 +3510,24 @@ var EditorModule = (function (Utils, EventBus) {
 
                     // 6. Fall through to default handler
                     return false;
+                },
+                handleDOMEvents: {
+                    keydown: function (view, event) {
+                        var mod = event.ctrlKey || event.metaKey;
+                        if (mod && event.key === 'Enter') {
+                            event.preventDefault();
+                            if (submitBtn && !submitBtn.disabled) submitBtn.click();
+                            return true;
+                        }
+                        if (mod && !event.shiftKey && (event.key === 'k' || event.key === 'K')) { event.preventDefault(); linkBtn.click(); return true; }
+                        if (mod && !event.shiftKey && (event.key === 'e' || event.key === 'E')) { event.preventDefault(); editor.chain().focus().toggleCode().run(); return true; }
+                        if (event.ctrlKey && event.shiftKey && (event.key === 's' || event.key === 'S')) { event.preventDefault(); spoilerBtn.click(); return true; }
+                        if (event.ctrlKey && event.shiftKey && (event.key === 'n' || event.key === 'N')) { event.preventDefault(); nsfwBtn.click(); return true; }
+                        return false;
+                    }
                 }
             },
             onCreate: function ({ editor }) {
-                // Keep the trailing paragraph logic
                 (function ensureTrailingParagraph() {
                     var doc = editor.state.doc;
                     var last = doc.lastChild;
@@ -3550,7 +3543,7 @@ var EditorModule = (function (Utils, EventBus) {
                 // 'reply' → skip. Most visits are to read, not reply.
                 if (opts.mode === 'reply') return;
 
-                // 'fastedit' → The user explicitly clicked the Edit button. 
+                // 'fastedit' → The user explicitly clicked the Edit button.
                 if (opts.mode === 'fastedit') {
                     setTimeout(function () {
                         if (editor && !editor.isDestroyed && !editor.isFocused) {
@@ -3611,53 +3604,39 @@ var EditorModule = (function (Utils, EventBus) {
             setupEmoticonAutocomplete(editor, editorRoot);
         }
 
-        editor.setOptions({
-            editorProps: {
-                handleDOMEvents: {
-                    keydown: function (view, event) {
-                        var mod = event.ctrlKey || event.metaKey;
-                        if (mod && event.key === 'Enter') {
-                            event.preventDefault();
-                            if (submitBtn && !submitBtn.disabled) submitBtn.click();
-                            return true;
-                        }
-                        if (mod && !event.shiftKey && (event.key === 'k' || event.key === 'K')) { event.preventDefault(); linkBtn.click(); return true; }
-                        if (mod && !event.shiftKey && (event.key === 'e' || event.key === 'E')) { event.preventDefault(); editor.chain().focus().toggleCode().run(); return true; }
-                        if (event.ctrlKey && event.shiftKey && (event.key === 's' || event.key === 'S')) { event.preventDefault(); spoilerBtn.click(); return true; }
-                        if (event.ctrlKey && event.shiftKey && (event.key === 'n' || event.key === 'N')) { event.preventDefault(); nsfwBtn.click(); return true; }
-                        return false;
-                    }
-                }
-            }
-        });
+        // NOTE: The previous editor.setOptions({ editorProps: { handleDOMEvents: { keydown: ... } } })
+        // call has been moved into the initial editorProps above. That call
+        // was doing a shallow merge at the top level, which REPLACED the
+        // entire editorProps object — wiping out attributes, plugins,
+        // transformPastedHTML and handlePaste. Moving the handler into the
+        // initial object avoids that replacement entirely.
 
         // Helper: image hover toolbar
         function setupImageToolbar(root, ed) {
-            var scrollContainer = root.parentNode; // This is the .modern-wysiwyg wrapper
-            
+            var scrollContainer = root.parentNode;
+
             var toolbarEl = document.createElement('div');
             toolbarEl.className = 'editor-image-toolbar';
             toolbarEl.style.display = 'none';
-            
+
             var nsfwB = document.createElement('button');
             nsfwB.type = 'button'; nsfwB.className = 'editor-image-nsfw-btn';
             nsfwB.innerHTML = '<i class="fa-regular fa-eye-slash" aria-hidden="true"></i>';
             nsfwB.title = 'Mark as NSFW'; nsfwB.setAttribute('aria-label', 'Toggle NSFW');
-            
+
             var editB = document.createElement('button');
             editB.type = 'button'; editB.className = 'editor-image-edit-btn';
             editB.innerHTML = '<i class="fa-regular fa-pen" aria-hidden="true"></i>';
             editB.title = 'Edit image'; editB.setAttribute('aria-label', 'Edit image');
-            
+
             var delB = document.createElement('button');
             delB.type = 'button'; delB.className = 'editor-image-delete-btn';
             delB.innerHTML = '<i class="fa-regular fa-trash-can" aria-hidden="true"></i>';
             delB.title = 'Delete image'; delB.setAttribute('aria-label', 'Delete image');
-            
+
             toolbarEl.appendChild(nsfwB); toolbarEl.appendChild(editB); toolbarEl.appendChild(delB);
-            
-            // Mount to the scroll container, NOT .ProseMirror
-            scrollContainer.appendChild(toolbarEl); 
+
+            scrollContainer.appendChild(toolbarEl);
 
             [nsfwB, editB, delB].forEach(function (b) { b.addEventListener('mousedown', function (e) { e.preventDefault(); }); });
 
@@ -3679,11 +3658,10 @@ var EditorModule = (function (Utils, EventBus) {
                 var rootRect = scrollContainer.getBoundingClientRect();
                 var w = toolbarEl.offsetWidth || 108;
                 var h = toolbarEl.offsetHeight || 32;
-                
-                // Calculate position relative to the scroll container (.modern-wysiwyg)
+
                 var top = (r.top - rootRect.top) + scrollContainer.scrollTop + 6;
                 var left = (r.right - rootRect.left) + scrollContainer.scrollLeft - w - 8;
-                
+
                 toolbarEl.style.top = Math.max(4, top) + 'px';
                 toolbarEl.style.left = Math.max(4, left) + 'px';
             }
@@ -3898,12 +3876,8 @@ var EditorModule = (function (Utils, EventBus) {
         }
 
         // Send-state
-                // Send-state
         function updateSendState() {
             if (!submitBtn) return;
-            // While a save is in flight, keep the button disabled even if
-            // the editor produces more transactions (e.g. the user types
-            // a character while waiting for the response).
             if (submitBtn.hasAttribute('data-saving')) {
                 submitBtn.disabled = true;
                 return;
@@ -4175,16 +4149,7 @@ var EditorModule = (function (Utils, EventBus) {
     //                &enablesig=1
     //          → HTML response (the topic page); extract #ee<id> .color
     //          → swap innerHTML into the live DOM
-    //
-    // No .fastedit, .fastedit_text, .fastedit_send, .fastedit_canc,
-    // .fastedit_button, or any other forum-injected element is consumed.
-    // FastLife's tag(), send_fastedit() and the CODE=08 link's onclick
-    // are all bypassed — the modern editor calls fetch directly.
     // ========================================================================
-
-    // Locate the post content element. Mirrors posts.js's getCleanContent
-    // selectors — the forum renders the body inside
-    // table.color under .right.Item or td.Item.
     function findPostContent(scope) {
         if (!scope) return null;
         return scope.querySelector('.right.Item table.color') ||
@@ -4192,19 +4157,15 @@ var EditorModule = (function (Utils, EventBus) {
                scope.querySelector('.color');
     }
 
-    // Look up the edit URL from the CODE=08 link. The forum emits one
-    // for every post the current user can edit — bored.js uses the exact
-    // same link as its source.
     function findEditLink(postEl) {
         if (!postEl) return null;
         return postEl.querySelector('.mini_buttons > a[href*="act=Post&CODE=08"]') ||
                postEl.querySelector('a[href*="act=Post&CODE=08"]');
     }
 
-        function cleanupFastEditEntry(entry) {
+    function cleanupFastEditEntry(entry) {
         if (!entry) return;
 
-        // Restore the original content area if we hid it for inline edit.
         if (entry.contentArea) {
             entry.contentArea.style.display = '';
             entry.contentArea = null;
@@ -4241,18 +4202,13 @@ var EditorModule = (function (Utils, EventBus) {
         var postId = (postEl.id || '').replace(/^ee/, '');
         if (!postId) return;
 
-        // Cancel any other open or in-progress edit — the forum's own
-        // fastedit only allows one at a time, so we match that.
         var others = [];
         _activeFastEdits.forEach(function (_entry, pe) {
             if (pe !== postEl) others.push(pe);
         });
         others.forEach(function (pe) { cancelFastEdit(pe); });
 
-        // Single mutable entry — the pending / active states share the
-        // same object so mutation (container, modernCard) is visible from
-        // every closure that holds a reference to it.
-       var entry = {
+        var entry = {
             state: 'pending',
             controller: new AbortController(),
             container: null,
@@ -4275,7 +4231,6 @@ var EditorModule = (function (Utils, EventBus) {
         }
 
         // ---- LOAD: fetch the full editor page ----
-                // ---- LOAD: fetch the full editor page ----
         var html;
         var pageCharset = 'utf-8';
         try {
@@ -4312,7 +4267,6 @@ var EditorModule = (function (Utils, EventBus) {
             if (i.name) hidden[i.name] = i.value;
         });
 
-        // ---- Convert BBCode → HTML for TipTap ----
         var initialHtml = '';
         if (bbcode.trim()) {
             try {
@@ -4325,24 +4279,15 @@ var EditorModule = (function (Utils, EventBus) {
 
         if (!isStillPending()) return;
 
-        // ---- Locate modern card (if posts.js converted this post) ----
-                entry.modernCard = document.querySelector(
+        entry.modernCard = document.querySelector(
             '.post-card[data-original-id="' + postEl.id + '"]'
         );
 
-        // ---- Build container ----
         var container = document.createElement('div');
         container.className = 'modern-editor-container modern-editor-container--fastedit';
         entry.container = container;
 
         if (entry.modernCard && entry.modernCard.parentNode) {
-            // INLINE MODE: hide .post-content and insert the editor as
-            // its next sibling inside the card. The card's header,
-            // body (avatar + author info), and anchor stay visible —
-            // only the content area is replaced. The original node is
-            // kept in the DOM (display: none) rather than having its
-            // innerHTML swapped, so Tippy instances, delegated
-            // listeners, and image load state survive cancel intact.
             var contentArea = entry.modernCard.querySelector('.post-content');
             if (contentArea) {
                 entry.contentArea = contentArea;
@@ -4350,24 +4295,17 @@ var EditorModule = (function (Utils, EventBus) {
                 entry.modernCard.classList.add('is-fast-editing');
                 contentArea.parentNode.insertBefore(container, contentArea.nextSibling);
             } else {
-                // Defensive: card without .post-content (shouldn't
-                // happen with the current generateModernPost, but if
-                // it ever does, fall back to the old sibling behaviour).
                 entry.modernCard.classList.add('is-being-edited');
                 entry.modernCard.parentNode.insertBefore(container, entry.modernCard.nextSibling);
             }
         } else {
-            // FALLBACK: no modern card exists (posts.js hasn't converted
-            // this post). Hide the legacy element and slot the editor
-            // beside it, same as before. Inline replacement doesn't
-            // apply to the raw legacy table markup.
             entry.legacyPost = postEl;
             postEl.classList.add('is-being-edited');
             postEl.parentNode.insertBefore(container, postEl.nextSibling);
         }
-        // ---- Build the editor ----
+
         try {
-                        await buildEditorInto(container, {
+            await buildEditorInto(container, {
                 mode: 'fastedit',
                 initialHtml: initialHtml,
                 placeholder: 'Edit your post…',
@@ -4403,15 +4341,15 @@ var EditorModule = (function (Utils, EventBus) {
                     var saveText;
                     try {
                         var saveCharset = entry.pageCharset || 'utf-8';
-var bodyString = buildFormBody(Array.from(body.entries()), saveCharset);
-var saveResp = await fetch('/', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/x-www-form-urlencoded; charset=' + saveCharset },
-    body: bodyString,
-    credentials: 'include'
-});
-var saveBuf = await saveResp.arrayBuffer();
-saveText = decodeHtmlBuffer(saveBuf, saveResp.headers.get('content-type') || '').text;
+                        var bodyString = buildFormBody(Array.from(body.entries()), saveCharset);
+                        var saveResp = await fetch('/', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/x-www-form-urlencoded; charset=' + saveCharset },
+                            body: bodyString,
+                            credentials: 'include'
+                        });
+                        var saveBuf = await saveResp.arrayBuffer();
+                        saveText = decodeHtmlBuffer(saveBuf, saveResp.headers.get('content-type') || '').text;
                     } catch (err) {
                         if (submitBtn) {
                             submitBtn.removeAttribute('data-saving');
@@ -4437,12 +4375,8 @@ saveText = decodeHtmlBuffer(saveBuf, saveResp.headers.get('content-type') || '')
                         return;
                     }
 
-                    // Swap the updated body into the live legacy post so
-                    // any subsequent reconversion reads fresh content.
                     liveColor.innerHTML = newColor.innerHTML;
 
-                    // Success — tear down editor, unhide card, rebuild
-                    // modern cards from the updated legacy DOM.
                     _activeFastEdits.delete(postEl);
                     cleanupFastEditEntry(entry);
                     showToast('Post updated', 'success');
@@ -4458,7 +4392,6 @@ saveText = decodeHtmlBuffer(saveBuf, saveResp.headers.get('content-type') || '')
         }
 
         if (!isStillPending()) {
-            // Canceled during build — clean up the orphaned container.
             cleanupFastEditEntry(entry);
             _activeFastEdits.delete(postEl);
             return;
@@ -4507,20 +4440,9 @@ saveText = decodeHtmlBuffer(saveBuf, saveResp.headers.get('content-type') || '')
         }
     }
 
-        // ========================================================================
-    // QUOTE — fetch-and-inject, real-time
-    //
-    // GET ?act=Post&CODE=02&p=<postId> → server returns the reply page with
-    // #Post.value pre-filled with one or more [QUOTE=Author,date,url]…[/QUOTE]
-    // blocks (session-tracked checkbox selections are folded in server-side).
-    // We extract the BBCode, convert it, and append it to the fast reply
-    // editor at the bottom of the topic. No navigation.
-    //
-    // Multiple rapid clicks are queued in order so the resulting quotes
-    // stack in the same order the user clicked, not in network-response
-    // order.
     // ========================================================================
-
+    // QUOTE — fetch-and-inject, real-time
+    // ========================================================================
     function startQuote(postEl) {
         _quoteQueue = _quoteQueue
             .then(function () { return doStartQuote(postEl); })
@@ -4542,9 +4464,6 @@ saveText = decodeHtmlBuffer(saveBuf, saveResp.headers.get('content-type') || '')
             return;
         }
 
-        // Fast reply editor must exist. If it doesn't (locked topic,
-        // reply disabled, editor module failed to mount), fall back to
-        // the legacy navigation so the user still gets their quote.
         var fastReplyHost = document.getElementById('modern-editor-fastreply');
         if (!fastReplyHost || !fastReplyHost.__editorInstance) {
             console.info('[EditorModule] Quote: falling back to full editor (no fast reply editor present)');
@@ -4552,7 +4471,6 @@ saveText = decodeHtmlBuffer(saveBuf, saveResp.headers.get('content-type') || '')
             return;
         }
 
-        // ---- LOAD: fetch the quote page, extract BBCode ----
         var bbcode;
         try {
             var decoded = await fetchHtmlDecoded(quoteLink.href, {
@@ -4573,7 +4491,6 @@ saveText = decodeHtmlBuffer(saveBuf, saveResp.headers.get('content-type') || '')
             return;
         }
 
-        // ---- CONVERT: BBCode → TipTap-ready HTML ----
         var html;
         try {
             html = await legacyToHtmlAsync(bbcode);
@@ -4583,7 +4500,6 @@ saveText = decodeHtmlBuffer(saveBuf, saveResp.headers.get('content-type') || '')
             return;
         }
 
-        // ---- INJECT: append to the reply editor at cursor end ----
         var editorInst = fastReplyHost.__editorInstance;
         try {
             editorInst.chain().focus('end').insertContent(html).run();
@@ -4593,16 +4509,6 @@ saveText = decodeHtmlBuffer(saveBuf, saveResp.headers.get('content-type') || '')
             return;
         }
 
-        // Ensure the cursor lands in a paragraph AFTER the quote.
-        // insertContent leaves the cursor at the end of the last
-        // inserted block — inside the blockquote's final paragraph.
-        // Without this, the user has to manually click below the
-        // quote before typing their reply, every single time. Same
-        // shape as focusTrailingEmbedParagraph for lite embeds, but
-        // applied to blockquotes on demand rather than as a plugin,
-        // because a blockquote mid-document should NOT auto-acquire
-        // a trailing paragraph — only when the user just inserted
-        // one do we want the extra row.
         var docAfter = editorInst.state.doc;
         var endPos = docAfter.content.size;
         var lastBlock = docAfter.lastChild;
@@ -4620,7 +4526,6 @@ saveText = decodeHtmlBuffer(saveBuf, saveResp.headers.get('content-type') || '')
                 .run();
         }
 
-        // ---- SCROLL: bring the editor into view ----
         fastReplyHost.scrollIntoView({ behavior: 'smooth', block: 'start' });
         showToast('Quote added', 'success');
     }
@@ -4686,7 +4591,7 @@ saveText = decodeHtmlBuffer(saveBuf, saveResp.headers.get('content-type') || '')
         });
     }
 
-        function reset() {
+    function reset() {
         isInitialized = false;
         _activeFastEdits.forEach(function (entry) {
             if (entry && entry.controller) {
@@ -4712,7 +4617,7 @@ saveText = decodeHtmlBuffer(saveBuf, saveResp.headers.get('content-type') || '')
         _currentUserCache = null;
     }
 
-        return {
+    return {
         initialize: initialize,
         reset: reset,
         startFastEdit: startFastEdit,
