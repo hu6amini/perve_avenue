@@ -1063,7 +1063,6 @@ var EditorModule = (function (Utils, EventBus) {
             );
 
             // Read from data-author
-                        // Read from data-author
             result = result.replace(/<blockquote([^>]*)>([\s\S]*?)<\/blockquote>/gi, function(match, attrs, inner) {
                 // Remove the injected author header paragraph (added by CustomBlockquote)
                 inner = inner.replace(/<p class="quote-author-header">[\s\S]*?<\/p>/gi, '');
