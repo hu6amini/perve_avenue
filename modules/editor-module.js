@@ -4422,8 +4422,6 @@ saveText = decodeHtmlBuffer(saveBuf, saveResp.headers.get('content-type') || '')
     // order.
     // ========================================================================
 
-    var _quoteQueue = Promise.resolve();
-
     function startQuote(postEl) {
         _quoteQueue = _quoteQueue
             .then(function () { return doStartQuote(postEl); })
