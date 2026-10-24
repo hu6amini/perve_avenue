@@ -908,18 +908,26 @@ var EditorModule = (function (Utils, EventBus) {
         
         // Use data-author to avoid overlapping the CSS pseudo-elements
         html = html.replace(/\[QUOTE(?:=([^\]]+))?\]([\s\S]*?)\[\/QUOTE\]/gi, function(match, params, body) {
-            var author = '';
-            if (params) {
-                var parts = params.split(',');
-                if (parts.length > 0 && parts[0].trim()) {
-                    author = parts[0].trim();
-                }
-            }
-            if (author) {
-                return '<blockquote data-author="' + escapeHtml(author) + '">' + body + '</blockquote>';
-            }
-            return '<blockquote>' + body + '</blockquote>';
-        });
+    var author = '';
+    if (params) {
+        var parts = params.split(',');
+        if (parts.length > 0 && parts[0].trim()) {
+            author = parts[0].trim();
+        }
+    }
+
+    // Skip empty quotes — matches htmlToLegacy so a stale
+    // "[QUOTE=Author][/QUOTE]" sitting in a saved draft can't reinstate
+    // an empty blockquote on load. This is what closes the loop: even
+    // if a user already has the broken draft persisted, the next
+    // refresh strips it and they start with a clean empty editor.
+    if (!body || !body.trim()) return '';
+
+    if (author) {
+        return '<blockquote data-author="' + escapeHtml(author) + '">' + body + '</blockquote>';
+    }
+    return '<blockquote>' + body + '</blockquote>';
+});
         html = html.replace(/\[code\](.*?)\[\/code\]/gis, '<pre><code>$1</code></pre>');
         html = html.replace(/\[spoiler\](.*?)\[\/spoiler\]/gis, '<div class="spoiler">$1</div>');
         html = html.replace(/\[CENTER\](.*?)\[\/CENTER\]/gis, '<div style="text-align:center">$1</div>');
@@ -1064,20 +1072,29 @@ var EditorModule = (function (Utils, EventBus) {
 
             // Read from data-author
             result = result.replace(/<blockquote([^>]*)>([\s\S]*?)<\/blockquote>/gi, function(match, attrs, inner) {
-                // Remove the injected author header paragraph (added by CustomBlockquote)
-                inner = inner.replace(/<p class="quote-author-header">[\s\S]*?<\/p>/gi, '');
+    // Remove the injected author header paragraph (added by CustomBlockquote)
+    inner = inner.replace(/<p class="quote-author-header">[\s\S]*?<\/p>/gi, '');
 
-                var cleaned = inner.replace(/<p[^>]*>/gi, '').replace(/<\/p>\s*/gi, '\n\n');
-                cleaned = cleaned.replace(/\n+$/, '');
+    var cleaned = inner.replace(/<p[^>]*>/gi, '').replace(/<\/p>\s*/gi, '\n\n');
+    cleaned = cleaned.replace(/\n+$/, '');
 
-                var authorMatch = attrs.match(/data-author="([^"]*)"/);
-                if (authorMatch) {
-                    var author = decodeHtmlEntities(authorMatch[1]);
-                    return '[QUOTE=' + author + ']' + cleaned + '[/QUOTE]';
-                }
+    // Skip empty quotes — nothing to preserve. Without this, emptying
+    // the blockquote in the editor produces "[QUOTE=Author][/QUOTE]",
+    // which is written to the legacy textarea / localStorage draft and
+    // re-inflated as an empty blockquote on the next page load. The
+    // empty blockquote then has no placeholder (it's not :first-child
+    // of the ProseMirror root) and the user's next keystroke lands
+    // inside it, wrapping fresh text in a quote they can't escape.
+    if (!cleaned.trim()) return '';
 
-                return '[QUOTE]' + cleaned + '[/QUOTE]';
-            });
+    var authorMatch = attrs.match(/data-author="([^"]*)"/);
+    if (authorMatch) {
+        var author = decodeHtmlEntities(authorMatch[1]);
+        return '[QUOTE=' + author + ']' + cleaned + '[/QUOTE]';
+    }
+
+    return '[QUOTE]' + cleaned + '[/QUOTE]';
+});
 
             result = result.replace(/<div\b([^>]*\bclass="[^"]*\bspoiler\b[^"]*"[^>]*)>([\s\S]*?)<\/div>/gi, function (_, attrs, inner) {
                 var cleaned = inner.replace(/<p[^>]*>/gi, '').replace(/<\/p>\s*/gi, '\n\n').replace(/\n+$/, '');
