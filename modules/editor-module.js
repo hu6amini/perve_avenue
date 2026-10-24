@@ -12,7 +12,6 @@ var EditorModule = (function (Utils, EventBus) {
     var isInitialized = false;
     var _boundHandlers = [];
     var _dropdownBackdrop = null;
-    var _uploadRegistry = new Map();
     var _currentUserCache = null;
     var _activeFastEdits = new Map();
     var _observerIds = [];
@@ -4155,12 +4154,14 @@ var EditorModule = (function (Utils, EventBus) {
         // Single mutable entry — the pending / active states share the
         // same object so mutation (container, modernCard) is visible from
         // every closure that holds a reference to it.
-        var entry = {
+       var entry = {
             state: 'pending',
             controller: new AbortController(),
             container: null,
             modernCard: null,
-            legacyPost: null
+            legacyPost: null,
+            contentArea: null,
+            pageCharset: null
         };
         _activeFastEdits.set(postEl, entry);
 
@@ -4583,7 +4584,6 @@ saveText = decodeHtmlBuffer(saveBuf, saveResp.headers.get('content-type') || '')
             _dropdownBackdrop.parentNode.removeChild(_dropdownBackdrop);
         }
         _dropdownBackdrop = null;
-        _uploadRegistry.clear();
         _currentUserCache = null;
     }
 
