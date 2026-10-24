@@ -87,6 +87,149 @@ var EditorModule = (function (Utils, EventBus) {
         return fetch(url, merged).finally(function () { clearTimeout(timer); });
     }
 
+       // ========================================================================
+    // CHARSET-AWARE HTML FETCH
+    //
+    // Response.text() is hardcoded to UTF-8 decode and ignores the
+    // charset in Content-Type, the <meta charset> tag, and any non-UTF-8
+    // BOM handling beyond 0xEF 0xBB 0xBF. The forum serves legacy-encoded
+    // HTML (windows-1252), so text() turns every accented character,
+    // curly quote, em-dash, etc. into U+FFFD.
+    //
+    // These helpers read the response as bytes, determine the charset
+    // (header > meta > strict-UTF-8 probe > windows-1252 fallback), and
+    // decode explicitly. They return the decoded string and the resolved
+    // charset, so the caller can use the same charset when encoding the
+    // save POST body — a save round-trip through the editor must not
+    // transcode to UTF-8 or the forum will re-encode it to mojibake.
+    // ========================================================================
+
+    var _W1252_REVERSE = {
+        0x20AC: 0x80, 0x201A: 0x82, 0x0192: 0x83, 0x201E: 0x84,
+        0x2026: 0x85, 0x2020: 0x86, 0x2021: 0x87, 0x02C6: 0x88,
+        0x2030: 0x89, 0x0160: 0x8A, 0x2039: 0x8B, 0x0152: 0x8C,
+        0x017D: 0x8E, 0x2018: 0x91, 0x2019: 0x92, 0x201C: 0x93,
+        0x201D: 0x94, 0x2022: 0x95, 0x2013: 0x96, 0x2014: 0x97,
+        0x02DC: 0x98, 0x2122: 0x99, 0x0161: 0x9A, 0x203A: 0x9B,
+        0x0153: 0x9C, 0x017E: 0x9E, 0x0178: 0x9F
+    };
+
+    function normalizeCharsetLabel(cs) {
+        if (!cs) return null;
+        cs = String(cs).trim().replace(/^["']|["']$/g, '').toLowerCase();
+        if (cs === 'iso-8859-1' || cs === 'iso8859-1' ||
+            cs === 'latin1' || cs === 'latin-1' || cs === 'us-ascii' || cs === 'ascii') {
+            return 'windows-1252';
+        }
+        if (cs === 'utf8' || cs === 'utf-8' || cs === 'unicode-1-1-utf-8') {
+            return 'utf-8';
+        }
+        return cs;
+    }
+
+    async function fetchHtmlDecoded(url, opts) {
+        var resp = await fetch(url, opts);
+        if (!resp.ok) throw new Error('HTTP ' + resp.status);
+        var buf = await resp.arrayBuffer();
+        return decodeHtmlBuffer(buf, resp.headers.get('content-type') || '');
+    }
+
+    function decodeHtmlBuffer(arrayBuffer, contentType) {
+        var bytes = new Uint8Array(arrayBuffer);
+
+        // 1. BOM
+        if (bytes.length >= 3 && bytes[0] === 0xEF && bytes[1] === 0xBB && bytes[2] === 0xBF) {
+            return { text: new TextDecoder('utf-8').decode(arrayBuffer.slice(3)), charset: 'utf-8' };
+        }
+        if (bytes.length >= 2) {
+            if (bytes[0] === 0xFF && bytes[1] === 0xFE) {
+                return { text: new TextDecoder('utf-16le').decode(arrayBuffer.slice(2)), charset: 'utf-16le' };
+            }
+            if (bytes[0] === 0xFE && bytes[1] === 0xFF) {
+                return { text: new TextDecoder('utf-16be').decode(arrayBuffer.slice(2)), charset: 'utf-16be' };
+            }
+        }
+
+        // 2. Peek at the meta / XML declaration in the first 2 KB
+        var peek = new TextDecoder('windows-1252').decode(bytes.slice(0, 2048));
+        var metaMatch =
+            peek.match(/<meta[^>]+charset\s*=\s*["']?\s*([^"'\s>\/]+)/i) ||
+            peek.match(/<meta[^>]+content\s*=\s*["'][^"']*charset\s*=\s*([^"'\s;]+)/i) ||
+            peek.match(/<\?xml[^>]+encoding\s*=\s*["']([^"']+)["']/i);
+        var metaCharset = normalizeCharsetLabel(metaMatch && metaMatch[1]);
+
+        // 3. Content-Type header charset
+        var headerMatch = contentType.match(/charset\s*=\s*["']?\s*([^;"'\s]+)/i);
+        var headerCharset = normalizeCharsetLabel(headerMatch && headerMatch[1]);
+
+        // 4. Header wins; meta is the fallback
+        var chosen = headerCharset || metaCharset;
+
+        if (chosen) {
+            try {
+                return { text: new TextDecoder(chosen).decode(arrayBuffer), charset: chosen };
+            } catch (e) { /* unknown label — fall through */ }
+        }
+
+        // 5. Try strict UTF-8
+        try {
+            var utf8Strict = new TextDecoder('utf-8', { fatal: true }).decode(arrayBuffer);
+            return { text: utf8Strict, charset: 'utf-8' };
+        } catch (e) { /* not UTF-8 */ }
+
+        // 6. Fall back to windows-1252
+        return { text: new TextDecoder('windows-1252').decode(arrayBuffer), charset: 'windows-1252' };
+    }
+
+    function buildFormBody(pairs, charset) {
+        var isUtf8 = normalizeCharsetLabel(charset) === 'utf-8';
+        var encoder = isUtf8 ? null : (function () {
+            return function (str) {
+                var out = [];
+                for (var i = 0; i < str.length; i++) {
+                    var cp = str.charCodeAt(i);
+                    if (cp < 0x80 || (cp >= 0xA0 && cp <= 0xFF)) {
+                        out.push(cp);
+                    } else if (_W1252_REVERSE[cp] !== undefined) {
+                        out.push(_W1252_REVERSE[cp]);
+                    } else {
+                        out.push(0x3F);
+                    }
+                }
+                return new Uint8Array(out);
+            };
+        })();
+
+        var percentEncode = function (bytes) {
+            var s = '';
+            for (var i = 0; i < bytes.length; i++) {
+                var b = bytes[i];
+                if (b === 0x20) { s += '+'; }
+                else if (
+                    (b >= 0x41 && b <= 0x5A) ||
+                    (b >= 0x61 && b <= 0x7A) ||
+                    (b >= 0x30 && b <= 0x39) ||
+                    b === 0x2D || b === 0x2E || b === 0x5F || b === 0x7E || b === 0x2A
+                ) { s += String.fromCharCode(b); }
+                else { s += '%' + (b < 16 ? '0' : '') + b.toString(16).toUpperCase(); }
+            }
+            return s;
+        };
+
+        var encodePart = function (str) {
+            if (isUtf8) {
+                return encodeURIComponent(str).replace(/%20/g, '+');
+            }
+            return percentEncode(encoder(str));
+        };
+
+        var parts = [];
+        for (var i = 0; i < pairs.length; i++) {
+            parts.push(encodePart(String(pairs[i][0])) + '=' + encodePart(String(pairs[i][1])));
+        }
+        return parts.join('&');
+    }
+
     function isImageUrl(url) {
         if (!url || typeof url !== 'string') return false;
         if (IMAGE_URL_EXTENSIONS.test(url)) return true;
@@ -4020,20 +4163,24 @@ var EditorModule = (function (Utils, EventBus) {
         }
 
         // ---- LOAD: fetch the full editor page ----
+                // ---- LOAD: fetch the full editor page ----
         var html;
+        var pageCharset = 'utf-8';
         try {
             var decoded = await fetchHtmlDecoded(editLink.href, {
-    credentials: 'include',
-    signal: entry.controller.signal
-});
-html = decoded.text;
-pageCharset = decoded.charset;
+                credentials: 'include',
+                signal: entry.controller.signal
+            });
+            html = decoded.text;
+            pageCharset = decoded.charset;
         } catch (err) {
             _activeFastEdits.delete(postEl);
             if (err && err.name === 'AbortError') return;
+            console.error('[EditorModule] Fast edit load failed:', err);
             showToast('Could not load the editor', 'error');
             return;
         }
+        entry.pageCharset = pageCharset;
 
         if (!isStillPending()) return;
 
