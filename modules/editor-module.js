@@ -4495,6 +4495,33 @@ saveText = decodeHtmlBuffer(saveBuf, saveResp.headers.get('content-type') || '')
             return;
         }
 
+        // Ensure the cursor lands in a paragraph AFTER the quote.
+        // insertContent leaves the cursor at the end of the last
+        // inserted block — inside the blockquote's final paragraph.
+        // Without this, the user has to manually click below the
+        // quote before typing their reply, every single time. Same
+        // shape as focusTrailingEmbedParagraph for lite embeds, but
+        // applied to blockquotes on demand rather than as a plugin,
+        // because a blockquote mid-document should NOT auto-acquire
+        // a trailing paragraph — only when the user just inserted
+        // one do we want the extra row.
+        var docAfter = editorInst.state.doc;
+        var endPos = docAfter.content.size;
+        var lastBlock = docAfter.lastChild;
+
+        if (lastBlock && lastBlock.type.name === 'blockquote') {
+            editorInst.chain()
+                .insertContentAt(endPos, { type: 'paragraph' })
+                .setTextSelection(endPos + 1)
+                .focus()
+                .run();
+        } else if (lastBlock && lastBlock.type.name === 'paragraph') {
+            editorInst.chain()
+                .setTextSelection(endPos - 1)
+                .focus()
+                .run();
+        }
+
         // ---- SCROLL: bring the editor into view ----
         fastReplyHost.scrollIntoView({ behavior: 'smooth', block: 'start' });
         showToast('Quote added', 'success');
