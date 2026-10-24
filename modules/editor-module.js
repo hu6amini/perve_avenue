@@ -1063,11 +1063,12 @@ var EditorModule = (function (Utils, EventBus) {
             );
 
             // Read from data-author
+                        // Read from data-author
             result = result.replace(/<blockquote([^>]*)>([\s\S]*?)<\/blockquote>/gi, function(match, attrs, inner) {
                 // Remove the injected author header paragraph (added by CustomBlockquote)
                 inner = inner.replace(/<p class="quote-author-header">[\s\S]*?<\/p>/gi, '');
 
-                var cleaned = inner.replace(/<p[^>]*>/gi, '').replace(/<\/p>\s*/gi, '\n');
+                var cleaned = inner.replace(/<p[^>]*>/gi, '').replace(/<\/p>\s*/gi, '\n\n');   // ← \n → \n\n
                 cleaned = cleaned.replace(/\n+$/, '');
 
                 var authorMatch = attrs.match(/data-author="([^"]*)"/);
@@ -1080,7 +1081,7 @@ var EditorModule = (function (Utils, EventBus) {
             });
 
             result = result.replace(/<div\b([^>]*\bclass="[^"]*\bspoiler\b[^"]*"[^>]*)>([\s\S]*?)<\/div>/gi, function (_, attrs, inner) {
-                var cleaned = inner.replace(/<p[^>]*>/gi, '').replace(/<\/p>\s*/gi, '\n').replace(/\n+$/, '');
+                var cleaned = inner.replace(/<p[^>]*>/gi, '').replace(/<\/p>\s*/gi, '\n\n').replace(/\n+$/, '');   // ← \n → \n\n
                 var t = attrs.match(/data-title="([^"]*)"/);
                 var title = t ? decodeHtmlEntities(t[1]).trim() : '';
                 var prefix = title ? '<span class="ff-spoiler-title">' + escapeHtml(title) + '</span>' : '';
