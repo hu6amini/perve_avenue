@@ -89,21 +89,7 @@ var EditorModule = (function (Utils, EventBus) {
 
     // ========================================================================
     // CHARSET-AWARE HTML FETCH
-    //
-    // Response.text() is hardcoded to UTF-8 decode and ignores the
-    // charset in Content-Type, the <meta charset> tag, and any non-UTF-8
-    // BOM handling beyond 0xEF 0xBB 0xBF. The forum serves legacy-encoded
-    // HTML (windows-1252), so text() turns every accented character,
-    // curly quote, em-dash, etc. into U+FFFD.
-    //
-    // These helpers read the response as bytes, determine the charset
-    // (header > meta > strict-UTF-8 probe > windows-1252 fallback), and
-    // decode explicitly. They return the decoded string and the resolved
-    // charset, so the caller can use the same charset when encoding the
-    // save POST body — a save round-trip through the editor must not
-    // transcode to UTF-8 or the forum will re-encode it to mojibake.
     // ========================================================================
-
     var _W1252_REVERSE = {
         0x20AC: 0x80, 0x201A: 0x82, 0x0192: 0x83, 0x201E: 0x84,
         0x2026: 0x85, 0x2020: 0x86, 0x2021: 0x87, 0x02C6: 0x88,
@@ -466,19 +452,6 @@ var EditorModule = (function (Utils, EventBus) {
         } catch (e) { return false; }
     }
 
-    // A paragraph whose entire text content is a bare YouTube/Vimeo URL
-    // is a video embed in disguise — the forum stored the URL as BBCode
-    // text and relied on its own renderer to autoplay the iframe. Once
-    // the content flows through TipTap (quoting a post, opening the
-    // editor with a URL-only quote, etc.), the URL just becomes a plain
-    // link. Convert those standalone paragraphs to lite-embed wrappers
-    // so the user sees the same facade they see in the post.
-    //
-    // Only paragraphs whose textContent is EXACTLY a single URL qualify.
-    // "Check out https://youtube.com/…" is left alone. Nor does this
-    // touch inline links, images, or any other element — it only
-    // matches <p>…</p> whose entire trimmed text is a URL with a
-    // recognized hostname.
     function transformBareVideoUrls(html) {
         if (!html || typeof html !== 'string') return html;
         if (html.indexOf('http') === -1) return html;
@@ -489,7 +462,6 @@ var EditorModule = (function (Utils, EventBus) {
         var paragraphs = tempDiv.querySelectorAll('p');
         paragraphs.forEach(function (p) {
             var text = (p.textContent || '').trim();
-            // Must be exactly one URL — no surrounding prose
             if (!/^https?:\/\/\S+$/.test(text)) return;
 
             if (isYouTubeHostname(text)) {
@@ -905,29 +877,21 @@ var EditorModule = (function (Utils, EventBus) {
         html = html.replace(/\[list=1\](.*?)\[\/list\]/gis, '<ol>$1</ol>');
         html = html.replace(/\[url=([^\]]+)\](.*?)\[\/url\]/gi, '<a href="$1" target="_blank">$2</a>');
         html = html.replace(/\[img\](.*?)\[\/img\]/gi, '<img src="$1" alt="image" loading="lazy" decoding="async">');
-        
+
         // Use data-author to avoid overlapping the CSS pseudo-elements
         html = html.replace(/\[QUOTE(?:=([^\]]+))?\]([\s\S]*?)\[\/QUOTE\]/gi, function(match, params, body) {
-    var author = '';
-    if (params) {
-        var parts = params.split(',');
-        if (parts.length > 0 && parts[0].trim()) {
-            author = parts[0].trim();
-        }
-    }
-
-    // Skip empty quotes — matches htmlToLegacy so a stale
-    // "[QUOTE=Author][/QUOTE]" sitting in a saved draft can't reinstate
-    // an empty blockquote on load. This is what closes the loop: even
-    // if a user already has the broken draft persisted, the next
-    // refresh strips it and they start with a clean empty editor.
-    if (!body || !body.trim()) return '';
-
-    if (author) {
-        return '<blockquote data-author="' + escapeHtml(author) + '">' + body + '</blockquote>';
-    }
-    return '<blockquote>' + body + '</blockquote>';
-});
+            var author = '';
+            if (params) {
+                var parts = params.split(',');
+                if (parts.length > 0 && parts[0].trim()) {
+                    author = parts[0].trim();
+                }
+            }
+            if (author) {
+                return '<blockquote data-author="' + escapeHtml(author) + '">' + body + '</blockquote>';
+            }
+            return '<blockquote>' + body + '</blockquote>';
+        });
         html = html.replace(/\[code\](.*?)\[\/code\]/gis, '<pre><code>$1</code></pre>');
         html = html.replace(/\[spoiler\](.*?)\[\/spoiler\]/gis, '<div class="spoiler">$1</div>');
         html = html.replace(/\[CENTER\](.*?)\[\/CENTER\]/gis, '<div style="text-align:center">$1</div>');
@@ -968,9 +932,9 @@ var EditorModule = (function (Utils, EventBus) {
                 codeBlocks.push(match);
                 return id;
             });
-            
+
             expanded = expanded.replace(/\r\n/g, '\n').replace(/\n/g, '<br>');
-            
+
             expanded = expanded.replace(/\uE000CODE(\d+)Z\uE001/g, function(m, idx) {
                 return codeBlocks[parseInt(idx, 10)];
             });
@@ -980,7 +944,7 @@ var EditorModule = (function (Utils, EventBus) {
         html = transformLegacyIframes(html);
         html = paragraphizeLegacyHtml(html);
         html = transformBareVideoUrls(html);
-        
+
         return await enrichImageDimensions(html);
     }
 
@@ -1072,29 +1036,20 @@ var EditorModule = (function (Utils, EventBus) {
 
             // Read from data-author
             result = result.replace(/<blockquote([^>]*)>([\s\S]*?)<\/blockquote>/gi, function(match, attrs, inner) {
-    // Remove the injected author header paragraph (added by CustomBlockquote)
-    inner = inner.replace(/<p class="quote-author-header">[\s\S]*?<\/p>/gi, '');
+                // Remove the injected author header paragraph (added by CustomBlockquote)
+                inner = inner.replace(/<p class="quote-author-header">[\s\S]*?<\/p>/gi, '');
 
-    var cleaned = inner.replace(/<p[^>]*>/gi, '').replace(/<\/p>\s*/gi, '\n\n');
-    cleaned = cleaned.replace(/\n+$/, '');
+                var cleaned = inner.replace(/<p[^>]*>/gi, '').replace(/<\/p>\s*/gi, '\n\n');
+                cleaned = cleaned.replace(/\n+$/, '');
 
-    // Skip empty quotes — nothing to preserve. Without this, emptying
-    // the blockquote in the editor produces "[QUOTE=Author][/QUOTE]",
-    // which is written to the legacy textarea / localStorage draft and
-    // re-inflated as an empty blockquote on the next page load. The
-    // empty blockquote then has no placeholder (it's not :first-child
-    // of the ProseMirror root) and the user's next keystroke lands
-    // inside it, wrapping fresh text in a quote they can't escape.
-    if (!cleaned.trim()) return '';
+                var authorMatch = attrs.match(/data-author="([^"]*)"/);
+                if (authorMatch) {
+                    var author = decodeHtmlEntities(authorMatch[1]);
+                    return '[QUOTE=' + author + ']' + cleaned + '[/QUOTE]';
+                }
 
-    var authorMatch = attrs.match(/data-author="([^"]*)"/);
-    if (authorMatch) {
-        var author = decodeHtmlEntities(authorMatch[1]);
-        return '[QUOTE=' + author + ']' + cleaned + '[/QUOTE]';
-    }
-
-    return '[QUOTE]' + cleaned + '[/QUOTE]';
-});
+                return '[QUOTE]' + cleaned + '[/QUOTE]';
+            });
 
             result = result.replace(/<div\b([^>]*\bclass="[^"]*\bspoiler\b[^"]*"[^>]*)>([\s\S]*?)<\/div>/gi, function (_, attrs, inner) {
                 var cleaned = inner.replace(/<p[^>]*>/gi, '').replace(/<\/p>\s*/gi, '\n\n').replace(/\n+$/, '');
@@ -3621,13 +3576,6 @@ var EditorModule = (function (Utils, EventBus) {
             setupEmoticonAutocomplete(editor, editorRoot);
         }
 
-        // NOTE: The previous editor.setOptions({ editorProps: { handleDOMEvents: { keydown: ... } } })
-        // call has been moved into the initial editorProps above. That call
-        // was doing a shallow merge at the top level, which REPLACED the
-        // entire editorProps object — wiping out attributes, plugins,
-        // transformPastedHTML and handlePaste. Moving the handler into the
-        // initial object avoids that replacement entirely.
-
         // Helper: image hover toolbar
         function setupImageToolbar(root, ed) {
             var scrollContainer = root.parentNode;
@@ -3997,6 +3945,11 @@ var EditorModule = (function (Utils, EventBus) {
 
     // ========================================================================
     // FAST REPLY BUILDER (body#topic)
+    //
+    // ONE-WAY FLOW: this editor never reads the textarea. The textarea is
+    // a submit-only sink, kept in sync via onSync. This eliminates the
+    // roundtrip that let stale/empty BBCode container markers (e.g. an
+    // emptied [QUOTE=Author][/QUOTE]) reload into a fresh editor session.
     // ========================================================================
     async function buildFastReplyEditor() {
         var legacySend = document.querySelector('.fast.send');
@@ -4006,8 +3959,6 @@ var EditorModule = (function (Utils, EventBus) {
         var legacyPost = document.getElementById('Post');
         var legacyForm = window.REPLIER || (legacyPost ? legacyPost.form : null);
         var legacySubmit = document.querySelector('input[name="sub-mit"]');
-
-        var legacyHtml = legacyPost ? legacyPost.value : '';
 
         var draftKey = null;
         if (legacyPost) {
@@ -4051,7 +4002,9 @@ var EditorModule = (function (Utils, EventBus) {
         try {
             await buildEditorInto(container, {
                 mode: 'reply',
-                initialHtml: await legacyToHtmlAsync(legacyHtml),
+                // Empty initial state. The textarea is intentionally not
+                // read here — see the ONE-WAY FLOW note above.
+                initialHtml: '',
                 placeholder: 'Write your reply…',
                 headerLabel: 'Replying as:',
                 submitLabel: 'Post reply',
@@ -4089,6 +4042,9 @@ var EditorModule = (function (Utils, EventBus) {
 
     // ========================================================================
     // FULL EDITOR BUILDER (body#send)
+    //
+    // ONE-WAY FLOW: this editor never reads the textarea. See the note in
+    // buildFastReplyEditor above.
     // ========================================================================
     async function buildFullEditor() {
         var legacySend = document.querySelector('.send');
@@ -4098,8 +4054,6 @@ var EditorModule = (function (Utils, EventBus) {
         var legacyPost = document.getElementById('Post');
         var legacyForm = window.REPLIER || (legacyPost ? legacyPost.form : null);
         var legacySubmit = document.querySelector('input[name="submit_post"]');
-
-        var legacyHtml = legacyPost ? legacyPost.value : '';
 
         var container = document.createElement('div');
         container.id = 'modern-editor-full';
@@ -4124,7 +4078,9 @@ var EditorModule = (function (Utils, EventBus) {
         try {
             await buildEditorInto(container, {
                 mode: 'full',
-                initialHtml: await legacyToHtmlAsync(legacyHtml),
+                // Empty initial state. The textarea is intentionally not
+                // read here — see the ONE-WAY FLOW note in buildFastReplyEditor.
+                initialHtml: '',
                 placeholder: 'Write your post…',
                 headerLabel: 'Writing as:',
                 submitLabel: 'Submit post',
@@ -4153,8 +4109,7 @@ var EditorModule = (function (Utils, EventBus) {
     // ========================================================================
     // FAST EDIT — protocol owned by EditorModule
     //
-    // Wire format (reverse-engineered from bored.js / FastLife v2.1 and
-    // verified against the forum's own fastedit):
+    // Wire format:
     //
     //   LOAD:  GET  ?act=Post&CODE=08&t=<topic>&p=<postId>&…
     //          → HTML response; extract form#REPLIER #Post.value (BBCode)
@@ -4166,6 +4121,10 @@ var EditorModule = (function (Utils, EventBus) {
     //                &enablesig=1
     //          → HTML response (the topic page); extract #ee<id> .color
     //          → swap innerHTML into the live DOM
+    //
+    // Fast edit fetches its BBCode from the server on each invocation. It
+    // does not read any textarea — the live editor is the only content
+    // source for the save POST.
     // ========================================================================
     function findPostContent(scope) {
         if (!scope) return null;
@@ -4459,6 +4418,9 @@ var EditorModule = (function (Utils, EventBus) {
 
     // ========================================================================
     // QUOTE — fetch-and-inject, real-time
+    //
+    // The quote BBCode is fetched fresh from the server on each invocation
+    // (GET CODE=02). Like fast edit, this path does not read any textarea.
     // ========================================================================
     function startQuote(postEl) {
         _quoteQueue = _quoteQueue
