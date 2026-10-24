@@ -5781,7 +5781,6 @@ body#topic .post .fastedit > :not(.modern-editor-container--fastedit) {
    already matches .post-card-body's horizontal padding, so only
    the top and bottom need adjusting. */
 .post-card.is-fast-editing .modern-editor-container--fastedit .modern-editor-toolbar {
-  padding-top: 0;
   margin-top: var(--space-lg);
 }
 
