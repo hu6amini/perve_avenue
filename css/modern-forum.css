@@ -5686,6 +5686,32 @@ body#topic #fastreply {
   border-radius: var(--radius);
   margin: var(--space-md) 0;
 }
+/* ------------------------------------------------------------------
+   Fast edit inline mode
+   The original .post-content is hidden (display: none in JS) and the
+   editor is inserted in its place inside the card. The card's chrome —
+   header (post #, time), body (avatar, author info), anchor — stays
+   visible. Footer and header actions are suppressed while editing.
+   ------------------------------------------------------------------ */
+.post-card.is-fast-editing .post-footer,
+.post-card.is-fast-editing .post-actions {
+  display: none;
+}
+
+/* Strip the editor's own frame — the card already provides border,
+   radius, and background. */
+.post-card.is-fast-editing .modern-editor-container--fastedit {
+  border: none;
+  border-radius: 0;
+  box-shadow: none;
+  background: transparent;
+  margin: 0;
+}
+
+.post-card.is-fast-editing .modern-editor-container--fastedit > :first-child {
+  border-top-left-radius: 0;
+  border-top-right-radius: 0;
+}
 .modern-editor-container--fastedit > :first-child {
   border-top-left-radius: var(--radius);
   border-top-right-radius: var(--radius);
