@@ -1628,12 +1628,6 @@ var EditorModule = (function (Utils, EventBus) {
 
         var lowlight = createLowlight(common);
 
-        // -------------------------------------------------------------------
-        // Rebuild support — shared across the editor's lifetime.
-        // If view.updateState or view.dispatch throws (which happens when
-        // the docView gets desynced from state), we rebuild the whole
-        // editor from the current state's HTML. Capped at 3 attempts.
-        // -------------------------------------------------------------------
         var _rebuildCount = opts._rebuildCount || 0;
         var MAX_REBUILDS = 3;
         var _rebuildScheduled = false;
@@ -1646,6 +1640,7 @@ var EditorModule = (function (Utils, EventBus) {
             }
             _rebuildScheduled = true;
             _rebuildCount++;
+            console.trace('[EditorModule] Editor rebuild scheduled (attempt #' + _rebuildCount + ')');
 
             setTimeout(function () {
                 _rebuildScheduled = false;
@@ -1685,7 +1680,6 @@ var EditorModule = (function (Utils, EventBus) {
             }, 0);
         }
 
-        // ---- Helpers used by update-based cleanup ----
         function countNonEmptyContainers(doc) {
             var count = 0;
             doc.forEach(function (node) {
@@ -1748,7 +1742,6 @@ var EditorModule = (function (Utils, EventBus) {
             }
         }
 
-        // ---- Replying-as header ----
         if (!opts.hideHeader) {
             var syncUser = getCurrentUserSync();
             var currentHeader = null;
@@ -1774,20 +1767,17 @@ var EditorModule = (function (Utils, EventBus) {
             });
         }
 
-        // ---- Toolbar ----
         var toolbar = document.createElement('div');
         toolbar.className = 'modern-editor-toolbar';
         toolbar.setAttribute('role', 'toolbar');
         toolbar.setAttribute('aria-label', 'Formatting');
         host.appendChild(toolbar);
 
-        // ---- Editor mount ----
         var editorEl = document.createElement('div');
         editorEl.id = 'tiptap-editor-' + Math.random().toString(36).slice(2, 9);
         editorEl.className = 'modern-wysiwyg';
         host.appendChild(editorEl);
 
-        // ---- Preview ----
         var previewArea = document.createElement('div');
         previewArea.className = 'modern-preview';
         previewArea.style.display = 'none';
@@ -1795,7 +1785,6 @@ var EditorModule = (function (Utils, EventBus) {
         host.appendChild(previewArea);
         attachPreviewHandlers(previewArea);
 
-        // ---- Actions ----
         var actions = document.createElement('div');
         actions.className = 'modern-actions';
         var cancelBtnHtml = opts.onCancel ? '<button type="button" class="modern-btn modern-btn-secondary modern-editor-cancel"><i class="fa-regular fa-xmark"></i> Cancel</button>' : '';
@@ -3473,12 +3462,6 @@ var EditorModule = (function (Utils, EventBus) {
 
         editorRef.current = editor;
 
-        // -------------------------------------------------------------------
-        // Wrap view.updateState and view.dispatch so a crash during render
-        // triggers a rebuild instead of leaving the editor in a zombie
-        // state. healViewDesync (below) catches the same condition on the
-        // next transaction, but this catches it synchronously.
-        // -------------------------------------------------------------------
         var _origViewUpdateState = editor.view.updateState.bind(editor.view);
         editor.view.updateState = function (state) {
             try {
@@ -3498,19 +3481,6 @@ var EditorModule = (function (Utils, EventBus) {
             }
         };
 
-        // -------------------------------------------------------------------
-        // Container emptiness tracking → cleanup.
-        //
-        // Runs on every update. When the count of non-empty top-level
-        // blockquote/spoiler nodes decreases (a container just emptied),
-        // dispatch a cleanup transaction on the next tick to remove the
-        // empty container. Doing this outside appendTransaction means we
-        // never fire it mid-apply — much safer than the previous design.
-        //
-        // A user who just created a fresh empty blockquote is NOT affected:
-        // the count before and after their creation is the same (0 → 0),
-        // so no cleanup fires.
-        // -------------------------------------------------------------------
         var _lastNonEmptyCount = countNonEmptyContainers(editor.state.doc);
 
         editor.on('update', function () {
@@ -3526,31 +3496,41 @@ var EditorModule = (function (Utils, EventBus) {
             }
         });
 
-        // -------------------------------------------------------------------
-        // healViewDesync — detects the DOM-empty/state-full desync on the
-        // next transaction and triggers a rebuild.
-        // -------------------------------------------------------------------
+        // healViewDesync — only on doc-changing transactions, deferred
+        // by a frame so transient DOM states during selection drags
+        // never trigger a rebuild (that was causing the flash bug).
+        var _healPending = false;
         function healViewDesync() {
+            if (_healPending) return;
             if (!editor || editor.isDestroyed || !editor.view) return;
             var dom = editor.view.dom;
             if (!dom || !dom.isConnected) return;
             if (dom.childElementCount > 0) return;
 
-            var stateHasContent = false;
-            editor.state.doc.forEach(function (node) {
-                if (node.textContent.trim()) { stateHasContent = true; return; }
-                var nm = node.type.name;
-                if (nm === 'image' || nm === 'liteYouTube' || nm === 'liteVimeo' ||
-                    nm === 'linkPreview' || nm === 'horizontalRule' || nm === 'imageUploadPlaceholder') {
-                    stateHasContent = true;
-                }
-            });
-            if (!stateHasContent) return;
+            _healPending = true;
+            requestAnimationFrame(function () {
+                _healPending = false;
+                if (!editor || editor.isDestroyed || !editor.view) return;
+                var dom2 = editor.view.dom;
+                if (!dom2 || !dom2.isConnected) return;
+                if (dom2.childElementCount > 0) return;
 
-            console.warn('[EditorModule] View desync detected — scheduling rebuild.');
-            scheduleEditorRebuild();
+                var stateHasContent = false;
+                editor.state.doc.forEach(function (node) {
+                    if (node.textContent.trim()) { stateHasContent = true; return; }
+                    var nm = node.type.name;
+                    if (nm === 'image' || nm === 'liteYouTube' || nm === 'liteVimeo' ||
+                        nm === 'linkPreview' || nm === 'horizontalRule' || nm === 'imageUploadPlaceholder') {
+                        stateHasContent = true;
+                    }
+                });
+                if (!stateHasContent) return;
+
+                console.warn('[EditorModule] View desync detected — scheduling rebuild.');
+                scheduleEditorRebuild();
+            });
         }
-        editor.on('transaction', healViewDesync);
+        editor.on('transaction', function (tr) { if (tr.docChanged) healViewDesync(); });
         setTimeout(healViewDesync, 0);
 
         function updateActive() {
