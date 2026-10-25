@@ -223,26 +223,31 @@ var EditorModule = (function (Utils, EventBus) {
         return false;
     }
 
-    // FIX: strip literal zero-width characters as well as the named entity.
-    // ProseMirror's getHTML() never emits "&zeroWidthSpace;" — it emits the
-    // literal U+200B codepoint. Without the literal strip, an "empty"
-    // document that still carries a zero-width space reads as non-empty and
-    // the placeholder stays hidden.
+    // ------------------------------------------------------------------------
+    // editorContentIsEmpty
+    //
+    // \p{Cc} (control) + \p{Cf} (format) covers every character with zero
+    // visual width: zero-width space, ZWNJ, ZWJ, the bidi marks and
+    // embedding controls, soft hyphen, BOM, etc. String.trim() does NOT
+    // strip most of these — it only handles Unicode whitespace. Without
+    // the strip, an "empty" document that still carries an invisible
+    // residual reads as non-empty and the placeholder stays hidden.
+    // ------------------------------------------------------------------------
     function editorContentIsEmpty(html) {
-    if (!html || typeof html !== 'string') return true;
-    var text = html
-        .replace(/<[^>]*>/g, '')
-        .replace(/&nbsp;/gi, ' ')
-        .replace(/&zeroWidthSpace;/gi, '')
-        .replace(/[\p{Cc}\p{Cf}]/gu, '')   // ← was [/[\u200B-\u200D\uFEFF\u2060]/]
-        .replace(/\s+/g, ' ')
-        .trim();
-    if (text.length > 0) return false;
-    if (/<img[^>]+src\s*=/i.test(html)) return false;
-    if (/<hr\b/i.test(html)) return false;
-    if (/<(video|audio|iframe)\b/i.test(html)) return false;
-    return true;
-}
+        if (!html || typeof html !== 'string') return true;
+        var text = html
+            .replace(/<[^>]*>/g, '')
+            .replace(/&nbsp;/gi, ' ')
+            .replace(/&zeroWidthSpace;/gi, '')
+            .replace(/[\p{Cc}\p{Cf}]/gu, '')
+            .replace(/\s+/g, ' ')
+            .trim();
+        if (text.length > 0) return false;
+        if (/<img[^>]+src\s*=/i.test(html)) return false;
+        if (/<hr\b/i.test(html)) return false;
+        if (/<(video|audio|iframe)\b/i.test(html)) return false;
+        return true;
+    }
 
     function ensureTrailingParagraphInHtml(html) {
         if (!html || typeof html !== 'string') return html;
@@ -1690,6 +1695,63 @@ var EditorModule = (function (Utils, EventBus) {
 
         var lowlight = createLowlight(common);
 
+        // ---------------------------------------------------------------------
+        // Post-delete safety net
+        //
+        // `deleteSelection` (what ProseMirror runs when the user has an
+        // active selection and presses Delete/Backspace) can leave an
+        // emptied blockquote/spoiler behind in the document — unlike
+        // `joinBackward` (single backspace at a boundary), which lifts
+        // the node out as a side-effect. NormalizeEmptyDoc is the primary
+        // cleanup, but its before/after count check can miss certain
+        // selection shapes. This function is independent of the plugin
+        // pipeline: it inspects the current doc and removes any top-level
+        // container that has no visible content. It runs from the
+        // keydown handler (below), after the delete transaction lands.
+        //
+        // Function is declared at function scope (not inside the
+        // `if (!opts.hideHeader)` block) so the keydown handler can
+        // reference it in strict mode.
+        // ---------------------------------------------------------------------
+        function cleanupEmptyContainers(view) {
+            var doc = view.state.doc;
+            var toRemove = [];
+            doc.forEach(function (node, offset) {
+                if (node.type.name !== 'blockquote' && node.type.name !== 'spoiler') return;
+                var hasContent = false;
+                node.descendants(function (n) {
+                    if (hasContent) return;
+                    if (n.isText && n.text) {
+                        var visible = n.text.replace(/[\p{Cc}\p{Cf}]/gu, '');
+                        if (visible.trim()) { hasContent = true; return; }
+                        return;
+                    }
+                    var nm = n.type.name;
+                    if (nm === 'image' || nm === 'liteYouTube' || nm === 'liteVimeo' ||
+                        nm === 'linkPreview' || nm === 'imageUploadPlaceholder' ||
+                        nm === 'horizontalRule') {
+                        hasContent = true;
+                    }
+                });
+                if (!hasContent) toRemove.push({ pos: offset, size: node.nodeSize });
+            });
+            if (toRemove.length === 0) return;
+
+            var tr = view.state.tr;
+            for (var i = toRemove.length - 1; i >= 0; i--) {
+                tr.delete(toRemove[i].pos, toRemove[i].pos + toRemove[i].size);
+            }
+            if (tr.doc.childCount === 0) {
+                tr.insert(0, view.state.schema.nodes.paragraph.create());
+            }
+            try {
+                tr.setSelection(TextSelection.near(tr.doc.resolve(
+                    Math.max(1, Math.min(tr.selection.from, tr.doc.content.size - 1))
+                )));
+            } catch (e) {}
+            view.dispatch(tr);
+        }
+
         // ---- Replying-as header ----
         if (!opts.hideHeader) {
             var syncUser = getCurrentUserSync();
@@ -1698,50 +1760,6 @@ var EditorModule = (function (Utils, EventBus) {
                 currentHeader = buildUserHeader(syncUser, opts.headerLabel || 'Replying as:');
                 if (currentHeader) host.appendChild(currentHeader);
             }
-
-           // Post-delete safety net. ProseMirror's deleteSelection leaves
-// empty containers behind in certain selection shapes, and
-// NormalizeEmptyDoc's before/after count check can miss them.
-// This runs after the delete transaction has landed and removes
-// any top-level blockquote/spoiler that has no visible content.
-function cleanupEmptyContainers(view) {
-    var doc = view.state.doc;
-    var toRemove = [];
-    doc.forEach(function (node, offset) {
-        if (node.type.name !== 'blockquote' && node.type.name !== 'spoiler') return;
-        var hasContent = false;
-        node.descendants(function (n) {
-            if (hasContent) return;
-            if (n.isText && n.text) {
-                var visible = n.text.replace(/[\p{Cc}\p{Cf}]/gu, '');
-                if (visible.trim()) { hasContent = true; return; }
-                return;
-            }
-            var nm = n.type.name;
-            if (nm === 'image' || nm === 'liteYouTube' || nm === 'liteVimeo' ||
-                nm === 'linkPreview' || nm === 'imageUploadPlaceholder' ||
-                nm === 'horizontalRule') {
-                hasContent = true;
-            }
-        });
-        if (!hasContent) toRemove.push({ pos: offset, size: node.nodeSize });
-    });
-    if (toRemove.length === 0) return;
-
-    var tr = view.state.tr;
-    for (var i = toRemove.length - 1; i >= 0; i--) {
-        tr.delete(toRemove[i].pos, toRemove[i].pos + toRemove[i].size);
-    }
-    if (tr.doc.childCount === 0) {
-        tr.insert(0, view.state.schema.nodes.paragraph.create());
-    }
-    try {
-        tr.setSelection(TextSelection.near(tr.doc.resolve(
-            Math.max(1, Math.min(tr.selection.from, tr.doc.content.size - 1))
-        )));
-    } catch (e) {}
-    view.dispatch(tr);
-}
 
             fetchCurrentUserData().then(function (user) {
                 if (!user) return;
@@ -3182,20 +3200,22 @@ function cleanupEmptyContainers(view) {
         // =================================================================
         // NormalizeEmptyDoc — structural cleanup after any transaction.
         //
-        // FIX: `isEffectivelyEmpty` now strips zero-width and other
-        // invisible Unicode characters (U+200B..U+200D, U+FEFF, U+2060)
-        // before checking for visible text. ProseMirror inserts a
-        // zero-width space into an empty textblock to keep the caret
-        // visible, and `String.prototype.trim()` does NOT consider those
-        // characters whitespace. Without this strip, a blockquote that
-        // the user just emptied was still classified as non-empty, so
-        // Job 1 never fired, the blockquote remained in the document,
-        // the placeholder never showed (the doc wasn't "empty" to TipTap),
-        // and any subsequent typing stayed inside the blockquote.
+        // `isEffectivelyEmpty` strips every zero-width character via the
+        // Unicode categories \p{Cc} (control) and \p{Cf} (format). That
+        // covers U+200B..U+200F, U+2060..U+2064, U+FEFF, U+061C, U+180E,
+        // U+00AD, and the bidi embedding controls — everything that
+        // String.prototype.trim() misses because it only handles Unicode
+        // whitespace. Without the strip, a container that the user just
+        // emptied via deleteSelection would still be classified as
+        // non-empty (ProseMirror inserts a zero-width space into an empty
+        // paragraph to keep the caret stable), so Job 1 would never fire,
+        // the blockquote would linger in the doc, the placeholder would
+        // stay hidden, and any subsequent typing would stay inside the
+        // blockquote.
         //
-        // Job 3 reuses the same predicate so multi-paragraph documents
-        // whose paragraphs all contain only invisible characters also
-        // collapse to a single empty paragraph.
+        // Job 3 reuses the same predicate so multi-block documents whose
+        // blocks are all effectively empty also collapse to a single
+        // fresh paragraph.
         // =================================================================
         const NormalizeEmptyDoc = Extension.create({
             name: 'normalizeEmptyDoc',
@@ -3205,16 +3225,10 @@ function cleanupEmptyContainers(view) {
                     node.descendants(function (n) {
                         if (hasContent) return;
                         if (n.isText && n.text) {
-    // \p{Cc} = control chars, \p{Cf} = format chars (zero-width space,
-    // bidi controls, soft hyphen, ZWJ, ZWNJ, etc). Every character in
-    // those categories has zero visual width; String.trim() doesn't
-    // strip most of them. Without this strip, an invisible residual
-    // left behind by deleteSelection keeps the blockquote classified
-    // as "non-empty" and the plugin never fires.
-    const visible = n.text.replace(/[\p{Cc}\p{Cf}]/gu, '');
-    if (visible.trim()) { hasContent = true; return; }
-    return;
-}
+                            var visible = n.text.replace(/[\p{Cc}\p{Cf}]/gu, '');
+                            if (visible.trim()) { hasContent = true; return; }
+                            return;
+                        }
                         const name = n.type.name;
                         if (name === 'image' || name === 'liteYouTube' || name === 'liteVimeo' ||
                             name === 'linkPreview' || name === 'imageUploadPlaceholder' ||
@@ -3271,21 +3285,17 @@ function cleanupEmptyContainers(view) {
                             changed = true;
                         }
 
-                        // ---- Job 3: collapse all-empty-paragraph docs ----
-                        // Reuses isEffectivelyEmpty so paragraphs whose
-                        // only text nodes carry invisible characters also
-                        // collapse into a single fresh paragraph.
                         // ---- Job 3: collapse docs made entirely of effectively-empty nodes ----
-if (tr.doc.childCount > 1) {
-    const allEmpty = tr.doc.content.content.every(function (c) {
-        return isEffectivelyEmpty(c);
-    });
-    if (allEmpty) {
-        const p = newState.schema.nodes.paragraph.create();
-        tr.replaceWith(0, tr.doc.content.size, p);
-        changed = true;
-    }
-}
+                        if (tr.doc.childCount > 1) {
+                            const allEmpty = tr.doc.content.content.every(function (c) {
+                                return isEffectivelyEmpty(c);
+                            });
+                            if (allEmpty) {
+                                const p = newState.schema.nodes.paragraph.create();
+                                tr.replaceWith(0, tr.doc.content.size, p);
+                                changed = true;
+                            }
+                        }
 
                         if (!changed) return null;
 
@@ -3546,30 +3556,31 @@ if (tr.doc.childCount > 1) {
                     return false;
                 },
                 handleDOMEvents: {
-    keydown: function (view, event) {
-        // Post-delete cleanup: let the delete run, then sweep for
-        // empty containers. Chain into the setTimeout because we
-        // need view.state.doc to reflect the post-delete state.
-        if ((event.key === 'Delete' || event.key === 'Backspace') &&
-            !view.state.selection.empty) {
-            setTimeout(function () {
-                if (view.dom && view.dom.isConnected) cleanupEmptyContainers(view);
-            }, 0);
-        }
+                    keydown: function (view, event) {
+                        // Post-delete cleanup: let the delete run, then sweep
+                        // for empty containers. Chain into setTimeout because
+                        // view.state.doc needs to reflect the post-delete
+                        // state, not the pre-delete state.
+                        if ((event.key === 'Delete' || event.key === 'Backspace') &&
+                            !view.state.selection.empty) {
+                            setTimeout(function () {
+                                if (view.dom && view.dom.isConnected) cleanupEmptyContainers(view);
+                            }, 0);
+                        }
 
-        var mod = event.ctrlKey || event.metaKey;
-        if (mod && event.key === 'Enter') {
-            event.preventDefault();
-            if (submitBtn && !submitBtn.disabled) submitBtn.click();
-            return true;
-        }
-        if (mod && !event.shiftKey && (event.key === 'k' || event.key === 'K')) { event.preventDefault(); linkBtn.click(); return true; }
-        if (mod && !event.shiftKey && (event.key === 'e' || event.key === 'E')) { event.preventDefault(); editor.chain().focus().toggleCode().run(); return true; }
-        if (event.ctrlKey && event.shiftKey && (event.key === 's' || event.key === 'S')) { event.preventDefault(); spoilerBtn.click(); return true; }
-        if (event.ctrlKey && event.shiftKey && (event.key === 'n' || event.key === 'N')) { event.preventDefault(); nsfwBtn.click(); return true; }
-        return false;
-    }
-}
+                        var mod = event.ctrlKey || event.metaKey;
+                        if (mod && event.key === 'Enter') {
+                            event.preventDefault();
+                            if (submitBtn && !submitBtn.disabled) submitBtn.click();
+                            return true;
+                        }
+                        if (mod && !event.shiftKey && (event.key === 'k' || event.key === 'K')) { event.preventDefault(); linkBtn.click(); return true; }
+                        if (mod && !event.shiftKey && (event.key === 'e' || event.key === 'E')) { event.preventDefault(); editor.chain().focus().toggleCode().run(); return true; }
+                        if (event.ctrlKey && event.shiftKey && (event.key === 's' || event.key === 'S')) { event.preventDefault(); spoilerBtn.click(); return true; }
+                        if (event.ctrlKey && event.shiftKey && (event.key === 'n' || event.key === 'N')) { event.preventDefault(); nsfwBtn.click(); return true; }
+                        return false;
+                    }
+                }
             },
             onCreate: function ({ editor }) {
                 (function ensureTrailingParagraph() {
