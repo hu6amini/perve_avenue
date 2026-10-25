@@ -931,6 +931,121 @@
 .modern-quote.long-quote.expanded .quote-expand-btn i { transform: rotate(180deg); }
 
 /* ------------------------------------------------------------
+   Quote queue — floating bar and card state
+   ------------------------------------------------------------ */
+
+.post-card.is-quote-queued {
+    border-color: var(--primary-color);
+    box-shadow: 0 0 0 2px var(--focus-ring), var(--shadow);
+}
+.post-card.is-quote-queued .action-icon[data-action="quote"] {
+    background: rgba(5, 150, 105, 0.12);
+    border-color: var(--primary-color);
+    color: var(--primary-color);
+}
+
+.quote-queue-bar {
+    position: fixed;
+    left: 50%;
+    bottom: var(--space-lg);
+    transform: translate(-50%, calc(100% + var(--space-lg)));
+    z-index: 9000;
+    background: var(--surface-color);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-xl);
+    padding: var(--space-sm) var(--space-md);
+    max-width: min(900px, calc(100vw - 2rem));
+    transition: transform 0.28s cubic-bezier(0.2, 0.9, 0.4, 1.1);
+    pointer-events: none;
+}
+.quote-queue-bar.is-visible {
+    transform: translate(-50%, 0);
+    pointer-events: auto;
+}
+
+.quote-queue-inner {
+    display: flex;
+    align-items: center;
+    gap: var(--space-md);
+    flex-wrap: wrap;
+}
+
+.quote-queue-lead {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-xs);
+    color: var(--text-primary);
+    font-size: var(--text-sm);
+    font-weight: 600;
+    flex-shrink: 0;
+}
+.quote-queue-lead i { color: var(--primary-color); }
+
+.quote-queue-chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-xs);
+    flex: 1;
+    min-width: 0;
+    max-height: 3.5rem;
+    overflow-y: auto;
+}
+
+.quote-queue-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 3px 6px 3px 10px;
+    background: var(--hover-color);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-full);
+    font-size: var(--text-xs);
+    font-family: var(--font-primary);
+    color: var(--text-primary);
+    cursor: pointer;
+    transition: background 0.15s, border-color 0.15s;
+    max-width: 160px;
+}
+.quote-queue-chip:hover {
+    border-color: var(--danger-color);
+    background: rgba(220, 38, 38, 0.08);
+}
+.quote-queue-chip-author {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    min-width: 0;
+}
+.quote-queue-chip i {
+    color: var(--text-tertiary);
+    font-size: 0.7rem;
+    flex-shrink: 0;
+}
+.quote-queue-chip:hover i { color: var(--danger-color); }
+
+.quote-queue-actions {
+    display: flex;
+    gap: var(--space-xs);
+    flex-shrink: 0;
+}
+
+@media (max-width: 680px) {
+    .quote-queue-bar {
+        left: var(--space-sm);
+        right: var(--space-sm);
+        bottom: var(--space-sm);
+        transform: translateY(calc(100% + var(--space-lg)));
+        padding: var(--space-sm);
+    }
+    .quote-queue-bar.is-visible { transform: translateY(0); }
+    .quote-queue-inner { flex-direction: column; align-items: stretch; }
+    .quote-queue-chips { max-height: 4.5rem; }
+    .quote-queue-actions { justify-content: stretch; }
+    .quote-queue-actions .modern-btn { flex: 1; }
+}
+
+/* ------------------------------------------------------------
    6. MODERN SPOILER
    ------------------------------------------------------------ */
 .modern-spoiler {
