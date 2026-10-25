@@ -6,9 +6,6 @@
 var EditorModule = (function (Utils, EventBus) {
     'use strict';
 
-    // ========================================================================
-    // STATE
-    // ========================================================================
     var isInitialized = false;
     var _boundHandlers = [];
     var _dropdownBackdrop = null;
@@ -18,9 +15,6 @@ var EditorModule = (function (Utils, EventBus) {
     var _mentionSearchAbort = null;
     var _quoteQueue = Promise.resolve();
 
-    // ========================================================================
-    // CONFIG
-    // ========================================================================
     var CONFIG = {
         OG_FETCH_TIMEOUT: 8000,
         UPLOAD_WORKER_URL: 'https://imgbb-upload-proxy.nhristakiev.workers.dev/',
@@ -46,9 +40,6 @@ var EditorModule = (function (Utils, EventBus) {
     var IMAGE_URL_EXTENSIONS = CONFIG.IMAGE_URL_EXTENSIONS;
     var IMAGE_URL_HOSTS      = CONFIG.IMAGE_URL_HOSTS;
 
-    // ========================================================================
-    // UTILITIES
-    // ========================================================================
     function escapeHtml(str) {
         if (!str) return '';
         return String(str).replace(/[&<>"']/g, function (m) {
@@ -87,9 +78,6 @@ var EditorModule = (function (Utils, EventBus) {
         return fetch(url, merged).finally(function () { clearTimeout(timer); });
     }
 
-    // ========================================================================
-    // CHARSET-AWARE HTML FETCH
-    // ========================================================================
     var _W1252_REVERSE = {
         0x20AC: 0x80, 0x201A: 0x82, 0x0192: 0x83, 0x201E: 0x84,
         0x2026: 0x85, 0x2020: 0x86, 0x2021: 0x87, 0x02C6: 0x88,
@@ -150,13 +138,13 @@ var EditorModule = (function (Utils, EventBus) {
         if (chosen) {
             try {
                 return { text: new TextDecoder(chosen).decode(arrayBuffer), charset: chosen };
-            } catch (e) { /* unknown label — fall through */ }
+            } catch (e) {}
         }
 
         try {
             var utf8Strict = new TextDecoder('utf-8', { fatal: true }).decode(arrayBuffer);
             return { text: utf8Strict, charset: 'utf-8' };
-        } catch (e) { /* not UTF-8 */ }
+        } catch (e) {}
 
         return { text: new TextDecoder('windows-1252').decode(arrayBuffer), charset: 'windows-1252' };
     }
@@ -223,7 +211,6 @@ var EditorModule = (function (Utils, EventBus) {
         return false;
     }
 
-    // \p{Cc} (control) + \p{Cf} (format) covers every zero-width character.
     function editorContentIsEmpty(html) {
         if (!html || typeof html !== 'string') return true;
         var text = html
@@ -282,9 +269,6 @@ var EditorModule = (function (Utils, EventBus) {
         return match[0].toUpperCase();
     }
 
-    // ========================================================================
-    // LITE-EMBED URL PARSERS
-    // ========================================================================
     function parseYouTubeUrl(url) {
         if (!url || typeof url !== 'string') return null;
         var m = url.match(/(?:youtube\.com\/(?:watch\?(?:.*&)?v=|embed\/|shorts\/)|youtu\.be\/)([A-Za-z0-9_-]{6,})/);
@@ -501,9 +485,6 @@ var EditorModule = (function (Utils, EventBus) {
         return tempDiv.innerHTML;
     }
 
-    // ========================================================================
-    // MENTION SEARCH
-    // ========================================================================
     function searchMentions(query) {
         if (!query || query.length < 1) return Promise.resolve([]);
         if (_mentionSearchAbort) {
@@ -535,9 +516,6 @@ var EditorModule = (function (Utils, EventBus) {
         });
     }
 
-    // ========================================================================
-    // AVATAR COLOURS / HELPERS
-    // ========================================================================
     var AVATAR_COLORS = [
         '059669', '10B981', '34D399', '6EE7B7', 'A7F3D0',
         '0D9488', '14B8A6', '2DD4BF', '5EEAD4', '99F6E4',
@@ -615,9 +593,6 @@ var EditorModule = (function (Utils, EventBus) {
         return 'group-' + sanitizeGroupName(user.group.name || 'member');
     }
 
-    // ========================================================================
-    // CURRENT USER
-    // ========================================================================
     function getCurrentUserId() {
         var match = document.body.className.match(/\ba(\d{5,})\b/);
         if (match) return match[1];
@@ -718,9 +693,6 @@ var EditorModule = (function (Utils, EventBus) {
         setTimeout(tryAttach, 200);
     }
 
-    // ========================================================================
-    // HTML → LEGACY CONVERTERS
-    // ========================================================================
     function paragraphizeLegacyHtml(html) {
         if (!html || typeof html !== 'string') return html;
         try {
@@ -1068,9 +1040,6 @@ var EditorModule = (function (Utils, EventBus) {
         return result;
     }
 
-    // ========================================================================
-    // SYNTAX HIGHLIGHTING
-    // ========================================================================
     function highlightCode(codeText) {
         if (codeText == null) return '';
         var html = String(codeText)
@@ -1097,9 +1066,6 @@ var EditorModule = (function (Utils, EventBus) {
         return html;
     }
 
-    // ========================================================================
-    // PREVIEW TRANSFORM
-    // ========================================================================
     function transformPreviewHtml(html) {
         if (!html || typeof html !== 'string') return html;
         var temp = document.createElement('div');
@@ -1208,9 +1174,6 @@ var EditorModule = (function (Utils, EventBus) {
         return temp.innerHTML;
     }
 
-    // ========================================================================
-    // PREVIEW HANDLERS
-    // ========================================================================
     function handlePreviewQuoteExpand(btn) {
         var quote = btn.closest('.modern-quote');
         if (!quote) return;
@@ -1413,9 +1376,6 @@ var EditorModule = (function (Utils, EventBus) {
         });
     }
 
-    // ========================================================================
-    // MODALS
-    // ========================================================================
     function makeModalShell(width) {
         var overlay = document.createElement('div');
         overlay.className = 'modern-modal-overlay';
@@ -1560,9 +1520,6 @@ var EditorModule = (function (Utils, EventBus) {
         };
     }
 
-    // ========================================================================
-    // EMOJI DATA
-    // ========================================================================
     var EMOJI_GROUPS = [
         { name: 'Emojis', emojis: [
             '😀','😃','😄','😁','😆','😅','🤣','😂','🙂','😉','😊','😇','🥰','😍','🤩','😘','🥲','😏','😋','😛',
@@ -1603,18 +1560,12 @@ var EditorModule = (function (Utils, EventBus) {
         return cps.filter(function (c) { return c !== 'fe0f'; }).join('-');
     }
 
-    // ========================================================================
-    // ASCII EMOTICON MAP
-    // ========================================================================
     var ASCII_EMOTICON_MAP = {
         '*\\0/*':'1f646','*\\O/*':'1f646','-___-':'1f611',":'-)":'1f602',"':-)":'1f605',"':-D":'1f605',
         ':-D':'1f603',":')":'1f602',":-)":'1f642',"(:":'1f643',";)":'1f609',':P':'1f61b',':D':'1f603',
         ':)':'1f642',':(':'1f61e','<3':'2764','(y)':'1f44d',"B-)":'1f60e','-_-':'1f611'
     };
 
-    // ========================================================================
-    // TIPTAP DEPS
-    // ========================================================================
     async function loadTipTapDeps() {
         const core = await import('https://esm.sh/@tiptap/core@2.5.2');
         const Editor = core.Editor || (core.default && core.default.Editor);
@@ -1663,9 +1614,6 @@ var EditorModule = (function (Utils, EventBus) {
         };
     }
 
-    // ========================================================================
-    // EDITOR FACTORY
-    // ========================================================================
     async function buildEditorInto(host, opts) {
         var editorRef = { current: null };
         var deps = await loadTipTapDeps();
@@ -1681,15 +1629,90 @@ var EditorModule = (function (Utils, EventBus) {
         var lowlight = createLowlight(common);
 
         // -------------------------------------------------------------------
-        // Post-delete safety net. Runs from the keydown handler (below),
-        // after the delete transaction has landed. Independent of the
-        // plugin pipeline: reads the current doc, removes top-level
-        // blockquote/spoiler that has no visible content. Wrapped in
-        // try/catch so a dispatch failure can't strand state.
+        // Rebuild support — shared across the editor's lifetime.
+        // If view.updateState or view.dispatch throws (which happens when
+        // the docView gets desynced from state), we rebuild the whole
+        // editor from the current state's HTML. Capped at 3 attempts.
         // -------------------------------------------------------------------
-        function cleanupEmptyContainers(view) {
+        var _rebuildCount = opts._rebuildCount || 0;
+        var MAX_REBUILDS = 3;
+        var _rebuildScheduled = false;
+
+        function scheduleEditorRebuild() {
+            if (_rebuildScheduled) return;
+            if (_rebuildCount >= MAX_REBUILDS) {
+                console.error('[EditorModule] Max rebuild attempts reached (' + MAX_REBUILDS + '). Please refresh the page.');
+                return;
+            }
+            _rebuildScheduled = true;
+            _rebuildCount++;
+
+            setTimeout(function () {
+                _rebuildScheduled = false;
+                var htmlToRestore = '';
+                try {
+                    if (editorRef.current && !editorRef.current.isDestroyed) {
+                        htmlToRestore = editorRef.current.getHTML();
+                    }
+                } catch (e) {
+                    console.warn('[EditorModule] Could not read HTML for rebuild:', e);
+                }
+
+                try {
+                    if (editorRef.current && !editorRef.current.isDestroyed) {
+                        editorRef.current.destroy();
+                    }
+                } catch (e) {
+                    console.warn('[EditorModule] Editor destroy threw:', e);
+                }
+
+                try {
+                    while (host.firstChild) host.removeChild(host.firstChild);
+                } catch (e) {
+                    console.warn('[EditorModule] Container clear threw:', e);
+                }
+
+                buildEditorInto(host, Object.assign({}, opts, {
+                    initialHtml: htmlToRestore,
+                    _rebuildCount: _rebuildCount
+                })).then(function () {
+                    if (typeof host.__editorSync === 'function') {
+                        try { host.__editorSync(); } catch (e) {}
+                    }
+                }).catch(function (err) {
+                    console.error('[EditorModule] Rebuild failed:', err);
+                });
+            }, 0);
+        }
+
+        // ---- Helpers used by update-based cleanup ----
+        function countNonEmptyContainers(doc) {
+            var count = 0;
+            doc.forEach(function (node) {
+                if (node.type.name !== 'blockquote' && node.type.name !== 'spoiler') return;
+                var hasContent = false;
+                node.descendants(function (n) {
+                    if (hasContent) return;
+                    if (n.isText && n.text) {
+                        var v = n.text.replace(/[\p{Cc}\p{Cf}]/gu, '');
+                        if (v.trim()) { hasContent = true; return; }
+                        return;
+                    }
+                    var nm = n.type.name;
+                    if (nm === 'image' || nm === 'liteYouTube' || nm === 'liteVimeo' ||
+                        nm === 'linkPreview' || nm === 'imageUploadPlaceholder' || nm === 'horizontalRule') {
+                        hasContent = true;
+                    }
+                });
+                if (hasContent) count++;
+            });
+            return count;
+        }
+
+        function removeEmptyContainers() {
+            if (!editorRef.current || editorRef.current.isDestroyed) return;
             try {
-                var doc = view.state.doc;
+                var doc = editorRef.current.state.doc;
                 var toRemove = [];
                 doc.forEach(function (node, offset) {
                     if (node.type.name !== 'blockquote' && node.type.name !== 'spoiler') return;
@@ -1697,14 +1720,13 @@ var EditorModule = (function (Utils, EventBus) {
                     node.descendants(function (n) {
                         if (hasContent) return;
                         if (n.isText && n.text) {
-                            var visible = n.text.replace(/[\p{Cc}\p{Cf}]/gu, '');
-                            if (visible.trim()) { hasContent = true; return; }
+                            var v = n.text.replace(/[\p{Cc}\p{Cf}]/gu, '');
+                            if (v.trim()) { hasContent = true; return; }
                             return;
                         }
                         var nm = n.type.name;
                         if (nm === 'image' || nm === 'liteYouTube' || nm === 'liteVimeo' ||
-                            nm === 'linkPreview' || nm === 'imageUploadPlaceholder' ||
-                            nm === 'horizontalRule') {
+                            nm === 'linkPreview' || nm === 'imageUploadPlaceholder' || nm === 'horizontalRule') {
                             hasContent = true;
                         }
                     });
@@ -1712,16 +1734,17 @@ var EditorModule = (function (Utils, EventBus) {
                 });
                 if (toRemove.length === 0) return;
 
-                var tr = view.state.tr;
+                var tr = editorRef.current.state.tr;
                 for (var i = toRemove.length - 1; i >= 0; i--) {
                     tr.delete(toRemove[i].pos, toRemove[i].pos + toRemove[i].size);
                 }
                 if (tr.doc.childCount === 0) {
-                    tr.insert(0, view.state.schema.nodes.paragraph.create());
+                    tr.insert(0, editorRef.current.state.schema.nodes.paragraph.create());
                 }
-                view.dispatch(tr);
+                editorRef.current.view.dispatch(tr);
             } catch (e) {
-                console.error('[EditorModule] cleanupEmptyContainers failed:', e);
+                console.error('[EditorModule] removeEmptyContainers failed:', e);
+                scheduleEditorRebuild();
             }
         }
 
@@ -1787,7 +1810,6 @@ var EditorModule = (function (Utils, EventBus) {
 
         var livePreviewTimer = null;
 
-        // ---- Helpers ----
         function addSep() {
             var s = document.createElement('span');
             s.className = 'toolbar-separator';
@@ -1882,7 +1904,6 @@ var EditorModule = (function (Utils, EventBus) {
             if (nowMobile !== _mobileMode) { _mobileMode = nowMobile; closeAllPopovers(); }
         });
 
-        // ---- Lite-embed helpers ----
         function focusTrailingEmbedParagraph() {
             if (!editorRef.current) return;
             var doc = editorRef.current.state.doc;
@@ -1940,7 +1961,6 @@ var EditorModule = (function (Utils, EventBus) {
             fetchEmbedMetadata(kind, videoid);
         }
 
-        // ---- Live preview ----
         function updateLivePreview() {
             if (!editorRef.current || editorContentIsEmpty(editorRef.current.getHTML())) return;
 
@@ -1976,7 +1996,6 @@ var EditorModule = (function (Utils, EventBus) {
             }, CONFIG.LIVE_PREVIEW_DEBOUNCE_MS);
         }
 
-        // ---- Toolbar buttons ----
         var undoBtn = mkBtn('fa-regular fa-undo', 'Undo', 'Control+Z');
         var redoBtn = mkBtn('fa-regular fa-redo', 'Redo', 'Control+Shift+Z');
         undoBtn.disabled = true; redoBtn.disabled = true;
@@ -1987,7 +2006,6 @@ var EditorModule = (function (Utils, EventBus) {
         var underlineBtn = mkBtn('fa-regular fa-underline', 'Underline', 'Control+U');
         var strikeBtn    = mkBtn('fa-regular fa-strikethrough', 'Strikethrough');
 
-        // Color dropdown
         var colorDrop = document.createElement('div');
         colorDrop.className = 'modern-dropdown';
         colorDrop.style.cssText = 'position:relative;display:inline-block';
@@ -2029,7 +2047,6 @@ var EditorModule = (function (Utils, EventBus) {
         var clearFormatBtn = mkBtn('fa-regular fa-remove-format', 'Clear formatting');
         addSep();
 
-        // Heading dropdown
         var headDrop = document.createElement('div');
         headDrop.className = 'modern-dropdown'; headDrop.style.cssText = 'position:relative;display:inline-block';
         var headBtn = document.createElement('button');
@@ -2055,7 +2072,6 @@ var EditorModule = (function (Utils, EventBus) {
         headMenu.addEventListener('click', function (e) { e.stopPropagation(); });
         var headingButtons = { h1: headMenu.querySelector('[data-level="1"]'), h2: headMenu.querySelector('[data-level="2"]'), h3: headMenu.querySelector('[data-level="3"]') };
 
-        // List dropdown
         var listDrop = document.createElement('div');
         listDrop.className = 'modern-dropdown'; listDrop.style.cssText = 'position:relative;display:inline-block';
         var listBtn = document.createElement('button');
@@ -2081,7 +2097,6 @@ var EditorModule = (function (Utils, EventBus) {
 
         var blockquoteBtn = mkBtn('fa-regular fa-quote-left', 'Blockquote');
 
-        // Code dropdown
         var codeDrop = document.createElement('div');
         codeDrop.className = 'modern-dropdown'; codeDrop.style.cssText = 'position:relative;display:inline-block';
         var codeBtn = document.createElement('button');
@@ -2134,7 +2149,6 @@ var EditorModule = (function (Utils, EventBus) {
         var spoilerBtn = mkBtn('fa-regular fa-square-caret-down', 'Spoiler', 'Control+Shift+S');
         var nsfwBtn = mkBtn('fa-regular fa-eye-slash', 'NSFW (hidden content)', 'Control+Shift+N');
 
-        // Emoji picker
         var emojiBtn = mkBtn('fa-regular fa-face-smile', 'Insert emoji');
         var emojiPanel = document.createElement('div');
         emojiPanel.className = 'modern-emoji-picker';
@@ -2203,7 +2217,6 @@ var EditorModule = (function (Utils, EventBus) {
         };
         emojiPanel.addEventListener('click', function (e) { e.stopPropagation(); });
 
-        // Upload placeholder
         var _uploadRegistryLocal = new Map();
         function uploadImageToWorker(file) {
             if (!file || !editorRef.current) return;
@@ -2266,7 +2279,6 @@ var EditorModule = (function (Utils, EventBus) {
 
         nsfwBtn.onclick = function () { exec(function () { editorRef.current.chain().focus().toggleNSFW().run(); }); };
 
-        // Basic formatting
         undoBtn.onclick = function () { exec(function () { editorRef.current.chain().focus().undo().run(); }); };
         redoBtn.onclick = function () { exec(function () { editorRef.current.chain().focus().redo().run(); }); };
         clearFormatBtn.onclick = function () { exec(function () { editorRef.current.chain().focus().unsetAllMarks().clearNodes().run(); }); };
@@ -2281,7 +2293,6 @@ var EditorModule = (function (Utils, EventBus) {
         listMenu.querySelector('#ordered-list-option').onclick = function () { exec(function () { editorRef.current.chain().focus().toggleOrderedList().run(); }); closeMenu(listBtn, listMenu); };
         blockquoteBtn.onclick = function () { exec(function () { editorRef.current.chain().focus().toggleBlockquote().run(); }); };
 
-        // ---- Node definitions ----
         const CustomBlockquote = Blockquote.extend({
             addAttributes() {
                 return {
@@ -2586,7 +2597,6 @@ var EditorModule = (function (Utils, EventBus) {
             }
         });
 
-        // ---- Lite YouTube / Vimeo nodes ----
         const LiteYouTube = Node.create({
             name: 'liteYouTube',
             group: 'block', atom: true, draggable: true, selectable: true,
@@ -2735,7 +2745,6 @@ var EditorModule = (function (Utils, EventBus) {
             },
         });
 
-        // ---- Link preview node ----
         const LinkPreview = Node.create({
             name: 'linkPreview',
             inline: true, group: 'inline', atom: true, draggable: true, selectable: true,
@@ -2873,7 +2882,6 @@ var EditorModule = (function (Utils, EventBus) {
             renderHTML() { return ['span', { class: 'ff-nsfw' }, 0]; }
         });
 
-        // ---- Mention node ----
         const CustomMention = Mention.extend({
             addAttributes() {
                 return {
@@ -3100,7 +3108,6 @@ var EditorModule = (function (Utils, EventBus) {
             }
         });
 
-        // ---- Link preview paste plugin ----
         const linkPreviewPlugin = new Plugin({
             key: new PluginKey('linkPreview'),
             props: {
@@ -3168,104 +3175,6 @@ var EditorModule = (function (Utils, EventBus) {
                     return true;
                 },
             },
-        });
-
-        // =================================================================
-        // NormalizeEmptyDoc
-        //
-        // Removes top-level blockquote/spoiler nodes whose visible content
-        // became empty after a delete.
-        //
-        // Why this is wrapped in try/catch: `appendTransaction` is invoked
-        // from inside `EditorState.apply`. If it throws, the whole dispatch
-        // unwinds — the browser's native `beforeinput` handler has already
-        // cleared the selection DOM, but `view.state` never advances, so
-        // the two desync. Catching the throw keeps `apply` alive and lets
-        // the delete transaction land cleanly. `cleanupEmptyContainers`
-        // (invoked from the keydown setTimeout) is the redundant path —
-        // if this plugin somehow can't complete, the setTimeout dispatch
-        // gets a second shot.
-        //
-        // No `setSelection` here: ProseMirror already maps selection
-        // through deletions. Manually re-setting it was the trigger for
-        // a `Cannot read properties of undefined (reading 'eq')` crash
-        // in the view's docView diff.
-        //
-        // Job 3 (multi-block collapse) was removed because Job 1 + Job 2
-        // cover the real-world cases and this branch was the riskiest.
-        // =================================================================
-        const NormalizeEmptyDoc = Extension.create({
-            name: 'normalizeEmptyDoc',
-            addProseMirrorPlugins() {
-                function isEffectivelyEmpty(node) {
-                    let hasContent = false;
-                    node.descendants(function (n) {
-                        if (hasContent) return;
-                        if (n.isText && n.text) {
-                            var visible = n.text.replace(/[\p{Cc}\p{Cf}]/gu, '');
-                            if (visible.trim()) { hasContent = true; return; }
-                            return;
-                        }
-                        const name = n.type.name;
-                        if (name === 'image' || name === 'liteYouTube' || name === 'liteVimeo' ||
-                            name === 'linkPreview' || name === 'imageUploadPlaceholder' ||
-                            name === 'horizontalRule') {
-                            hasContent = true;
-                        }
-                    });
-                    return !hasContent;
-                }
-
-                const CONTAINER_TYPES = new Set(['blockquote', 'spoiler']);
-
-                return [new Plugin({
-                    key: new PluginKey('normalizeEmptyDoc'),
-                    appendTransaction(trs, oldState, newState) {
-                        try {
-                            if (!trs.some(t => t.docChanged)) return null;
-
-                            const doc = newState.doc;
-
-                            let beforeNonEmpty = 0;
-                            oldState.doc.forEach(function (node) {
-                                if (CONTAINER_TYPES.has(node.type.name) && !isEffectivelyEmpty(node)) {
-                                    beforeNonEmpty++;
-                                }
-                            });
-                            let afterNonEmpty = 0;
-                            doc.forEach(function (node) {
-                                if (CONTAINER_TYPES.has(node.type.name) && !isEffectivelyEmpty(node)) {
-                                    afterNonEmpty++;
-                                }
-                            });
-
-                            // Only fire when a non-empty container just emptied.
-                            if (afterNonEmpty >= beforeNonEmpty) return null;
-
-                            const tr = newState.tr;
-                            const toRemove = [];
-                            doc.forEach(function (node, offset) {
-                                if (CONTAINER_TYPES.has(node.type.name) && isEffectivelyEmpty(node)) {
-                                    toRemove.push({ pos: offset, size: node.nodeSize });
-                                }
-                            });
-
-                            for (let i = toRemove.length - 1; i >= 0; i--) {
-                                tr.delete(toRemove[i].pos, toRemove[i].pos + toRemove[i].size);
-                            }
-
-                            if (tr.doc.childCount === 0) {
-                                tr.insert(0, newState.schema.nodes.paragraph.create());
-                            }
-
-                            return tr;
-                        } catch (e) {
-                            console.error('[NormalizeEmptyDoc] appendTransaction failed:', e);
-                            return null;
-                        }
-                    }
-                })];
-            }
         });
 
         const DeleteAdjacentAtom = Extension.create({
@@ -3375,7 +3284,6 @@ var EditorModule = (function (Utils, EventBus) {
             }
         });
 
-        // ---- Editor instance ----
         var initialHtml = ensureTrailingParagraphInHtml(opts.initialHtml || '');
 
         var editor = new Editor({
@@ -3395,7 +3303,7 @@ var EditorModule = (function (Utils, EventBus) {
                 Link.configure({ openOnClick: false, autolink: true, linkOnPaste: true, HTMLAttributes: { target: '_blank', rel: 'noopener noreferrer' } }),
                 LiteYouTube, LiteVimeo, Spoiler, NSFW, LinkPreview, SemanticColor, CustomMention,
                 EmoticonRule,
-                TrailingEmbedParagraph, NormalizeEmptyDoc, DeleteAdjacentAtom, BlockAtomSelection,
+                TrailingEmbedParagraph, DeleteAdjacentAtom, BlockAtomSelection,
                 CharacterCount.configure({ limit: MAX_MESSAGE_LENGTH > 0 ? MAX_MESSAGE_LENGTH : null }),
                 Typography
             ],
@@ -3511,17 +3419,6 @@ var EditorModule = (function (Utils, EventBus) {
                 },
                 handleDOMEvents: {
                     keydown: function (view, event) {
-                        // Post-delete safety net. Fires on the next tick so the
-                        // delete transaction has fully landed. try/catch
-                        // is inside cleanupEmptyContainers, so this dispatch
-                        // can't strand view.state.
-                        if ((event.key === 'Delete' || event.key === 'Backspace') &&
-                            !view.state.selection.empty) {
-                            setTimeout(function () {
-                                if (view.dom && view.dom.isConnected) cleanupEmptyContainers(view);
-                            }, 0);
-                        }
-
                         var mod = event.ctrlKey || event.metaKey;
                         if (mod && event.key === 'Enter') {
                             event.preventDefault();
@@ -3577,15 +3474,61 @@ var EditorModule = (function (Utils, EventBus) {
         editorRef.current = editor;
 
         // -------------------------------------------------------------------
-        // healViewDesync
+        // Wrap view.updateState and view.dispatch so a crash during render
+        // triggers a rebuild instead of leaving the editor in a zombie
+        // state. healViewDesync (below) catches the same condition on the
+        // next transaction, but this catches it synchronously.
+        // -------------------------------------------------------------------
+        var _origViewUpdateState = editor.view.updateState.bind(editor.view);
+        editor.view.updateState = function (state) {
+            try {
+                _origViewUpdateState(state);
+            } catch (err) {
+                console.error('[EditorModule] view.updateState crashed — scheduling rebuild:', err);
+                scheduleEditorRebuild();
+            }
+        };
+        var _origViewDispatch = editor.view.dispatch.bind(editor.view);
+        editor.view.dispatch = function (tr) {
+            try {
+                _origViewDispatch(tr);
+            } catch (err) {
+                console.error('[EditorModule] view.dispatch crashed — scheduling rebuild:', err);
+                scheduleEditorRebuild();
+            }
+        };
+
+        // -------------------------------------------------------------------
+        // Container emptiness tracking → cleanup.
         //
-        // Defensive: if ProseMirror's view is in a state where the DOM has
-        // been emptied but `view.state` still has content, the editor is
-        // unusable (no placeholder, typing goes into invisible structures).
-        // We can't call updateState(view.state) — that's exactly what throws
-        // when the docView is corrupted. setContent re-parses the HTML into
-        // a fresh state, which forces the view to rebuild its docView tree.
-        // If that also fails, log clearly so the user knows to refresh.
+        // Runs on every update. When the count of non-empty top-level
+        // blockquote/spoiler nodes decreases (a container just emptied),
+        // dispatch a cleanup transaction on the next tick to remove the
+        // empty container. Doing this outside appendTransaction means we
+        // never fire it mid-apply — much safer than the previous design.
+        //
+        // A user who just created a fresh empty blockquote is NOT affected:
+        // the count before and after their creation is the same (0 → 0),
+        // so no cleanup fires.
+        // -------------------------------------------------------------------
+        var _lastNonEmptyCount = countNonEmptyContainers(editor.state.doc);
+
+        editor.on('update', function () {
+            var newCount = countNonEmptyContainers(editor.state.doc);
+            var oldCount = _lastNonEmptyCount;
+            _lastNonEmptyCount = newCount;
+
+            if (newCount < oldCount) {
+                setTimeout(function () {
+                    if (!editorRef.current || editorRef.current.isDestroyed) return;
+                    removeEmptyContainers();
+                }, 0);
+            }
+        });
+
+        // -------------------------------------------------------------------
+        // healViewDesync — detects the DOM-empty/state-full desync on the
+        // next transaction and triggers a rebuild.
         // -------------------------------------------------------------------
         function healViewDesync() {
             if (!editor || editor.isDestroyed || !editor.view) return;
@@ -3598,19 +3541,14 @@ var EditorModule = (function (Utils, EventBus) {
                 if (node.textContent.trim()) { stateHasContent = true; return; }
                 var nm = node.type.name;
                 if (nm === 'image' || nm === 'liteYouTube' || nm === 'liteVimeo' ||
-                    nm === 'linkPreview' || nm === 'horizontalRule') {
+                    nm === 'linkPreview' || nm === 'horizontalRule' || nm === 'imageUploadPlaceholder') {
                     stateHasContent = true;
                 }
             });
             if (!stateHasContent) return;
 
-            console.warn('[EditorModule] View desync detected — DOM empty, state has content. Attempting recovery via setContent.');
-            try {
-                editor.commands.setContent(editor.getHTML(), false);
-                console.log('[EditorModule] Recovery successful.');
-            } catch (e) {
-                console.error('[EditorModule] View desync recovery FAILED. The editor needs a page refresh to continue.', e);
-            }
+            console.warn('[EditorModule] View desync detected — scheduling rebuild.');
+            scheduleEditorRebuild();
         }
         editor.on('transaction', healViewDesync);
         setTimeout(healViewDesync, 0);
@@ -3976,9 +3914,6 @@ var EditorModule = (function (Utils, EventBus) {
         };
     }
 
-    // ========================================================================
-    // TOAST
-    // ========================================================================
     function ensureToastContainer() {
         var c = document.getElementById('editor-toasts');
         if (!c) {
@@ -4010,9 +3945,6 @@ var EditorModule = (function (Utils, EventBus) {
         }, 3000);
     }
 
-    // ========================================================================
-    // FAST REPLY BUILDER
-    // ========================================================================
     async function buildFastReplyEditor() {
         var legacySend = document.querySelector('.fast.send');
         if (!legacySend) return;
@@ -4102,9 +4034,6 @@ var EditorModule = (function (Utils, EventBus) {
         }
     }
 
-    // ========================================================================
-    // FULL EDITOR BUILDER
-    // ========================================================================
     async function buildFullEditor() {
         var legacySend = document.querySelector('.send');
         if (!legacySend) return;
@@ -4165,9 +4094,6 @@ var EditorModule = (function (Utils, EventBus) {
         }
     }
 
-    // ========================================================================
-    // FAST EDIT
-    // ========================================================================
     function findPostContent(scope) {
         if (!scope) return null;
         return scope.querySelector('.right.Item table.color') ||
@@ -4456,9 +4382,6 @@ var EditorModule = (function (Utils, EventBus) {
         }
     }
 
-    // ========================================================================
-    // QUOTE
-    // ========================================================================
     function startQuote(postEl) {
         _quoteQueue = _quoteQueue
             .then(function () { return doStartQuote(postEl); })
@@ -4546,9 +4469,6 @@ var EditorModule = (function (Utils, EventBus) {
         showToast('Quote added', 'success');
     }
 
-    // ========================================================================
-    // OBSERVER REGISTRATION
-    // ========================================================================
     function registerObservers() {
         if (!globalThis.forumObserver || typeof globalThis.forumObserver.register !== 'function') return;
 
@@ -4575,9 +4495,6 @@ var EditorModule = (function (Utils, EventBus) {
         } catch (e) { console.error('[EditorModule] observer (full) failed:', e); }
     }
 
-    // ========================================================================
-    // INITIALIZE / RESET
-    // ========================================================================
     function initialize() {
         if (isInitialized) return Promise.resolve();
         if (!globalThis.forumObserver) {
