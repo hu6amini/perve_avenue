@@ -223,6 +223,7 @@ var EditorModule = (function (Utils, EventBus) {
         return false;
     }
 
+    // \p{Cc} (control) + \p{Cf} (format) covers every zero-width character.
     function editorContentIsEmpty(html) {
         if (!html || typeof html !== 'string') return true;
         var text = html
@@ -239,31 +240,14 @@ var EditorModule = (function (Utils, EventBus) {
         return true;
     }
 
-    // [FIX] Renamed from ensureTrailingParagraphInHtml and extended to add
-    // a leading escape paragraph too. Any blockquote/spoiler at position 0
-    // gets a plain <p></p> above it so ProseMirror's deleteSelection has a
-    // valid cursor neighbourhood and never produces an empty-view crash.
-    function ensureBoundaryParagraphs(html) {
+    function ensureTrailingParagraphInHtml(html) {
         if (!html || typeof html !== 'string') return html;
         var d = document.createElement('div');
         d.innerHTML = html;
-        if (!d.firstElementChild) return html;
-
-        function isContainer(el) {
-            if (!el || el.nodeType !== 1) return false;
-            return el.tagName === 'BLOCKQUOTE' ||
-                   (el.tagName === 'DIV' && el.classList.contains('spoiler'));
-        }
-
-        if (isContainer(d.firstElementChild)) {
-            d.insertBefore(document.createElement('p'), d.firstElementChild);
-        }
-
         var last = d.lastElementChild;
-        if (last && last.tagName !== 'P') {
-            d.appendChild(document.createElement('p'));
-        }
-
+        if (!last) return html;
+        if (last.tagName === 'P') return html;
+        d.appendChild(document.createElement('p'));
         return d.innerHTML;
     }
 
@@ -364,45 +348,48 @@ var EditorModule = (function (Utils, EventBus) {
 
     function parseLegacyIframeProvider(src) {
         if (!src) return null;
-        var m = src.match(/(?:youtube(?:-nocookie)?\.com\/(?:embed\/|v\/)|youtu\.be\/)([A-Za-z0-9_-]{6,})/);
+
+        let m = src.match(/(?:youtube(?:-nocookie)?\.com\/(?:embed\/|v\/)|youtu\.be\/)([A-Za-z0-9_-]{6,})/);
         if (m) {
-            var result = { kind: 'youtube', videoid: m[1], start: null, end: null };
+            const result = { kind: 'youtube', videoid: m[1], start: null, end: null };
             try {
-                var qIndex = src.indexOf('?');
+                const qIndex = src.indexOf('?');
                 if (qIndex >= 0) {
-                    var hashIndex = src.indexOf('#', qIndex);
-                    var queryStr = src.slice(qIndex + 1, hashIndex >= 0 ? hashIndex : undefined);
-                    var params = new URLSearchParams(queryStr);
-                    var start = params.get('start');
-                    var end   = params.get('end');
+                    const hashIndex = src.indexOf('#', qIndex);
+                    const queryStr = src.slice(qIndex + 1, hashIndex >= 0 ? hashIndex : undefined);
+                    const params = new URLSearchParams(queryStr);
+                    const start = params.get('start');
+                    const end   = params.get('end');
                     if (start) {
-                        var parsed = parseTimeString(start);
+                        const parsed = parseTimeString(start);
                         if (parsed != null) result.start = parsed;
                     }
                     if (end) {
-                        var parsedEnd = parseInt(end, 10);
-                        if (!isNaN(parsedEnd) && parsedEnd > 0) result.end = parsedEnd;
+                        const parsed = parseInt(end, 10);
+                        if (!isNaN(parsed) && parsed > 0) result.end = parsed;
                     }
                 }
             } catch (e) {}
             return result;
         }
+
         m = src.match(/player\.vimeo\.com\/video\/(\d+)/);
         if (m) {
-            var result2 = { kind: 'vimeo', videoid: m[1], start: null };
+            const result = { kind: 'vimeo', videoid: m[1], start: null };
             try {
-                var hashIndex2 = src.indexOf('#');
-                if (hashIndex2 >= 0) {
-                    var frag = src.slice(hashIndex2 + 1);
-                    var fragMatch = frag.match(/^t=(.+)$/);
+                const hashIndex = src.indexOf('#');
+                if (hashIndex >= 0) {
+                    const frag = src.slice(hashIndex + 1);
+                    const fragMatch = frag.match(/^t=(.+)$/);
                     if (fragMatch) {
-                        var parsed2 = parseTimeString(fragMatch[1]);
-                        if (parsed2 != null) result2.start = parsed2;
+                        const parsed = parseTimeString(fragMatch[1]);
+                        if (parsed != null) result.start = parsed;
                     }
                 }
             } catch (e) {}
-            return result2;
+            return result;
         }
+
         return null;
     }
 
@@ -410,28 +397,31 @@ var EditorModule = (function (Utils, EventBus) {
         if (!htmlContent || typeof htmlContent !== 'string') return htmlContent;
         if (htmlContent.indexOf('<iframe') === -1) return htmlContent;
 
-        var tempDiv = document.createElement('div');
+        const tempDiv = document.createElement('div');
         tempDiv.innerHTML = htmlContent;
-        var iframes = tempDiv.querySelectorAll('iframe[src]');
-        iframes.forEach(function (iframe) {
-            var src = iframe.getAttribute('src') || '';
-            var parsed = parseLegacyIframeProvider(src);
+
+        const iframes = tempDiv.querySelectorAll('iframe[src]');
+        iframes.forEach(iframe => {
+            const src = iframe.getAttribute('src') || '';
+            const parsed = parseLegacyIframeProvider(src);
             if (!parsed) return;
 
-            var wrapper = document.createElement('div');
+            const wrapper = document.createElement('div');
             wrapper.className = 'lite-embed-wrapper';
             wrapper.setAttribute('data-videoid', parsed.videoid);
             if (parsed.start != null) wrapper.setAttribute('data-start', String(parsed.start));
             if (parsed.end   != null) wrapper.setAttribute('data-end',   String(parsed.end));
 
-            var lite = document.createElement(parsed.kind === 'youtube' ? 'lite-youtube' : 'lite-vimeo');
+            const lite = document.createElement(
+                parsed.kind === 'youtube' ? 'lite-youtube' : 'lite-vimeo'
+            );
             lite.setAttribute('videoid', parsed.videoid);
             if (parsed.start != null) lite.setAttribute('start', String(parsed.start));
             if (parsed.end   != null) lite.setAttribute('end',   String(parsed.end));
             wrapper.appendChild(lite);
 
-            var parent = iframe.parentNode;
-            var target = (
+            const parent = iframe.parentNode;
+            const target = (
                 parent && parent.tagName === 'DIV' &&
                 parent.getAttribute('align') === 'center' &&
                 parent.children.length === 1
@@ -439,6 +429,7 @@ var EditorModule = (function (Utils, EventBus) {
 
             target.parentNode.replaceChild(wrapper, target);
         });
+
         return tempDiv.innerHTML;
     }
 
@@ -460,42 +451,53 @@ var EditorModule = (function (Utils, EventBus) {
     function transformBareVideoUrls(html) {
         if (!html || typeof html !== 'string') return html;
         if (html.indexOf('http') === -1) return html;
+
         var tempDiv = document.createElement('div');
         tempDiv.innerHTML = html;
+
         var paragraphs = tempDiv.querySelectorAll('p');
         paragraphs.forEach(function (p) {
             var text = (p.textContent || '').trim();
             if (!/^https?:\/\/\S+$/.test(text)) return;
+
             if (isYouTubeHostname(text)) {
                 var yt = parseYouTubeUrl(text);
                 if (!yt || !yt.videoid) return;
+
                 var wrapper = document.createElement('div');
                 wrapper.className = 'lite-embed-wrapper';
                 wrapper.setAttribute('data-videoid', yt.videoid);
                 if (yt.start != null) wrapper.setAttribute('data-start', String(yt.start));
                 if (yt.end   != null) wrapper.setAttribute('data-end',   String(yt.end));
+
                 var lite = document.createElement('lite-youtube');
                 lite.setAttribute('videoid', yt.videoid);
                 if (yt.start != null) lite.setAttribute('start', String(yt.start));
                 if (yt.end   != null) lite.setAttribute('end',   String(yt.end));
                 wrapper.appendChild(lite);
+
                 p.parentNode.replaceChild(wrapper, p);
                 return;
             }
+
             if (isVimeoHostname(text)) {
                 var vm = parseVimeoUrl(text);
                 if (!vm || !vm.videoid) return;
+
                 var wrapper2 = document.createElement('div');
                 wrapper2.className = 'lite-embed-wrapper';
                 wrapper2.setAttribute('data-videoid', vm.videoid);
                 if (vm.start != null) wrapper2.setAttribute('data-start', String(vm.start));
+
                 var lite2 = document.createElement('lite-vimeo');
                 lite2.setAttribute('videoid', vm.videoid);
                 if (vm.start != null) lite2.setAttribute('start', String(vm.start));
                 wrapper2.appendChild(lite2);
+
                 p.parentNode.replaceChild(wrapper2, p);
             }
         });
+
         return tempDiv.innerHTML;
     }
 
@@ -590,12 +592,25 @@ var EditorModule = (function (Utils, EventBus) {
         var groupClass = (user.group.class || '').toLowerCase();
         var groupBody  = (user.group.bodyclass || '').toLowerCase();
         var groupId    = user.group.id;
-        if (groupClass.indexOf('founder') !== -1 || groupBody.indexOf('founder') !== -1 || groupName === 'founder') return 'group-founder';
-        if (groupName === 'administrator' || groupClass.indexOf('admin') !== -1 || groupId === 1) return 'group-administrator';
-        if (groupName === 'global moderator' || groupClass.indexOf('global_mod') !== -1) return 'group-global-moderator';
-        if (groupName === 'moderator' || groupClass.indexOf('mod') !== -1) return 'group-moderator';
-        if (groupName === 'developer' || groupClass.indexOf('developer') !== -1) return 'group-developer';
-        if (groupName === 'game dev' || groupClass.indexOf('game_dev') !== -1) return 'group-game-dev';
+
+        if (groupClass.indexOf('founder') !== -1 || groupBody.indexOf('founder') !== -1 || groupName === 'founder') {
+            return 'group-founder';
+        }
+        if (groupName === 'administrator' || groupClass.indexOf('admin') !== -1 || groupId === 1) {
+            return 'group-administrator';
+        }
+        if (groupName === 'global moderator' || groupClass.indexOf('global_mod') !== -1) {
+            return 'group-global-moderator';
+        }
+        if (groupName === 'moderator' || groupClass.indexOf('mod') !== -1) {
+            return 'group-moderator';
+        }
+        if (groupName === 'developer' || groupClass.indexOf('developer') !== -1) {
+            return 'group-developer';
+        }
+        if (groupName === 'game dev' || groupClass.indexOf('game_dev') !== -1) {
+            return 'group-game-dev';
+        }
         if (groupName === 'fan') return 'group-fan';
         return 'group-' + sanitizeGroupName(user.group.name || 'member');
     }
@@ -655,8 +670,10 @@ var EditorModule = (function (Utils, EventBus) {
         var profileUrl = '/?act=Profile&MID=' + mid;
         var avatarUrl = optimizeAvatarUrl(user.avatar, 36, 36);
         var groupClass = getGroupClass(user);
+
         var header = document.createElement('div');
         header.className = 'modern-replying-as ' + groupClass;
+
         var avatarHtml;
         if (avatarUrl) {
             avatarHtml = '<img class="modern-replying-avatar" src="' + escapeHtml(avatarUrl) +
@@ -666,6 +683,7 @@ var EditorModule = (function (Utils, EventBus) {
                 'style="background-color:#' + getColorFromNickname(username, mid) + ';">' +
                 escapeHtml(getInitialFromName(username)) + '</span>';
         }
+
         header.innerHTML =
             '<span class="modern-replying-label">' + escapeHtml(label || 'Replying as:') + '</span>' +
             '<a href="' + escapeHtml(profileUrl) + '" class="modern-replying-user" rel="nofollow">' +
@@ -679,7 +697,9 @@ var EditorModule = (function (Utils, EventBus) {
         if (!header || !user) return;
         var tryAttach = function () {
             if (!window.ForumPostsModule ||
-                typeof window.ForumPostsModule.attachProfileTip !== 'function') return false;
+                typeof window.ForumPostsModule.attachProfileTip !== 'function') {
+                return false;
+            }
             var username = decodeHtmlEntities(user.nickname) || 'You';
             var data = {
                 mid: user.mid,
@@ -709,6 +729,7 @@ var EditorModule = (function (Utils, EventBus) {
                 'BLOCKQUOTE','PRE','TABLE','HR','SECTION','ARTICLE','FIGURE',
                 'HEADER','FOOTER','ASIDE','NAV','DL','DT','DD','FORM'
             ]);
+
             const container = document.createElement('div');
             container.innerHTML = html;
             const newChildren = [];
@@ -722,38 +743,65 @@ var EditorModule = (function (Utils, EventBus) {
                     return false;
                 });
             }
+
             function flushBuffer() {
-                while (inlineBuffer.length > 0 && inlineBuffer[0].nodeType === 1 && inlineBuffer[0].tagName === 'BR') inlineBuffer.shift();
-                while (inlineBuffer.length > 0 && inlineBuffer[inlineBuffer.length - 1].nodeType === 1 && inlineBuffer[inlineBuffer.length - 1].tagName === 'BR') inlineBuffer.pop();
-                if (!hasVisibleContent(inlineBuffer)) { inlineBuffer = []; return; }
+                while (inlineBuffer.length > 0 && inlineBuffer[0].nodeType === 1 && inlineBuffer[0].tagName === 'BR') {
+                    inlineBuffer.shift();
+                }
+                while (inlineBuffer.length > 0 && inlineBuffer[inlineBuffer.length - 1].nodeType === 1 && inlineBuffer[inlineBuffer.length - 1].tagName === 'BR') {
+                    inlineBuffer.pop();
+                }
+                if (!hasVisibleContent(inlineBuffer)) {
+                    inlineBuffer = [];
+                    return;
+                }
                 const p = document.createElement('p');
                 inlineBuffer.forEach(n => p.appendChild(n));
                 newChildren.push(p);
                 inlineBuffer = [];
             }
+
             Array.from(container.childNodes).forEach(child => {
                 if (child.nodeType === 1 && child.tagName === 'BR') {
                     pendingBreaks++;
-                    if (pendingBreaks >= 2) { flushBuffer(); pendingBreaks = 0; }
+                    if (pendingBreaks >= 2) {
+                        flushBuffer();
+                        pendingBreaks = 0;
+                    }
                     return;
                 }
-                if (child.nodeType === 3 && !child.nodeValue.trim() && pendingBreaks > 0) return;
-                if (pendingBreaks === 1) inlineBuffer.push(document.createElement('br'));
+
+                if (child.nodeType === 3 && !child.nodeValue.trim() && pendingBreaks > 0) {
+                    return;
+                }
+
+                if (pendingBreaks === 1) {
+                    inlineBuffer.push(document.createElement('br'));
+                }
                 pendingBreaks = 0;
+
                 if (child.nodeType === 1 && BLOCK_TAGS.has(child.tagName)) {
                     flushBuffer();
                     newChildren.push(child);
                     return;
                 }
+
                 inlineBuffer.push(child);
             });
-            if (pendingBreaks === 1) inlineBuffer.push(document.createElement('br'));
+
+            if (pendingBreaks === 1) {
+                inlineBuffer.push(document.createElement('br'));
+            }
+
             flushBuffer();
+
             container.innerHTML = '';
             newChildren.forEach(n => container.appendChild(n));
+
             Array.from(container.querySelectorAll('blockquote, .quote-content, .spoiler-content-inner')).forEach(el => {
                 el.innerHTML = paragraphizeLegacyHtml(el.innerHTML);
             });
+
             return container.innerHTML;
         } catch (e) {
             console.warn('[EditorModule] paragraphizeLegacyHtml failed:', e);
@@ -764,6 +812,7 @@ var EditorModule = (function (Utils, EventBus) {
     function legacyToHtml(legacy) {
         if (!legacy) return '';
         var html = legacy;
+
         html = html.replace(
             /<span[^>]*\bff-spoiler-title\b[^>]*>([\s\S]*?)<\/span>\s*(?:<br\s*\/?>)*\s*\[spoiler\]([\s\S]*?)\[\/spoiler\]/gis,
             function (_, title, body) {
@@ -771,6 +820,7 @@ var EditorModule = (function (Utils, EventBus) {
                 return '<div class="spoiler" data-title="' + escapeHtml(decoded) + '">' + body + '</div>';
             }
         );
+
         html = html.replace(
             /<span[^>]*\bff-code-lang\b[^>]*>([\s\S]*?)<\/span>\s*(?:<br\s*\/?>)*\s*\[code\]([\s\S]*?)\[\/code\]/gis,
             function (_, lang, body) {
@@ -778,6 +828,7 @@ var EditorModule = (function (Utils, EventBus) {
                 return '<pre data-language="' + escapeHtml(decoded) + '"><code>' + body + '</code></pre>';
             }
         );
+
         html = html.replace(
             /<span\b[^>]*\bff-lite-youtube\b[^>]*>([\s\S]*?)<\/span>/gis,
             function (match) {
@@ -812,6 +863,7 @@ var EditorModule = (function (Utils, EventBus) {
                 return '<lite-vimeo ' + attrs + '></lite-vimeo>';
             }
         );
+
         html = html.replace(/\[b\](.*?)\[\/b\]/gi, '<strong>$1</strong>');
         html = html.replace(/\[i\](.*?)\[\/i\]/gi, '<em>$1</em>');
         html = html.replace(/\[u\](.*?)\[\/u\]/gi, '<u>$1</u>');
@@ -821,25 +873,32 @@ var EditorModule = (function (Utils, EventBus) {
         html = html.replace(/\[list=1\](.*?)\[\/list\]/gis, '<ol>$1</ol>');
         html = html.replace(/\[url=([^\]]+)\](.*?)\[\/url\]/gi, '<a href="$1" target="_blank">$2</a>');
         html = html.replace(/\[img\](.*?)\[\/img\]/gi, '<img src="$1" alt="image" loading="lazy" decoding="async">');
+
         html = html.replace(/\[QUOTE(?:=([^\]]+))?\]([\s\S]*?)\[\/QUOTE\]/gi, function(match, params, body) {
             var author = '';
             if (params) {
                 var parts = params.split(',');
-                if (parts.length > 0 && parts[0].trim()) author = parts[0].trim();
+                if (parts.length > 0 && parts[0].trim()) {
+                    author = parts[0].trim();
+                }
             }
-            if (author) return '<blockquote data-author="' + escapeHtml(author) + '">' + body + '</blockquote>';
+            if (author) {
+                return '<blockquote data-author="' + escapeHtml(author) + '">' + body + '</blockquote>';
+            }
             return '<blockquote>' + body + '</blockquote>';
         });
         html = html.replace(/\[code\](.*?)\[\/code\]/gis, '<pre><code>$1</code></pre>');
         html = html.replace(/\[spoiler\](.*?)\[\/spoiler\]/gis, '<div class="spoiler">$1</div>');
         html = html.replace(/\[CENTER\](.*?)\[\/CENTER\]/gis, '<div style="text-align:center">$1</div>');
         html = html.replace(/\[font=([^\]]+)\](.*?)\[\/font\]/gis, '$2');
+
         html = html.replace(/\[size=([^\]]+)\](.*?)\[\/size\]/gis, function (_, sz, content) {
             var n = parseInt(sz, 10);
             if (isNaN(n)) n = 14;
             n = Math.max(10, Math.min(30, n));
             return '<span style="font-size:' + n + 'px">' + content + '</span>';
         });
+
         html = html.replace(
             /<span[^>]*\bff-inline-code\b[^>]*>([\s\S]*?)<\/span>/gis,
             function (_, content) {
@@ -847,16 +906,19 @@ var EditorModule = (function (Utils, EventBus) {
                 return '<code>' + escapeHtml(decoded) + '</code>';
             }
         );
+
         html = html.replace(/\[EMAIL\](.*?)\[\/EMAIL\]/gi, '<a href="mailto:$1">$1</a>');
         return html;
     }
 
     async function legacyToHtmlAsync(legacy) {
         if (!legacy) return '';
+
         var expanded = legacy.replace(/\[IMG=([^\]]+)\]([^\[]+?)\[\/IMG\]/gi, function (_, altText, url) {
             var safeAlt = escapeHtml(altText.trim());
             return '<img src="' + url.trim() + '" alt="' + safeAlt + '" loading="lazy" decoding="async">';
         });
+
         if (!/<br\s*\/?>/i.test(expanded) && /\n/.test(expanded)) {
             var codeBlocks = [];
             expanded = expanded.replace(/\[code\]([\s\S]*?)\[\/code\]/gi, function(match) {
@@ -864,52 +926,72 @@ var EditorModule = (function (Utils, EventBus) {
                 codeBlocks.push(match);
                 return id;
             });
+
             expanded = expanded.replace(/\r\n/g, '\n').replace(/\n/g, '<br>');
+
             expanded = expanded.replace(/\uE000CODE(\d+)Z\uE001/g, function(m, idx) {
                 return codeBlocks[parseInt(idx, 10)];
             });
         }
+
         var html = legacyToHtml(expanded);
         html = transformLegacyIframes(html);
         html = paragraphizeLegacyHtml(html);
         html = transformBareVideoUrls(html);
+
         return await enrichImageDimensions(html);
     }
 
     async function enrichImageDimensions(html) {
         if (!html || html.indexOf('<img') === -1) return html;
+
         var temp = document.createElement('div');
         temp.innerHTML = html;
+
         var promises = [];
+
         temp.querySelectorAll('img').forEach(function (img) {
             var w = img.getAttribute('width');
             var h = img.getAttribute('height');
             if (w && h && parseInt(w, 10) > 0 && parseInt(h, 10) > 0) return;
+
             if (img.classList.contains('twemoji')) return;
             var alt = img.getAttribute('alt') || '';
             if (alt.startsWith(':') && alt.endsWith(':')) return;
+
             var src = img.getAttribute('src') || '';
             if (!src) return;
             if (src.indexOf('weserv.nl') !== -1 || src.indexOf('wsrv.nl') !== -1) return;
+
             if (!img.hasAttribute('loading')) img.setAttribute('loading', 'lazy');
             if (!img.hasAttribute('decoding')) img.setAttribute('decoding', 'async');
+
             promises.push(new Promise(function (resolve) {
                 var probe = new Image();
                 var done = false;
-                var timer = setTimeout(function () { if (!done) { done = true; resolve(); } }, 4000);
+                var timer = setTimeout(function () {
+                    if (!done) { done = true; resolve(); }
+                }, 4000);
                 probe.onload = function () {
                     if (done) return;
-                    done = true; clearTimeout(timer);
+                    done = true;
+                    clearTimeout(timer);
                     if (probe.naturalWidth > 0 && probe.naturalHeight > 0) {
                         img.setAttribute('width', probe.naturalWidth);
                         img.setAttribute('height', probe.naturalHeight);
                     }
                     resolve();
                 };
-                probe.onerror = function () { if (done) return; done = true; clearTimeout(timer); resolve(); };
+                probe.onerror = function () {
+                    if (done) return;
+                    done = true;
+                    clearTimeout(timer);
+                    resolve();
+                };
                 probe.src = src;
             }));
         });
+
         if (promises.length === 0) return temp.innerHTML;
         await Promise.all(promises);
         return temp.innerHTML;
@@ -920,7 +1002,11 @@ var EditorModule = (function (Utils, EventBus) {
         var result = html;
         for (var i = 0; i < 10; i++) {
             var before = result;
-            result = result.replace(/<span[^>]*\bff-upload-placeholder-marker\b[^>]*>\s*<\/span>/gi, '');
+
+            result = result.replace(
+                /<span[^>]*\bff-upload-placeholder-marker\b[^>]*>\s*<\/span>/gi, ''
+            );
+
             result = result.replace(
                 /<lite-youtube\b[^>]*\bvideoid="([^"]*)"[^>]*>\s*<\/lite-youtube>/gi,
                 function (match, videoid) {
@@ -941,14 +1027,19 @@ var EditorModule = (function (Utils, EventBus) {
                     return span + '></span>';
                 }
             );
+
             result = result.replace(/<blockquote([^>]*)>([\s\S]*?)<\/blockquote>/gi, function(match, attrs, inner) {
                 inner = inner.replace(/<p class="quote-author-header">[\s\S]*?<\/p>/gi, '');
                 var cleaned = inner.replace(/<p[^>]*>/gi, '').replace(/<\/p>\s*/gi, '\n\n');
                 cleaned = cleaned.replace(/\n+$/, '');
                 var authorMatch = attrs.match(/data-author="([^"]*)"/);
-                if (authorMatch) return '[QUOTE=' + decodeHtmlEntities(authorMatch[1]) + ']' + cleaned + '[/QUOTE]';
+                if (authorMatch) {
+                    var author = decodeHtmlEntities(authorMatch[1]);
+                    return '[QUOTE=' + author + ']' + cleaned + '[/QUOTE]';
+                }
                 return '[QUOTE]' + cleaned + '[/QUOTE]';
             });
+
             result = result.replace(/<div\b([^>]*\bclass="[^"]*\bspoiler\b[^"]*"[^>]*)>([\s\S]*?)<\/div>/gi, function (_, attrs, inner) {
                 var cleaned = inner.replace(/<p[^>]*>/gi, '').replace(/<\/p>\s*/gi, '\n\n').replace(/\n+$/, '');
                 var t = attrs.match(/data-title="([^"]*)"/);
@@ -956,6 +1047,7 @@ var EditorModule = (function (Utils, EventBus) {
                 var prefix = title ? '<span class="ff-spoiler-title">' + escapeHtml(title) + '</span>' : '';
                 return prefix + '[SPOILER]' + cleaned + '[/SPOILER]';
             });
+
             result = result.replace(/<pre([^>]*)>\s*<code[^>]*>([\s\S]*?)<\/code>\s*<\/pre>/gi, function (_, preAttrs, inner) {
                 var decoded = inner.replace(/<[^>]*>/g, '')
                     .replace(/&lt;/g, '<').replace(/&gt;/g, '>')
@@ -966,23 +1058,13 @@ var EditorModule = (function (Utils, EventBus) {
                 var prefix = lang ? '<span class="ff-code-lang">' + escapeHtml(lang) + '</span>' : '';
                 return prefix + '[CODE]' + decoded + '[/CODE]';
             });
+
             result = result.replace(/<code\b[^>]*>([\s\S]*?)<\/code>/gi, function (_, inner) {
                 return '<span class="ff-inline-code">' + inner + '</span>';
             });
+
             if (result === before) break;
         }
-
-        // [FIX] Strip the auto-generated escape paragraphs that sit directly
-        // before a [QUOTE] block or directly after a [/QUOTE] block. They
-        // exist only to give ProseMirror a valid cursor neighbourhood while
-        // editing — they should never reach the forum.
-        for (var j = 0; j < 3; j++) {
-            var _before = result;
-            result = result.replace(/^<p[^>]*>\s*(?:<br\s*\/?>)?\s*<\/p>\s*(?=\[QUOTE)/i, '');
-            result = result.replace(/(\[\/QUOTE\])\s*<p[^>]*>\s*(?:<br\s*\/?>)?\s*<\/p>\s*$/i, '$1');
-            if (result === _before) break;
-        }
-
         return result;
     }
 
@@ -991,16 +1073,23 @@ var EditorModule = (function (Utils, EventBus) {
     // ========================================================================
     function highlightCode(codeText) {
         if (codeText == null) return '';
-        var html = String(codeText).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+        var html = String(codeText)
+            .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
         var stash = [];
-        function keep(htmlStr) { var key = '\uE000A' + stash.length.toString(36) + 'Z\uE001'; stash.push(htmlStr); return key; }
+        function keep(htmlStr) {
+            var key = '\uE000A' + stash.length.toString(36) + 'Z\uE001';
+            stash.push(htmlStr);
+            return key;
+        }
         html = html.replace(/\/\*[\s\S]*?\*\//g, function (m) { return keep('<span class="code-comment">' + m + '</span>'); });
         html = html.replace(/(^|[^:\w])(\/\/[^\n]*)/g, function (m, p, c) { return p + keep('<span class="code-comment">' + c + '</span>'); });
         html = html.replace(/^(\s*)(#[^\n]*)/gm, function (m, ws, c) {
             if (/^#[0-9a-fA-F]{3,8}$/.test(c.trim())) return m;
             return ws + keep('<span class="code-comment">' + c + '</span>');
         });
-        html = html.replace(/"(?:[^"\\\n]|\\.)*"|'(?:[^'\\\n]|\\.)*'|`(?:[^`\\]|\\.)*`/g, function (m) { return keep('<span class="code-string">' + m + '</span>'); });
+        html = html.replace(/"(?:[^"\\\n]|\\.)*"|'(?:[^'\\\n]|\\.)*'|`(?:[^`\\]|\\.)*`/g, function (m) {
+            return keep('<span class="code-string">' + m + '</span>');
+        });
         html = html.replace(/\b\d+(?:\.\d+)?\b/g, '<span class="code-number">$&</span>');
         var KW = ['abstract','as','assert','async','await','bool','break','case','catch','class','const','continue','def','default','del','delete','do','elif','else','enum','except','export','extends','False','false','final','finally','float','for','from','func','function','global','goto','if','import','in','int','interface','is','lambda','let','match','module','new','None','null','not','or','pass','print','private','protected','public','raise','return','self','static','str','super','switch','this','throw','True','true','try','typeof','var','void','while','with','yield'].join('|');
         html = html.replace(new RegExp('\\b(' + KW + ')\\b', 'g'), '<span class="code-keyword">$1</span>');
@@ -1286,14 +1375,18 @@ var EditorModule = (function (Utils, EventBus) {
                 if (img.getBoundingClientRect().height > maxH + 2) tallImg = true;
             });
             var overflows = (content.scrollHeight > maxH + 2) || (actualH > maxH + 2) || tallImg;
-            if (!overflows) { expandBtn.remove(); quote.classList.remove('long-quote'); }
+            if (!overflows) {
+                expandBtn.remove();
+                quote.classList.remove('long-quote');
+            }
         };
         previewArea.querySelectorAll('.modern-quote.long-quote').forEach(function (quote) {
             var content = quote.querySelector('.quote-content');
             if (!content) return;
             var imgs = content.querySelectorAll('img');
-            if (imgs.length === 0) { checkQuoteOverflow(quote); }
-            else {
+            if (imgs.length === 0) {
+                checkQuoteOverflow(quote);
+            } else {
                 var pending = imgs.length;
                 var onLoadOrError = function () {
                     pending--;
@@ -1494,14 +1587,17 @@ var EditorModule = (function (Utils, EventBus) {
         try { var r = localStorage.getItem(EMOJI_RECENTS_KEY); if (!r) return []; var a = JSON.parse(r); return Array.isArray(a) ? a : []; }
         catch (e) { return []; }
     }
+
     function saveEmojiRecents(arr) {
         try { localStorage.setItem(EMOJI_RECENTS_KEY, JSON.stringify(arr.slice(0, EMOJI_RECENTS_MAX))); } catch (e) {}
     }
+
     function pushEmojiRecent(e) {
         var r = loadEmojiRecents(); var i = r.indexOf(e);
         if (i !== -1) r.splice(i, 1);
         r.unshift(e); saveEmojiRecents(r);
     }
+
     function emojiToCodePoint(emoji) {
         var cps = Array.from(emoji).map(function (ch) { return ch.codePointAt(0).toString(16); });
         return cps.filter(function (c) { return c !== 'fe0f'; }).join('-');
@@ -1543,7 +1639,10 @@ var EditorModule = (function (Utils, EventBus) {
         const typo = await import('https://esm.sh/@tiptap/extension-typography@2.5.2');
         const bq = await import('https://esm.sh/@tiptap/extension-blockquote@2.5.2');
 
-        const BlockquoteClass = bq.Blockquote || (bq.default && bq.default.Blockquote) || bq.default || bq;
+        const BlockquoteClass = bq.Blockquote
+            || (bq.default && bq.default.Blockquote)
+            || bq.default
+            || bq;
 
         return {
             Editor, Node, Mark, Extension, InputRule,
@@ -1582,7 +1681,11 @@ var EditorModule = (function (Utils, EventBus) {
         var lowlight = createLowlight(common);
 
         // -------------------------------------------------------------------
-        // Post-delete safety net
+        // Post-delete safety net. Runs from the keydown handler (below),
+        // after the delete transaction has landed. Independent of the
+        // plugin pipeline: reads the current doc, removes top-level
+        // blockquote/spoiler that has no visible content. Wrapped in
+        // try/catch so a dispatch failure can't strand state.
         // -------------------------------------------------------------------
         function cleanupEmptyContainers(view) {
             try {
@@ -1630,10 +1733,12 @@ var EditorModule = (function (Utils, EventBus) {
                 currentHeader = buildUserHeader(syncUser, opts.headerLabel || 'Replying as:');
                 if (currentHeader) host.appendChild(currentHeader);
             }
+
             fetchCurrentUserData().then(function (user) {
                 if (!user) return;
                 var newHeader = buildUserHeader(user, opts.headerLabel || 'Replying as:');
                 if (!newHeader) return;
+
                 if (currentHeader && currentHeader.parentNode) {
                     currentHeader.parentNode.replaceChild(newHeader, currentHeader);
                 } else if (host.firstChild) {
@@ -1682,6 +1787,7 @@ var EditorModule = (function (Utils, EventBus) {
 
         var livePreviewTimer = null;
 
+        // ---- Helpers ----
         function addSep() {
             var s = document.createElement('span');
             s.className = 'toolbar-separator';
@@ -1689,6 +1795,7 @@ var EditorModule = (function (Utils, EventBus) {
             s.style.cssText = 'width:1px;height:1.5rem;background:var(--border-color);margin:0 var(--space-sm);display:inline-block;vertical-align:middle;';
             toolbar.appendChild(s);
         }
+
         function mkBtn(icon, label, shortcut) {
             var b = document.createElement('button');
             b.type = 'button';
@@ -1700,11 +1807,14 @@ var EditorModule = (function (Utils, EventBus) {
             toolbar.appendChild(b);
             return b;
         }
+
         function exec(cmd) { if (!editorRef.current) return; cmd(); editorRef.current.commands.focus(); }
 
         var _backdrop = null;
         var _mobileMode = window.matchMedia('(max-width: 680px)').matches;
+
         function isMobile() { return window.matchMedia('(max-width: 680px)').matches; }
+
         function ensureBackdrop() {
             if (!_backdrop) {
                 _backdrop = document.createElement('div');
@@ -1714,6 +1824,7 @@ var EditorModule = (function (Utils, EventBus) {
             }
             return _backdrop;
         }
+
         function positionMenu(btn, menu) {
             menu.style.left = ''; menu.style.right = ''; menu.style.top = ''; menu.style.bottom = '';
             menu.style.maxWidth = ''; menu.style.maxHeight = ''; menu.style.overflowY = '';
@@ -1729,6 +1840,7 @@ var EditorModule = (function (Utils, EventBus) {
             else if (mr.height <= sa) { menu.style.top = 'auto'; menu.style.bottom = '100%'; }
             else { menu.style.top = '100%'; menu.style.bottom = 'auto'; menu.style.maxHeight = Math.max(120, sb) + 'px'; menu.style.overflowY = 'auto'; }
         }
+
         function openMenu(btn, menu) {
             if (isMobile()) {
                 menu.classList.add('is-open', 'is-sheet'); menu.style.display = 'block';
@@ -1741,6 +1853,7 @@ var EditorModule = (function (Utils, EventBus) {
             if (btn) btn.setAttribute('aria-expanded', 'true');
             positionMenu(btn, menu);
         }
+
         function closeMenu(btn, menu) {
             if (!menu) return;
             menu.classList.remove('is-open', 'is-sheet');
@@ -1751,6 +1864,7 @@ var EditorModule = (function (Utils, EventBus) {
             if (_backdrop) _backdrop.classList.remove('is-active');
             document.body.classList.remove('dropdown-sheet-open');
         }
+
         function closeAllPopovers() {
             document.querySelectorAll('.modern-dropdown-menu').forEach(function (m) {
                 m.classList.remove('is-open', 'is-sheet'); m.style.display = 'none';
@@ -1768,6 +1882,7 @@ var EditorModule = (function (Utils, EventBus) {
             if (nowMobile !== _mobileMode) { _mobileMode = nowMobile; closeAllPopovers(); }
         });
 
+        // ---- Lite-embed helpers ----
         function focusTrailingEmbedParagraph() {
             if (!editorRef.current) return;
             var doc = editorRef.current.state.doc;
@@ -1785,6 +1900,7 @@ var EditorModule = (function (Utils, EventBus) {
             var canonicalUrl = kind === 'liteYouTube'
                 ? 'https://www.youtube.com/watch?v=' + encodeURIComponent(videoid)
                 : 'https://vimeo.com/' + encodeURIComponent(videoid);
+
             fetchWithTimeout(OG_WORKER_URL + encodeURIComponent(canonicalUrl), {}, OG_FETCH_TIMEOUT)
                 .then(function (r) { return r.ok ? r.json() : null; })
                 .then(function (data) {
@@ -1824,8 +1940,10 @@ var EditorModule = (function (Utils, EventBus) {
             fetchEmbedMetadata(kind, videoid);
         }
 
+        // ---- Live preview ----
         function updateLivePreview() {
             if (!editorRef.current || editorContentIsEmpty(editorRef.current.getHTML())) return;
+
             var hasPlaceholder = false;
             editorRef.current.state.doc.content.content.some(function (child) {
                 if (child.type.name === 'imageUploadPlaceholder') {
@@ -1835,15 +1953,20 @@ var EditorModule = (function (Utils, EventBus) {
                 return false;
             });
             if (hasPlaceholder) return;
+
             if (!previewArea || previewArea.style.display === 'none') return;
+
             var previewHtml = transformPreviewHtml(editorRef.current.getHTML());
             var previewContent = previewArea.querySelector('.preview-content');
             if (previewContent) {
                 previewContent.innerHTML = previewHtml;
-                if (window.twemoji) window.twemoji.parse(previewContent, { base: TWEMOJI_BASE, ext: '.svg' });
+                if (window.twemoji) {
+                    window.twemoji.parse(previewContent, { base: TWEMOJI_BASE, ext: '.svg' });
+                }
             }
             initPreviewQuotesAndSpoilers(previewArea);
         }
+
         function scheduleLivePreviewRefresh() {
             if (!previewArea || previewArea.style.display === 'none') return;
             if (livePreviewTimer) clearTimeout(livePreviewTimer);
@@ -1864,6 +1987,7 @@ var EditorModule = (function (Utils, EventBus) {
         var underlineBtn = mkBtn('fa-regular fa-underline', 'Underline', 'Control+U');
         var strikeBtn    = mkBtn('fa-regular fa-strikethrough', 'Strikethrough');
 
+        // Color dropdown
         var colorDrop = document.createElement('div');
         colorDrop.className = 'modern-dropdown';
         colorDrop.style.cssText = 'position:relative;display:inline-block';
@@ -1905,6 +2029,7 @@ var EditorModule = (function (Utils, EventBus) {
         var clearFormatBtn = mkBtn('fa-regular fa-remove-format', 'Clear formatting');
         addSep();
 
+        // Heading dropdown
         var headDrop = document.createElement('div');
         headDrop.className = 'modern-dropdown'; headDrop.style.cssText = 'position:relative;display:inline-block';
         var headBtn = document.createElement('button');
@@ -1930,6 +2055,7 @@ var EditorModule = (function (Utils, EventBus) {
         headMenu.addEventListener('click', function (e) { e.stopPropagation(); });
         var headingButtons = { h1: headMenu.querySelector('[data-level="1"]'), h2: headMenu.querySelector('[data-level="2"]'), h3: headMenu.querySelector('[data-level="3"]') };
 
+        // List dropdown
         var listDrop = document.createElement('div');
         listDrop.className = 'modern-dropdown'; listDrop.style.cssText = 'position:relative;display:inline-block';
         var listBtn = document.createElement('button');
@@ -1955,6 +2081,7 @@ var EditorModule = (function (Utils, EventBus) {
 
         var blockquoteBtn = mkBtn('fa-regular fa-quote-left', 'Blockquote');
 
+        // Code dropdown
         var codeDrop = document.createElement('div');
         codeDrop.className = 'modern-dropdown'; codeDrop.style.cssText = 'position:relative;display:inline-block';
         var codeBtn = document.createElement('button');
@@ -2007,6 +2134,7 @@ var EditorModule = (function (Utils, EventBus) {
         var spoilerBtn = mkBtn('fa-regular fa-square-caret-down', 'Spoiler', 'Control+Shift+S');
         var nsfwBtn = mkBtn('fa-regular fa-eye-slash', 'NSFW (hidden content)', 'Control+Shift+N');
 
+        // Emoji picker
         var emojiBtn = mkBtn('fa-regular fa-face-smile', 'Insert emoji');
         var emojiPanel = document.createElement('div');
         emojiPanel.className = 'modern-emoji-picker';
@@ -2075,6 +2203,7 @@ var EditorModule = (function (Utils, EventBus) {
         };
         emojiPanel.addEventListener('click', function (e) { e.stopPropagation(); });
 
+        // Upload placeholder
         var _uploadRegistryLocal = new Map();
         function uploadImageToWorker(file) {
             if (!file || !editorRef.current) return;
@@ -2136,6 +2265,8 @@ var EditorModule = (function (Utils, EventBus) {
         };
 
         nsfwBtn.onclick = function () { exec(function () { editorRef.current.chain().focus().toggleNSFW().run(); }); };
+
+        // Basic formatting
         undoBtn.onclick = function () { exec(function () { editorRef.current.chain().focus().undo().run(); }); };
         redoBtn.onclick = function () { exec(function () { editorRef.current.chain().focus().redo().run(); }); };
         clearFormatBtn.onclick = function () { exec(function () { editorRef.current.chain().focus().unsetAllMarks().clearNodes().run(); }); };
@@ -2185,6 +2316,7 @@ var EditorModule = (function (Utils, EventBus) {
                     const dom = document.createElement('div');
                     dom.className = 'ff-upload-placeholder';
                     dom.setAttribute('contenteditable', 'false');
+
                     const dropzone = document.createElement('div');
                     dropzone.className = 'ff-upload-dropzone';
                     dropzone.innerHTML =
@@ -2195,6 +2327,7 @@ var EditorModule = (function (Utils, EventBus) {
                             '<div class="ff-upload-dropzone-hint">Max 32 MB per image</div>' +
                         '</div>' +
                         '<button type="button" class="ff-upload-btn is-danger ff-upload-dismiss-btn" aria-label="Remove"><i class="fa-regular fa-xmark" aria-hidden="true"></i></button>';
+
                     const progress = document.createElement('div');
                     progress.className = 'ff-upload-progress';
                     progress.innerHTML =
@@ -2206,7 +2339,9 @@ var EditorModule = (function (Utils, EventBus) {
                             '<button type="button" class="ff-upload-btn ff-upload-retry-btn" hidden aria-label="Retry upload"><i class="fa-regular fa-arrow-rotate-right" aria-hidden="true"></i></button>' +
                             '<button type="button" class="ff-upload-btn is-danger ff-upload-cancel-btn" aria-label="Cancel upload"><i class="fa-regular fa-xmark" aria-hidden="true"></i></button>' +
                         '</div>';
+
                     dom.appendChild(dropzone); dom.appendChild(progress);
+
                     const dismissBtn = dropzone.querySelector('.ff-upload-dismiss-btn');
                     const urlBtn = dropzone.querySelector('.ff-upload-by-url');
                     const filenameEl = progress.querySelector('.ff-upload-filename');
@@ -2216,7 +2351,9 @@ var EditorModule = (function (Utils, EventBus) {
                     const retryBtn = progress.querySelector('.ff-upload-retry-btn');
                     const cancelBtn = progress.querySelector('.ff-upload-cancel-btn');
                     const cancelIcon = cancelBtn.querySelector('i');
+
                     let currentXhr = null;
+
                     function findSelf() {
                         const pos = getPos();
                         if (typeof pos !== 'number') return null;
@@ -2248,6 +2385,7 @@ var EditorModule = (function (Utils, EventBus) {
                         tr.setSelection(TextSelection.create(tr.doc, np + 2));
                         editor.view.dispatch(tr); editor.view.focus();
                     }
+
                     function render(n) {
                         const idle = n.attrs.status === 'idle';
                         dropzone.style.display = idle ? '' : 'none';
@@ -2265,12 +2403,14 @@ var EditorModule = (function (Utils, EventBus) {
                         cancelBtn.title = failed ? 'Remove' : 'Cancel upload';
                         cancelBtn.setAttribute('aria-label', failed ? 'Remove' : 'Cancel upload');
                     }
+
                     function startUpload() {
                         if (currentXhr) { try { currentXhr.abort(); } catch (e) {} currentXhr = null; }
                         const s = findSelf(); if (!s) return;
                         const uid = s.node.attrs.uploadId; if (!uid) return;
                         const entry = _uploadRegistryLocal.get(uid);
                         if (!entry || !entry.file) { patch({ status: 'failed', errorMessage: 'File no longer available' }); return; }
+
                         const xhr = new XMLHttpRequest();
                         currentXhr = xhr;
                         xhr.open('POST', UPLOAD_WORKER_URL);
@@ -2290,6 +2430,7 @@ var EditorModule = (function (Utils, EventBus) {
                         xhr.addEventListener('error', function () { currentXhr = null; patch({ status: 'failed', errorMessage: 'Network error' }); });
                         const fd = new FormData(); fd.append('image', entry.file); xhr.send(fd);
                     }
+
                     function handleFile(file) {
                         if (file.size > MAX_UPLOAD_BYTES) {
                             patch({ status: 'failed', filename: file.name || 'image', filesize: file.size || 0, progress: 0, errorMessage: 'File exceeds 32 MB limit' });
@@ -2300,12 +2441,14 @@ var EditorModule = (function (Utils, EventBus) {
                         patch({ uploadId: uid, filename: file.name || 'image', filesize: file.size || 0, progress: 0, status: 'uploading', errorMessage: '' });
                         startUpload();
                     }
+
                     function openPicker() {
                         const input = document.createElement('input');
                         input.type = 'file'; input.accept = 'image/*';
                         input.onchange = function () { if (input.files && input.files[0]) handleFile(input.files[0]); };
                         input.click();
                     }
+
                     dropzone.addEventListener('click', function (e) {
                         if (e.target.closest('.ff-upload-by-url')) return;
                         if (e.target.closest('.ff-upload-dismiss-btn')) return;
@@ -2341,8 +2484,10 @@ var EditorModule = (function (Utils, EventBus) {
                         if (currentXhr) { try { currentXhr.abort(); } catch (err) {} currentXhr = null; }
                         patch({ status: 'uploading', progress: 0, errorMessage: '' }); startUpload();
                     });
+
                     render(node);
                     if (node.attrs.status === 'uploading') startUpload();
+
                     return {
                         dom,
                         update(u) { if (u.type.name !== 'imageUploadPlaceholder') return false; render(u); return true; },
@@ -2441,38 +2586,57 @@ var EditorModule = (function (Utils, EventBus) {
             }
         });
 
+        // ---- Lite YouTube / Vimeo nodes ----
         const LiteYouTube = Node.create({
             name: 'liteYouTube',
             group: 'block', atom: true, draggable: true, selectable: true,
             addAttributes() {
                 return {
-                    videoid: { default: null, parseHTML: el => el.getAttribute('videoid') || el.getAttribute('data-videoid') || null, renderHTML: attrs => attrs.videoid ? { videoid: attrs.videoid } : {} },
+                    videoid: {
+                        default: null,
+                        parseHTML: el => el.getAttribute('videoid') || el.getAttribute('data-videoid') || null,
+                        renderHTML: attrs => attrs.videoid ? { videoid: attrs.videoid } : {},
+                    },
                     title:  { default: '' },
                     author: { default: '' },
-                    start: { default: null, parseHTML: el => el.getAttribute('start') || null, renderHTML: attrs => attrs.start ? { start: String(attrs.start) } : {} },
-                    end: { default: null, parseHTML: el => el.getAttribute('end') || null, renderHTML: attrs => attrs.end ? { end: String(attrs.end) } : {} },
+                    start: {
+                        default: null,
+                        parseHTML: el => el.getAttribute('start') || null,
+                        renderHTML: attrs => attrs.start ? { start: String(attrs.start) } : {},
+                    },
+                    end: {
+                        default: null,
+                        parseHTML: el => el.getAttribute('end') || null,
+                        renderHTML: attrs => attrs.end ? { end: String(attrs.end) } : {},
+                    },
                 };
             },
             parseHTML() {
                 return [
-                    { tag: 'div.lite-embed-wrapper', getAttrs: el => {
-                        const lite = el.querySelector('lite-youtube');
-                        if (!lite) return false;
-                        return {
-                            videoid: lite.getAttribute('videoid') || el.getAttribute('data-videoid') || null,
+                    {
+                        tag: 'div.lite-embed-wrapper',
+                        getAttrs: el => {
+                            const lite = el.querySelector('lite-youtube');
+                            if (!lite) return false;
+                            return {
+                                videoid: lite.getAttribute('videoid') || el.getAttribute('data-videoid') || null,
+                                title: el.getAttribute('data-title') || '',
+                                author: el.getAttribute('data-author') || '',
+                                start: el.getAttribute('data-start') || lite.getAttribute('start') || null,
+                                end: el.getAttribute('data-end') || lite.getAttribute('end') || null,
+                            };
+                        },
+                    },
+                    {
+                        tag: 'lite-youtube',
+                        getAttrs: el => ({
+                            videoid: el.getAttribute('videoid') || el.getAttribute('data-videoid') || null,
                             title: el.getAttribute('data-title') || '',
                             author: el.getAttribute('data-author') || '',
-                            start: el.getAttribute('data-start') || lite.getAttribute('start') || null,
-                            end: el.getAttribute('data-end') || lite.getAttribute('end') || null,
-                        };
-                    }},
-                    { tag: 'lite-youtube', getAttrs: el => ({
-                        videoid: el.getAttribute('videoid') || el.getAttribute('data-videoid') || null,
-                        title: el.getAttribute('data-title') || '',
-                        author: el.getAttribute('data-author') || '',
-                        start: el.getAttribute('start') || null,
-                        end: el.getAttribute('end') || null,
-                    })},
+                            start: el.getAttribute('start') || null,
+                            end: el.getAttribute('end') || null,
+                        }),
+                    },
                     { tag: 'span.ff-lite-youtube' },
                 ];
             },
@@ -2506,30 +2670,44 @@ var EditorModule = (function (Utils, EventBus) {
             group: 'block', atom: true, draggable: true, selectable: true,
             addAttributes() {
                 return {
-                    videoid: { default: null, parseHTML: el => el.getAttribute('videoid') || el.getAttribute('data-videoid') || null, renderHTML: attrs => attrs.videoid ? { videoid: attrs.videoid } : {} },
+                    videoid: {
+                        default: null,
+                        parseHTML: el => el.getAttribute('videoid') || el.getAttribute('data-videoid') || null,
+                        renderHTML: attrs => attrs.videoid ? { videoid: attrs.videoid } : {},
+                    },
                     title:  { default: '' },
                     author: { default: '' },
-                    start: { default: null, parseHTML: el => el.getAttribute('start') || null, renderHTML: attrs => attrs.start ? { start: String(attrs.start) } : {} },
+                    start: {
+                        default: null,
+                        parseHTML: el => el.getAttribute('start') || null,
+                        renderHTML: attrs => attrs.start ? { start: String(attrs.start) } : {},
+                    },
                 };
             },
             parseHTML() {
                 return [
-                    { tag: 'div.lite-embed-wrapper', getAttrs: el => {
-                        const lite = el.querySelector('lite-vimeo');
-                        if (!lite) return false;
-                        return {
-                            videoid: lite.getAttribute('videoid') || el.getAttribute('data-videoid') || null,
+                    {
+                        tag: 'div.lite-embed-wrapper',
+                        getAttrs: el => {
+                            const lite = el.querySelector('lite-vimeo');
+                            if (!lite) return false;
+                            return {
+                                videoid: lite.getAttribute('videoid') || el.getAttribute('data-videoid') || null,
+                                title: el.getAttribute('data-title') || '',
+                                author: el.getAttribute('data-author') || '',
+                                start: el.getAttribute('data-start') || lite.getAttribute('start') || null,
+                            };
+                        },
+                    },
+                    {
+                        tag: 'lite-vimeo',
+                        getAttrs: el => ({
+                            videoid: el.getAttribute('videoid') || el.getAttribute('data-videoid') || null,
                             title: el.getAttribute('data-title') || '',
                             author: el.getAttribute('data-author') || '',
-                            start: el.getAttribute('data-start') || lite.getAttribute('start') || null,
-                        };
-                    }},
-                    { tag: 'lite-vimeo', getAttrs: el => ({
-                        videoid: el.getAttribute('videoid') || el.getAttribute('data-videoid') || null,
-                        title: el.getAttribute('data-title') || '',
-                        author: el.getAttribute('data-author') || '',
-                        start: el.getAttribute('start') || null,
-                    })},
+                            start: el.getAttribute('start') || null,
+                        }),
+                    },
                     { tag: 'span.ff-lite-vimeo' },
                 ];
             },
@@ -2557,6 +2735,7 @@ var EditorModule = (function (Utils, EventBus) {
             },
         });
 
+        // ---- Link preview node ----
         const LinkPreview = Node.create({
             name: 'linkPreview',
             inline: true, group: 'inline', atom: true, draggable: true, selectable: true,
@@ -2570,7 +2749,9 @@ var EditorModule = (function (Utils, EventBus) {
                     loading: { default: false },
                 };
             },
-            parseHTML() { return [{ tag: 'span[data-type="link-preview"]' }]; },
+            parseHTML() {
+                return [{ tag: 'span[data-type="link-preview"]' }];
+            },
             renderHTML({ node, HTMLAttributes }) {
                 var href = node.attrs.href;
                 var title = node.attrs.title;
@@ -2579,8 +2760,11 @@ var EditorModule = (function (Utils, EventBus) {
                 var loading = node.attrs.loading;
 
                 var hostname = '';
-                try { hostname = new URL(href).hostname.replace(/^www\./, ''); }
-                catch (e) { hostname = href.replace(/^https?:\/\//, '').split('/')[0].replace(/^www\./, ''); }
+                try {
+                    hostname = new URL(href).hostname.replace(/^www\./, '');
+                } catch (e) {
+                    hostname = href.replace(/^https?:\/\//, '').split('/')[0].replace(/^www\./, '');
+                }
 
                 if (loading) {
                     return [
@@ -2599,6 +2783,7 @@ var EditorModule = (function (Utils, EventBus) {
                     try { finalImageUrl = new URL(href).origin + imageSrc; }
                     catch (e) { finalImageUrl = imageSrc; }
                 }
+
                 var faviconUrl = 'https://www.google.com/s2/favicons?domain=' + hostname + '&sz=32';
                 var isRich = finalImageUrl && finalImageUrl.trim() !== '';
 
@@ -2656,7 +2841,9 @@ var EditorModule = (function (Utils, EventBus) {
                                 'span',
                                 { class: 'link-preview-text' },
                                 ['span', { class: 'link-preview-title' }, title || href],
-                                node.attrs.author ? ['span', { class: 'link-preview-author' }, node.attrs.author] : '',
+                                node.attrs.author
+                                    ? ['span', { class: 'link-preview-author' }, node.attrs.author]
+                                    : '',
                                 description ? ['span', { class: 'link-preview-description' }, description] : '',
                                 [
                                     'span',
@@ -2686,13 +2873,16 @@ var EditorModule = (function (Utils, EventBus) {
             renderHTML() { return ['span', { class: 'ff-nsfw' }, 0]; }
         });
 
+        // ---- Mention node ----
         const CustomMention = Mention.extend({
             addAttributes() {
                 return {
                     id: {
                         default: null,
                         parseHTML: function (el) { return el.getAttribute('data-uid'); },
-                        renderHTML: function (attrs) { return attrs.id != null ? { 'data-uid': attrs.id } : {}; },
+                        renderHTML: function (attrs) {
+                            return attrs.id != null ? { 'data-uid': attrs.id } : {};
+                        },
                     },
                     label: {
                         default: null,
@@ -2700,7 +2890,9 @@ var EditorModule = (function (Utils, EventBus) {
                             var v = el.getAttribute('data-username') || el.textContent || '';
                             return decodeHtmlEntities(v).replace(/^@/, '');
                         },
-                        renderHTML: function (attrs) { return attrs.label ? { 'data-username': attrs.label } : {}; },
+                        renderHTML: function (attrs) {
+                            return attrs.label ? { 'data-username': attrs.label } : {};
+                        },
                     },
                 };
             },
@@ -2722,7 +2914,9 @@ var EditorModule = (function (Utils, EventBus) {
             },
         }).configure({
             HTMLAttributes: { class: 'user-tag' },
-            renderText: function ({ node }) { return '@' + (node.attrs.label || ''); },
+            renderText: function ({ node }) {
+                return '@' + (node.attrs.label || '');
+            },
             suggestion: {
                 char: '@',
                 allowSpaces: false,
@@ -2739,8 +2933,11 @@ var EditorModule = (function (Utils, EventBus) {
                     var selectedIndex = 0;
                     var itemEls = [];
                     var lastProps = null;
+
                     function updateSelected() {
-                        itemEls.forEach(function (el, i) { el.classList.toggle('is-selected', i === selectedIndex); });
+                        itemEls.forEach(function (el, i) {
+                            el.classList.toggle('is-selected', i === selectedIndex);
+                        });
                     }
                     function makeInitialAvatar(name, userId) {
                         var initial = getInitialFromName(name);
@@ -2776,11 +2973,13 @@ var EditorModule = (function (Utils, EventBus) {
                             el.type = 'button';
                             el.className = 'mention-suggestion-item';
                             el.setAttribute('role', 'option');
+
                             var rawAvatar = (typeof user.avatar === 'string' && user.avatar) ? user.avatar : null;
                             var avatarUrl = (rawAvatar && !shouldUseInitialAvatar(rawAvatar))
                                 ? (optimizeAvatarUrl(rawAvatar, 28, 28) || rawAvatar)
                                 : null;
                             var userName = decodeHtmlEntities(user.name || '');
+
                             if (avatarUrl) {
                                 var img = document.createElement('img');
                                 img.className = 'mention-suggestion-avatar';
@@ -2797,10 +2996,12 @@ var EditorModule = (function (Utils, EventBus) {
                             } else {
                                 el.appendChild(makeInitialAvatar(userName, user.id));
                             }
+
                             var name = document.createElement('span');
                             name.className = 'mention-suggestion-name';
                             name.textContent = userName;
                             el.appendChild(name);
+
                             el.addEventListener('mousedown', function (e) {
                                 e.preventDefault();
                                 props.command({ id: String(user.id), label: userName || String(user.id) });
@@ -2820,7 +3021,10 @@ var EditorModule = (function (Utils, EventBus) {
                         popup.style.left = (rect.left + scrollX) + 'px';
                         popup.style.top = (rect.bottom + scrollY + 4) + 'px';
                     }
-                    function reposition() { if (lastProps && popup) positionPopup(lastProps); }
+                    function reposition() {
+                        if (lastProps && popup) positionPopup(lastProps);
+                    }
+
                     return {
                         onStart: function (props) {
                             lastProps = props;
@@ -2841,14 +3045,30 @@ var EditorModule = (function (Utils, EventBus) {
                         },
                         onKeyDown: function (props) {
                             if (!popup || popup.style.display === 'none' || items.length === 0) return false;
-                            if (props.event.key === 'ArrowDown') { selectedIndex = (selectedIndex + 1) % items.length; updateSelected(); return true; }
-                            if (props.event.key === 'ArrowUp') { selectedIndex = (selectedIndex - 1 + items.length) % items.length; updateSelected(); return true; }
-                            if (props.event.key === 'Enter') {
-                                var user = items[selectedIndex];
-                                if (user) props.command({ id: String(user.id), label: decodeHtmlEntities(user.name || '') || String(user.id) });
+                            if (props.event.key === 'ArrowDown') {
+                                selectedIndex = (selectedIndex + 1) % items.length;
+                                updateSelected();
                                 return true;
                             }
-                            if (props.event.key === 'Escape') { if (popup) { popup.remove(); popup = null; } return true; }
+                            if (props.event.key === 'ArrowUp') {
+                                selectedIndex = (selectedIndex - 1 + items.length) % items.length;
+                                updateSelected();
+                                return true;
+                            }
+                            if (props.event.key === 'Enter') {
+                                var user = items[selectedIndex];
+                                if (user) {
+                                    props.command({
+                                        id: String(user.id),
+                                        label: decodeHtmlEntities(user.name || '') || String(user.id),
+                                    });
+                                }
+                                return true;
+                            }
+                            if (props.event.key === 'Escape') {
+                                if (popup) { popup.remove(); popup = null; }
+                                return true;
+                            }
                             return false;
                         },
                         onExit: function () {
@@ -2880,6 +3100,7 @@ var EditorModule = (function (Utils, EventBus) {
             }
         });
 
+        // ---- Link preview paste plugin ----
         const linkPreviewPlugin = new Plugin({
             key: new PluginKey('linkPreview'),
             props: {
@@ -2890,13 +3111,17 @@ var EditorModule = (function (Utils, EventBus) {
                     var urlRegex = /^(https?:\/\/[^\s]+)$/;
                     if (!urlRegex.test(trimmed)) return false;
                     event.preventDefault();
+
                     var url = trimmed;
                     var state = view.state;
                     var tr = state.tr.replaceWith(
                         state.selection.from, state.selection.to,
-                        state.schema.nodes.linkPreview.create({ href: url, title: '', description: '', imageSrc: '', loading: true })
+                        state.schema.nodes.linkPreview.create({
+                            href: url, title: '', description: '', imageSrc: '', loading: true
+                        })
                     );
                     view.dispatch(tr);
+
                     function replaceSkeletonWithText() {
                         var foundPos = -1;
                         view.state.doc.descendants(function (node, pos) {
@@ -2909,6 +3134,7 @@ var EditorModule = (function (Utils, EventBus) {
                         if (foundPos === -1) return;
                         view.dispatch(view.state.tr.replaceWith(foundPos, foundPos + 1, view.state.schema.text(url)));
                     }
+
                     fetchWithTimeout(OG_WORKER_URL + encodeURIComponent(url), {}, OG_FETCH_TIMEOUT)
                         .then(function (res) { return res.json(); })
                         .then(function (data) {
@@ -2946,6 +3172,27 @@ var EditorModule = (function (Utils, EventBus) {
 
         // =================================================================
         // NormalizeEmptyDoc
+        //
+        // Removes top-level blockquote/spoiler nodes whose visible content
+        // became empty after a delete.
+        //
+        // Why this is wrapped in try/catch: `appendTransaction` is invoked
+        // from inside `EditorState.apply`. If it throws, the whole dispatch
+        // unwinds — the browser's native `beforeinput` handler has already
+        // cleared the selection DOM, but `view.state` never advances, so
+        // the two desync. Catching the throw keeps `apply` alive and lets
+        // the delete transaction land cleanly. `cleanupEmptyContainers`
+        // (invoked from the keydown setTimeout) is the redundant path —
+        // if this plugin somehow can't complete, the setTimeout dispatch
+        // gets a second shot.
+        //
+        // No `setSelection` here: ProseMirror already maps selection
+        // through deletions. Manually re-setting it was the trigger for
+        // a `Cannot read properties of undefined (reading 'eq')` crash
+        // in the view's docView diff.
+        //
+        // Job 3 (multi-block collapse) was removed because Job 1 + Job 2
+        // cover the real-world cases and this branch was the riskiest.
         // =================================================================
         const NormalizeEmptyDoc = Extension.create({
             name: 'normalizeEmptyDoc',
@@ -2976,16 +3223,25 @@ var EditorModule = (function (Utils, EventBus) {
                     appendTransaction(trs, oldState, newState) {
                         try {
                             if (!trs.some(t => t.docChanged)) return null;
+
                             const doc = newState.doc;
+
                             let beforeNonEmpty = 0;
                             oldState.doc.forEach(function (node) {
-                                if (CONTAINER_TYPES.has(node.type.name) && !isEffectivelyEmpty(node)) beforeNonEmpty++;
+                                if (CONTAINER_TYPES.has(node.type.name) && !isEffectivelyEmpty(node)) {
+                                    beforeNonEmpty++;
+                                }
                             });
                             let afterNonEmpty = 0;
                             doc.forEach(function (node) {
-                                if (CONTAINER_TYPES.has(node.type.name) && !isEffectivelyEmpty(node)) afterNonEmpty++;
+                                if (CONTAINER_TYPES.has(node.type.name) && !isEffectivelyEmpty(node)) {
+                                    afterNonEmpty++;
+                                }
                             });
+
+                            // Only fire when a non-empty container just emptied.
                             if (afterNonEmpty >= beforeNonEmpty) return null;
+
                             const tr = newState.tr;
                             const toRemove = [];
                             doc.forEach(function (node, offset) {
@@ -2993,54 +3249,18 @@ var EditorModule = (function (Utils, EventBus) {
                                     toRemove.push({ pos: offset, size: node.nodeSize });
                                 }
                             });
+
                             for (let i = toRemove.length - 1; i >= 0; i--) {
                                 tr.delete(toRemove[i].pos, toRemove[i].pos + toRemove[i].size);
                             }
+
                             if (tr.doc.childCount === 0) {
                                 tr.insert(0, newState.schema.nodes.paragraph.create());
                             }
+
                             return tr;
                         } catch (e) {
                             console.error('[NormalizeEmptyDoc] appendTransaction failed:', e);
-                            return null;
-                        }
-                    }
-                })];
-            }
-        });
-
-        // [FIX] New extension. Ensures every blockquote/spoiler has a plain
-        // paragraph before and after it, at the document boundary. This
-        // gives ProseMirror a valid cursor neighbourhood even after the
-        // user deletes the quote content — the exact scenario that was
-        // crashing deleteSelection.
-        const BlockBoundaryParagraph = Extension.create({
-            name: 'blockBoundaryParagraph',
-            addProseMirrorPlugins() {
-                const CONTAINER_TYPES = new Set(['blockquote', 'spoiler']);
-                return [new Plugin({
-                    key: new PluginKey('blockBoundaryParagraph'),
-                    appendTransaction(trs, oldState, newState) {
-                        try {
-                            if (!trs.some(t => t.docChanged)) return null;
-                            const tr = newState.tr;
-                            let changed = false;
-
-                            const first = tr.doc.firstChild;
-                            if (first && CONTAINER_TYPES.has(first.type.name)) {
-                                tr.insert(0, newState.schema.nodes.paragraph.create());
-                                changed = true;
-                            }
-
-                            const last = tr.doc.lastChild;
-                            if (last && CONTAINER_TYPES.has(last.type.name)) {
-                                tr.insert(tr.doc.content.size, newState.schema.nodes.paragraph.create());
-                                changed = true;
-                            }
-
-                            return changed ? tr : null;
-                        } catch (e) {
-                            console.error('[BlockBoundaryParagraph] appendTransaction failed:', e);
                             return null;
                         }
                     }
@@ -3156,8 +3376,7 @@ var EditorModule = (function (Utils, EventBus) {
         });
 
         // ---- Editor instance ----
-        // [FIX] ensureBoundaryParagraphs now inserts a leading escape paragraph too.
-        var initialHtml = ensureBoundaryParagraphs(opts.initialHtml || '');
+        var initialHtml = ensureTrailingParagraphInHtml(opts.initialHtml || '');
 
         var editor = new Editor({
             element: editorEl,
@@ -3176,8 +3395,7 @@ var EditorModule = (function (Utils, EventBus) {
                 Link.configure({ openOnClick: false, autolink: true, linkOnPaste: true, HTMLAttributes: { target: '_blank', rel: 'noopener noreferrer' } }),
                 LiteYouTube, LiteVimeo, Spoiler, NSFW, LinkPreview, SemanticColor, CustomMention,
                 EmoticonRule,
-                TrailingEmbedParagraph, NormalizeEmptyDoc, BlockBoundaryParagraph,
-                DeleteAdjacentAtom, BlockAtomSelection,
+                TrailingEmbedParagraph, NormalizeEmptyDoc, DeleteAdjacentAtom, BlockAtomSelection,
                 CharacterCount.configure({ limit: MAX_MESSAGE_LENGTH > 0 ? MAX_MESSAGE_LENGTH : null }),
                 Typography
             ],
@@ -3187,7 +3405,11 @@ var EditorModule = (function (Utils, EventBus) {
                 plugins: [linkPreviewPlugin],
                 transformPastedHTML: function (html) {
                     if (!html || typeof html !== 'string') return html;
-                    if (html.indexOf('&nbsp') === -1 && html.indexOf('&#160') === -1 && html.indexOf('\u00a0') === -1) return html;
+                    if (html.indexOf('&nbsp') === -1 &&
+                        html.indexOf('&#160') === -1 &&
+                        html.indexOf('\u00a0') === -1) {
+                        return html;
+                    }
                     return html
                         .replace(/&nbsp;?|&#160;|&#xA0;/gi, ' ')
                         .replace(/\u00a0/g, ' ')
@@ -3199,6 +3421,7 @@ var EditorModule = (function (Utils, EventBus) {
                         var imgs = Array.prototype.slice.call(files).filter(function (f) { return f.type && f.type.indexOf('image/') === 0; });
                         if (imgs.length) { event.preventDefault(); imgs.forEach(function (f) { uploadImageToWorker(f); }); return true; }
                     }
+
                     if (view.state.selection.empty) {
                         var $from = view.state.selection.$from;
                         var codeMarkType = view.state.schema.marks.code;
@@ -3213,10 +3436,12 @@ var EditorModule = (function (Utils, EventBus) {
                             }
                         }
                     }
+
                     if (event.shiftKey) {
                         var t = event.clipboardData.getData('text/plain');
                         if (t) { event.preventDefault(); view.dispatch(view.state.tr.insertText(t)); return true; }
                     }
+
                     if (view.state.selection.empty) {
                         var txt = event.clipboardData ? event.clipboardData.getData('text/plain') : '';
                         if (txt) {
@@ -3239,6 +3464,7 @@ var EditorModule = (function (Utils, EventBus) {
                             }
                         }
                     }
+
                     var clipboard = event.clipboardData;
                     if (clipboard) {
                         var htmlData = clipboard.getData('text/html');
@@ -3247,37 +3473,61 @@ var EditorModule = (function (Utils, EventBus) {
                             var iframeSrc = srcMatch ? srcMatch[1].replace(/&amp;/g, '&') : '';
                             if (iframeSrc) {
                                 var ytFromIframe = parseYouTubeUrl(iframeSrc);
-                                if (ytFromIframe) { event.preventDefault(); insertLiteEmbed('liteYouTube', ytFromIframe.videoid, { start: ytFromIframe.start, end: ytFromIframe.end }); return true; }
+                                if (ytFromIframe) {
+                                    event.preventDefault();
+                                    insertLiteEmbed('liteYouTube', ytFromIframe.videoid, { start: ytFromIframe.start, end: ytFromIframe.end });
+                                    return true;
+                                }
                                 var vmFromIframe = parseVimeoUrl(iframeSrc);
-                                if (vmFromIframe) { event.preventDefault(); insertLiteEmbed('liteVimeo', vmFromIframe.videoid, { start: vmFromIframe.start }); return true; }
+                                if (vmFromIframe) {
+                                    event.preventDefault();
+                                    insertLiteEmbed('liteVimeo', vmFromIframe.videoid, { start: vmFromIframe.start });
+                                    return true;
+                                }
                             }
                         }
+
                         var textData = clipboard.getData('text/plain');
                         if (textData) {
                             var candidate = textData.trim();
                             if (/^https?:\/\/\S+$/.test(candidate)) {
                                 var yt = parseYouTubeUrl(candidate);
-                                if (yt) { event.preventDefault(); insertLiteEmbed('liteYouTube', yt.videoid, { start: yt.start, end: yt.end }); return true; }
+                                if (yt) {
+                                    event.preventDefault();
+                                    insertLiteEmbed('liteYouTube', yt.videoid, { start: yt.start, end: yt.end });
+                                    return true;
+                                }
                                 var vm = parseVimeoUrl(candidate);
-                                if (vm) { event.preventDefault(); insertLiteEmbed('liteVimeo', vm.videoid, { start: vm.start }); return true; }
+                                if (vm) {
+                                    event.preventDefault();
+                                    insertLiteEmbed('liteVimeo', vm.videoid, { start: vm.start });
+                                    return true;
+                                }
                             }
                         }
                     }
+
                     return false;
                 },
                 handleDOMEvents: {
                     keydown: function (view, event) {
+                        // Post-delete safety net. Fires on the next tick so the
+                        // delete transaction has fully landed. try/catch
+                        // is inside cleanupEmptyContainers, so this dispatch
+                        // can't strand view.state.
                         if ((event.key === 'Delete' || event.key === 'Backspace') &&
                             !view.state.selection.empty) {
                             setTimeout(function () {
-                                if (view.dom && view.dom.isConnected) {
-                                    try { cleanupEmptyContainers(view); } catch (e) { console.error(e); }
-                                    try { healViewDesync(); } catch (e) { console.error(e); }
-                                }
-                            }, 50);
+                                if (view.dom && view.dom.isConnected) cleanupEmptyContainers(view);
+                            }, 0);
                         }
+
                         var mod = event.ctrlKey || event.metaKey;
-                        if (mod && event.key === 'Enter') { event.preventDefault(); if (submitBtn && !submitBtn.disabled) submitBtn.click(); return true; }
+                        if (mod && event.key === 'Enter') {
+                            event.preventDefault();
+                            if (submitBtn && !submitBtn.disabled) submitBtn.click();
+                            return true;
+                        }
                         if (mod && !event.shiftKey && (event.key === 'k' || event.key === 'K')) { event.preventDefault(); linkBtn.click(); return true; }
                         if (mod && !event.shiftKey && (event.key === 'e' || event.key === 'E')) { event.preventDefault(); editor.chain().focus().toggleCode().run(); return true; }
                         if (event.ctrlKey && event.shiftKey && (event.key === 's' || event.key === 'S')) { event.preventDefault(); spoilerBtn.click(); return true; }
@@ -3298,13 +3548,18 @@ var EditorModule = (function (Utils, EventBus) {
                     tr.setSelection(TextSelection.near(tr.doc.resolve(tr.doc.content.size - 1)));
                     editor.view.dispatch(tr);
                 })();
+
                 if (opts.mode === 'reply') return;
+
                 if (opts.mode === 'fastedit') {
                     setTimeout(function () {
-                        if (editor && !editor.isDestroyed && !editor.isFocused) editor.commands.focus('end');
+                        if (editor && !editor.isDestroyed && !editor.isFocused) {
+                            editor.commands.focus('end');
+                        }
                     }, 50);
                     return;
                 }
+
                 if (!window.matchMedia('(hover: hover) and (pointer: fine)').matches) return;
                 var a = document.activeElement;
                 if (a && a !== document.body && a !== document.documentElement) return;
@@ -3321,11 +3576,23 @@ var EditorModule = (function (Utils, EventBus) {
 
         editorRef.current = editor;
 
+        // -------------------------------------------------------------------
+        // healViewDesync
+        //
+        // Defensive: if ProseMirror's view is in a state where the DOM has
+        // been emptied but `view.state` still has content, the editor is
+        // unusable (no placeholder, typing goes into invisible structures).
+        // We can't call updateState(view.state) — that's exactly what throws
+        // when the docView is corrupted. setContent re-parses the HTML into
+        // a fresh state, which forces the view to rebuild its docView tree.
+        // If that also fails, log clearly so the user knows to refresh.
+        // -------------------------------------------------------------------
         function healViewDesync() {
             if (!editor || editor.isDestroyed || !editor.view) return;
             var dom = editor.view.dom;
             if (!dom || !dom.isConnected) return;
             if (dom.childElementCount > 0) return;
+
             var stateHasContent = false;
             editor.state.doc.forEach(function (node) {
                 if (node.textContent.trim()) { stateHasContent = true; return; }
@@ -3336,6 +3603,7 @@ var EditorModule = (function (Utils, EventBus) {
                 }
             });
             if (!stateHasContent) return;
+
             console.warn('[EditorModule] View desync detected — DOM empty, state has content. Attempting recovery via setContent.');
             try {
                 editor.commands.setContent(editor.getHTML(), false);
@@ -3383,26 +3651,35 @@ var EditorModule = (function (Utils, EventBus) {
 
         function setupImageToolbar(root, ed) {
             var scrollContainer = root.parentNode;
+
             var toolbarEl = document.createElement('div');
             toolbarEl.className = 'editor-image-toolbar';
             toolbarEl.style.display = 'none';
+
             var nsfwB = document.createElement('button');
             nsfwB.type = 'button'; nsfwB.className = 'editor-image-nsfw-btn';
             nsfwB.innerHTML = '<i class="fa-regular fa-eye-slash" aria-hidden="true"></i>';
             nsfwB.title = 'Mark as NSFW'; nsfwB.setAttribute('aria-label', 'Toggle NSFW');
+
             var editB = document.createElement('button');
             editB.type = 'button'; editB.className = 'editor-image-edit-btn';
             editB.innerHTML = '<i class="fa-regular fa-pen" aria-hidden="true"></i>';
             editB.title = 'Edit image'; editB.setAttribute('aria-label', 'Edit image');
+
             var delB = document.createElement('button');
             delB.type = 'button'; delB.className = 'editor-image-delete-btn';
             delB.innerHTML = '<i class="fa-regular fa-trash-can" aria-hidden="true"></i>';
             delB.title = 'Delete image'; delB.setAttribute('aria-label', 'Delete image');
+
             toolbarEl.appendChild(nsfwB); toolbarEl.appendChild(editB); toolbarEl.appendChild(delB);
+
             scrollContainer.appendChild(toolbarEl);
+
             [nsfwB, editB, delB].forEach(function (b) { b.addEventListener('mousedown', function (e) { e.preventDefault(); }); });
+
             var hovered = null;
             var hideTimer = null;
+
             function isEligible(img) {
                 if (!img) return false;
                 if (img.classList.contains('twemoji')) return false;
@@ -3412,15 +3689,20 @@ var EditorModule = (function (Utils, EventBus) {
                 if (img.closest('.ff-upload-placeholder')) return false;
                 return true;
             }
+
             function position(img) {
                 var r = img.getBoundingClientRect();
                 var rootRect = scrollContainer.getBoundingClientRect();
                 var w = toolbarEl.offsetWidth || 108;
+                var h = toolbarEl.offsetHeight || 32;
+
                 var top = (r.top - rootRect.top) + scrollContainer.scrollTop + 6;
                 var left = (r.right - rootRect.left) + scrollContainer.scrollLeft - w - 8;
+
                 toolbarEl.style.top = Math.max(4, top) + 'px';
                 toolbarEl.style.left = Math.max(4, left) + 'px';
             }
+
             function show(img) {
                 if (hideTimer) { clearTimeout(hideTimer); hideTimer = null; }
                 hovered = img;
@@ -3429,10 +3711,12 @@ var EditorModule = (function (Utils, EventBus) {
                 toolbarEl.style.display = 'flex';
                 position(img);
             }
+
             function hide() {
                 if (hideTimer) clearTimeout(hideTimer);
                 hideTimer = setTimeout(function () { toolbarEl.style.display = 'none'; hovered = null; }, 120);
             }
+
             function resolve(img) {
                 if (!img) return null;
                 var view = ed.view;
@@ -3443,6 +3727,7 @@ var EditorModule = (function (Utils, EventBus) {
                 if ($pos.nodeBefore && $pos.nodeBefore.type.name === 'image') return { node: $pos.nodeBefore, pos: pos - $pos.nodeBefore.nodeSize };
                 return null;
             }
+
             root.addEventListener('mouseover', function (e) {
                 var img = e.target.closest('img');
                 if (isEligible(img)) show(img);
@@ -3464,6 +3749,7 @@ var EditorModule = (function (Utils, EventBus) {
             });
             toolbarEl.addEventListener('mouseenter', function () { if (hideTimer) { clearTimeout(hideTimer); hideTimer = null; } });
             toolbarEl.addEventListener('mouseleave', function () { if (hovered) hide(); });
+
             nsfwB.addEventListener('click', function (e) {
                 e.preventDefault(); e.stopPropagation();
                 if (!hovered) return;
@@ -3487,6 +3773,7 @@ var EditorModule = (function (Utils, EventBus) {
                 ed.view.dispatch(ed.view.state.tr.delete(r.pos, r.pos + r.node.nodeSize));
                 toolbarEl.style.display = 'none'; hovered = null;
             });
+
             ed.on('transaction', function () {
                 if (!hovered) return;
                 if (!document.body.contains(hovered)) { if (hideTimer) clearTimeout(hideTimer); toolbarEl.style.display = 'none'; hovered = null; }
@@ -3520,6 +3807,7 @@ var EditorModule = (function (Utils, EventBus) {
 
         function setupEmoticonAutocomplete(ed, root) {
             var popup = null, items = [], sel = 0, itemEls = [], query = '';
+
             function close() {
                 if (popup) { popup.remove(); popup = null; }
                 items = []; itemEls = []; sel = 0; query = '';
@@ -3624,7 +3912,10 @@ var EditorModule = (function (Utils, EventBus) {
 
         function updateSendState() {
             if (!submitBtn) return;
-            if (submitBtn.hasAttribute('data-saving')) { submitBtn.disabled = true; return; }
+            if (submitBtn.hasAttribute('data-saving')) {
+                submitBtn.disabled = true;
+                return;
+            }
             var empty = editorContentIsEmpty(editor.getHTML());
             var hasPlaceholder = false;
             editor.state.doc.descendants(function (n) {
@@ -3661,7 +3952,10 @@ var EditorModule = (function (Utils, EventBus) {
         if (cancelBtn) {
             cancelBtn.onclick = function (e) {
                 e.preventDefault();
-                if (editorRef.current) { editorRef.current.destroy(); editorRef.current = null; }
+                if (editorRef.current) {
+                    editorRef.current.destroy();
+                    editorRef.current = null;
+                }
                 if (opts.onCancel) opts.onCancel();
             };
         }
@@ -3676,7 +3970,9 @@ var EditorModule = (function (Utils, EventBus) {
             }
         };
         host.__editorDestroy = function () {
-            if (editor) { try { editor.destroy(); } catch (e) {} }
+            if (editor) {
+                try { editor.destroy(); } catch (e) {}
+            }
         };
     }
 
@@ -3701,6 +3997,7 @@ var EditorModule = (function (Utils, EventBus) {
         var icon = 'fa-regular fa-circle-check';
         if (type === 'error') { color = 'var(--danger-color)'; icon = 'fa-regular fa-circle-exclamation'; }
         else if (type === 'warning') { color = 'var(--warning-color)'; icon = 'fa-regular fa-triangle-exclamation'; }
+
         var t = document.createElement('div');
         t.setAttribute('role', 'status');
         t.style.cssText = 'display:flex;align-items:center;gap:var(--space-sm);padding:var(--pad-3) var(--pad-5);background:var(--surface-color);color:var(--text-primary);border:1px solid var(--border-color);border-left-width:3px;border-left-color:' + color + ';border-radius:var(--radius);box-shadow:var(--shadow-lg);font-family:var(--font-primary);font-size:var(--text-sm);max-width:360px;pointer-events:auto;opacity:0;transform:translateY(8px);transition:opacity .2s ease,transform .2s ease;';
@@ -3720,16 +4017,20 @@ var EditorModule = (function (Utils, EventBus) {
         var legacySend = document.querySelector('.fast.send');
         if (!legacySend) return;
         if (document.getElementById('modern-editor-fastreply')) return;
+
         var legacyPost = document.getElementById('Post');
         var legacyForm = window.REPLIER || (legacyPost ? legacyPost.form : null);
         var legacySubmit = document.querySelector('input[name="sub-mit"]');
+
         var legacyHtml = legacyPost ? legacyPost.value : '';
+
         var draftKey = null;
         if (legacyPost) {
             var onkeyup = legacyPost.getAttribute('onkeyup') || '';
             var dm = onkeyup.match(/localStorage\.setItem\(['"]([^'"]+)['"]/);
             if (dm) draftKey = dm[1];
         }
+
         function persistDraft(legacy) {
             if (!draftKey) return;
             try {
@@ -3738,19 +4039,30 @@ var EditorModule = (function (Utils, EventBus) {
                 else localStorage.removeItem(draftKey);
             } catch (e) {}
         }
+
         var container = document.createElement('div');
         container.id = 'modern-editor-fastreply';
         container.className = 'modern-editor-container modern-editor-container--reply';
+
         var insertAfter = document.getElementById('modern-pagination');
         var wrapper = document.getElementById('modern-forum-wrapper');
-        if (insertAfter && insertAfter.parentNode) insertAfter.parentNode.insertBefore(container, insertAfter.nextSibling);
-        else if (wrapper) wrapper.appendChild(container);
-        else document.body.appendChild(container);
+
+        if (insertAfter && insertAfter.parentNode) {
+            insertAfter.parentNode.insertBefore(container, insertAfter.nextSibling);
+        } else if (wrapper) {
+            wrapper.appendChild(container);
+        } else {
+            document.body.appendChild(container);
+        }
+
         var anchorEl = document.getElementById('fastreply');
         if (anchorEl) {
-            var anchorNode = (anchorEl.parentElement && anchorEl.parentElement.classList.contains('anchor')) ? anchorEl.parentElement : anchorEl;
+            var anchorNode = (anchorEl.parentElement && anchorEl.parentElement.classList.contains('anchor'))
+                ? anchorEl.parentElement
+                : anchorEl;
             container.parentNode.insertBefore(anchorNode, container);
         }
+
         try {
             await buildEditorInto(container, {
                 mode: 'reply',
@@ -3771,12 +4083,18 @@ var EditorModule = (function (Utils, EventBus) {
                     if (legacyForm && legacyForm instanceof HTMLFormElement) {
                         try { HTMLFormElement.prototype.submit.call(legacyForm); }
                         catch (e) { legacyForm.submit(); }
-                    } else if (legacySubmit) { legacySubmit.click(); }
+                    } else if (legacySubmit) {
+                        legacySubmit.click();
+                    }
                 }
             });
+
             if (window.location.hash === '#fastreply') {
-                setTimeout(function () { container.scrollIntoView({ behavior: 'smooth', block: 'start' }); }, 100);
+                setTimeout(function () {
+                    container.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                }, 100);
             }
+
             console.log('[EditorModule] Fast reply editor built');
         } catch (err) {
             console.error('[EditorModule] Fast reply build failed:', err);
@@ -3791,22 +4109,33 @@ var EditorModule = (function (Utils, EventBus) {
         var legacySend = document.querySelector('.send');
         if (!legacySend) return;
         if (document.getElementById('modern-editor-full')) return;
+
         var legacyPost = document.getElementById('Post');
         var legacyForm = window.REPLIER || (legacyPost ? legacyPost.form : null);
         var legacySubmit = document.querySelector('input[name="submit_post"]');
+
         var legacyHtml = legacyPost ? legacyPost.value : '';
+
         var container = document.createElement('div');
         container.id = 'modern-editor-full';
         container.className = 'modern-editor-container modern-editor-container--full';
+
         var summary = document.getElementById('modern-summary-container');
         var wrapper = document.getElementById('modern-forum-wrapper');
-        if (summary && summary.parentNode) summary.parentNode.insertBefore(container, summary);
-        else if (wrapper) wrapper.appendChild(container);
-        else document.body.appendChild(container);
+
+        if (summary && summary.parentNode) {
+            summary.parentNode.insertBefore(container, summary);
+        } else if (wrapper) {
+            wrapper.appendChild(container);
+        } else {
+            document.body.appendChild(container);
+        }
+
         var sig = document.getElementById('enablesig');
         var trk = document.getElementById('track_topic');
         if (sig) sig.checked = true;
         if (trk) trk.checked = true;
+
         try {
             await buildEditorInto(container, {
                 mode: 'full',
@@ -3824,7 +4153,9 @@ var EditorModule = (function (Utils, EventBus) {
                     if (legacyForm && legacyForm instanceof HTMLFormElement) {
                         try { HTMLFormElement.prototype.submit.call(legacyForm); }
                         catch (e) { legacyForm.submit(); }
-                    } else if (legacySubmit) { legacySubmit.click(); }
+                    } else if (legacySubmit) {
+                        legacySubmit.click();
+                    }
                 }
             });
             console.log('[EditorModule] Full editor built');
@@ -3843,20 +4174,31 @@ var EditorModule = (function (Utils, EventBus) {
                scope.querySelector('td.Item table.color') ||
                scope.querySelector('.color');
     }
+
     function findEditLink(postEl) {
         if (!postEl) return null;
         return postEl.querySelector('.mini_buttons > a[href*="act=Post&CODE=08"]') ||
                postEl.querySelector('a[href*="act=Post&CODE=08"]');
     }
+
     function cleanupFastEditEntry(entry) {
         if (!entry) return;
-        if (entry.contentArea) { entry.contentArea.style.display = ''; entry.contentArea = null; }
+
+        if (entry.contentArea) {
+            entry.contentArea.style.display = '';
+            entry.contentArea = null;
+        }
+
         var container = entry.container;
         if (container && container.parentNode) {
-            if (typeof container.__editorDestroy === 'function') { try { container.__editorDestroy(); } catch (e) {} }
-            else if (container.__editorInstance && !container.__editorInstance.isDestroyed) { try { container.__editorInstance.destroy(); } catch (e) {} }
+            if (typeof container.__editorDestroy === 'function') {
+                try { container.__editorDestroy(); } catch (e) {}
+            } else if (container.__editorInstance && !container.__editorInstance.isDestroyed) {
+                try { container.__editorInstance.destroy(); } catch (e) {}
+            }
             container.remove();
         }
+
         if (entry.modernCard) {
             entry.modernCard.classList.remove('is-being-edited');
             entry.modernCard.classList.remove('is-fast-editing');
@@ -3865,15 +4207,25 @@ var EditorModule = (function (Utils, EventBus) {
             entry.legacyPost.classList.remove('is-being-edited');
         }
     }
+
     async function startFastEdit(postEl) {
         if (!postEl) return;
+
         var existing = _activeFastEdits.get(postEl);
-        if (existing) { if (existing.state === 'active') focusFastEdit(postEl); return; }
+        if (existing) {
+            if (existing.state === 'active') focusFastEdit(postEl);
+            return;
+        }
+
         var postId = (postEl.id || '').replace(/^ee/, '');
         if (!postId) return;
+
         var others = [];
-        _activeFastEdits.forEach(function (_entry, pe) { if (pe !== postEl) others.push(pe); });
+        _activeFastEdits.forEach(function (_entry, pe) {
+            if (pe !== postEl) others.push(pe);
+        });
         others.forEach(function (pe) { cancelFastEdit(pe); });
+
         var entry = {
             state: 'pending',
             controller: new AbortController(),
@@ -3884,13 +4236,25 @@ var EditorModule = (function (Utils, EventBus) {
             pageCharset: null
         };
         _activeFastEdits.set(postEl, entry);
-        function isStillPending() { return entry.state === 'pending' && _activeFastEdits.get(postEl) === entry; }
+
+        function isStillPending() {
+            return entry.state === 'pending' && _activeFastEdits.get(postEl) === entry;
+        }
+
         var editLink = findEditLink(postEl);
-        if (!editLink) { _activeFastEdits.delete(postEl); showToast('Edit link not found on this post', 'error'); return; }
+        if (!editLink) {
+            _activeFastEdits.delete(postEl);
+            showToast('Edit link not found on this post', 'error');
+            return;
+        }
+
         var html;
         var pageCharset = 'utf-8';
         try {
-            var decoded = await fetchHtmlDecoded(editLink.href, { credentials: 'include', signal: entry.controller.signal });
+            var decoded = await fetchHtmlDecoded(editLink.href, {
+                credentials: 'include',
+                signal: entry.controller.signal
+            });
             html = decoded.text;
             pageCharset = decoded.charset;
         } catch (err) {
@@ -3901,24 +4265,44 @@ var EditorModule = (function (Utils, EventBus) {
             return;
         }
         entry.pageCharset = pageCharset;
+
         if (!isStillPending()) return;
+
         var doc = new DOMParser().parseFromString(html, 'text/html');
         var form = doc.querySelector('form[name="REPLIER"]');
         var postArea = form && form.querySelector('#Post');
-        if (!form || !postArea) { _activeFastEdits.delete(postEl); showToast('Session expired — please log in again', 'error'); return; }
+        if (!form || !postArea) {
+            _activeFastEdits.delete(postEl);
+            showToast('Session expired — please log in again', 'error');
+            return;
+        }
+
         var bbcode = postArea.value || '';
         var hidden = {};
-        form.querySelectorAll('input[type="hidden"]').forEach(function (i) { if (i.name) hidden[i.name] = i.value; });
+        form.querySelectorAll('input[type="hidden"]').forEach(function (i) {
+            if (i.name) hidden[i.name] = i.value;
+        });
+
         var initialHtml = '';
         if (bbcode.trim()) {
-            try { initialHtml = await legacyToHtmlAsync(bbcode); }
-            catch (e) { console.warn('[EditorModule] legacyToHtmlAsync failed:', e); initialHtml = ''; }
+            try {
+                initialHtml = await legacyToHtmlAsync(bbcode);
+            } catch (e) {
+                console.warn('[EditorModule] legacyToHtmlAsync failed:', e);
+                initialHtml = '';
+            }
         }
+
         if (!isStillPending()) return;
-        entry.modernCard = document.querySelector('.post-card[data-original-id="' + postEl.id + '"]');
+
+        entry.modernCard = document.querySelector(
+            '.post-card[data-original-id="' + postEl.id + '"]'
+        );
+
         var container = document.createElement('div');
         container.className = 'modern-editor-container modern-editor-container--fastedit';
         entry.container = container;
+
         if (entry.modernCard && entry.modernCard.parentNode) {
             var contentArea = entry.modernCard.querySelector('.post-content');
             if (contentArea) {
@@ -3935,6 +4319,7 @@ var EditorModule = (function (Utils, EventBus) {
             postEl.classList.add('is-being-edited');
             postEl.parentNode.insertBefore(container, postEl.nextSibling);
         }
+
         try {
             await buildEditorInto(container, {
                 mode: 'fastedit',
@@ -3942,10 +4327,14 @@ var EditorModule = (function (Utils, EventBus) {
                 placeholder: 'Edit your post…',
                 hideHeader: true,
                 submitLabel: 'Save changes',
-                onCancel: function () { _activeFastEdits.delete(postEl); cleanupFastEditEntry(entry); },
+                onCancel: function () {
+                    _activeFastEdits.delete(postEl);
+                    cleanupFastEditEntry(entry);
+                },
                 onSubmit: async function () {
                     var editorInst = container.__editorInstance;
                     if (!editorInst) return;
+
                     var submitBtn = container.querySelector('.modern-editor-submit-btn');
                     var origLabel = submitBtn ? submitBtn.innerHTML : '';
                     if (submitBtn) {
@@ -3953,13 +4342,18 @@ var EditorModule = (function (Utils, EventBus) {
                         submitBtn.disabled = true;
                         submitBtn.innerHTML = '<i class="fa-regular fa-spinner fa-spin"></i> Saving…';
                     }
+
                     var newBbcode = htmlToLegacy(editorInst.getHTML());
+
                     var body = new URLSearchParams();
-                    Object.keys(hidden).forEach(function (k) { body.set(k, hidden[k]); });
+                    Object.keys(hidden).forEach(function (k) {
+                        body.set(k, hidden[k]);
+                    });
                     body.set('act', 'Post');
                     body.set('CODE', '09');
                     body.set('Post', newBbcode);
                     body.set('enablesig', '1');
+
                     var saveText;
                     try {
                         var saveCharset = entry.pageCharset || 'utf-8';
@@ -3973,20 +4367,32 @@ var EditorModule = (function (Utils, EventBus) {
                         var saveBuf = await saveResp.arrayBuffer();
                         saveText = decodeHtmlBuffer(saveBuf, saveResp.headers.get('content-type') || '').text;
                     } catch (err) {
-                        if (submitBtn) { submitBtn.removeAttribute('data-saving'); submitBtn.disabled = false; submitBtn.innerHTML = origLabel; }
+                        if (submitBtn) {
+                            submitBtn.removeAttribute('data-saving');
+                            submitBtn.disabled = false;
+                            submitBtn.innerHTML = origLabel;
+                        }
                         showToast('Save failed — network error', 'error');
                         return;
                     }
+
                     var saveDoc = new DOMParser().parseFromString(saveText, 'text/html');
                     var responsePost = saveDoc.getElementById(postEl.id);
                     var newColor = findPostContent(responsePost);
                     var liveColor = findPostContent(postEl);
+
                     if (!newColor || !liveColor) {
-                        if (submitBtn) { submitBtn.removeAttribute('data-saving'); submitBtn.disabled = false; submitBtn.innerHTML = origLabel; }
+                        if (submitBtn) {
+                            submitBtn.removeAttribute('data-saving');
+                            submitBtn.disabled = false;
+                            submitBtn.innerHTML = origLabel;
+                        }
                         showToast('Save failed — please try again', 'error');
                         return;
                     }
+
                     liveColor.innerHTML = newColor.innerHTML;
+
                     _activeFastEdits.delete(postEl);
                     cleanupFastEditEntry(entry);
                     showToast('Post updated', 'success');
@@ -4000,35 +4406,54 @@ var EditorModule = (function (Utils, EventBus) {
             showToast('Failed to load editor', 'error');
             return;
         }
-        if (!isStillPending()) { cleanupFastEditEntry(entry); _activeFastEdits.delete(postEl); return; }
+
+        if (!isStillPending()) {
+            cleanupFastEditEntry(entry);
+            _activeFastEdits.delete(postEl);
+            return;
+        }
+
         entry.state = 'active';
     }
+
     function cancelFastEdit(postEl) {
         var entry = _activeFastEdits.get(postEl);
         if (!entry) return false;
-        if (entry.controller) { try { entry.controller.abort(); } catch (e) {} }
+        if (entry.controller) {
+            try { entry.controller.abort(); } catch (e) {}
+        }
         cleanupFastEditEntry(entry);
         _activeFastEdits.delete(postEl);
         return true;
     }
+
     function isFastEditActive(postEl) {
         var entry = _activeFastEdits.get(postEl);
         return !!(entry && entry.state === 'active');
     }
+
     function focusFastEdit(postEl) {
         var entry = _activeFastEdits.get(postEl);
         if (!entry || entry.state !== 'active') return false;
         var container = entry.container;
         if (!container || !container.__editorInstance) return false;
-        try { container.__editorInstance.commands.focus('end'); return true; } catch (e) { return false; }
+        try {
+            container.__editorInstance.commands.focus('end');
+            return true;
+        } catch (e) {
+            return false;
+        }
     }
+
     function triggerPostReconversion() {
         if (typeof window.ForumPostsModule === 'undefined') return;
         try {
             window.ForumPostsModule.reset();
             window.ForumPostsModule.initialize();
             console.log('[EditorModule] Post re-conversion triggered');
-        } catch (e) { console.warn('[EditorModule] Post re-conversion failed:', e); }
+        } catch (e) {
+            console.warn('[EditorModule] Post re-conversion failed:', e);
+        }
     }
 
     // ========================================================================
@@ -4037,42 +4462,86 @@ var EditorModule = (function (Utils, EventBus) {
     function startQuote(postEl) {
         _quoteQueue = _quoteQueue
             .then(function () { return doStartQuote(postEl); })
-            .catch(function (err) { console.warn('[EditorModule] Quote queue error:', err); });
+            .catch(function (err) {
+                console.warn('[EditorModule] Quote queue error:', err);
+            });
         return _quoteQueue;
     }
+
     async function doStartQuote(postEl) {
         if (!postEl) return;
-        var quoteLink = postEl.querySelector('.mini_buttons a[href*="CODE=02"]') || postEl.querySelector('a[href*="CODE=02"]');
-        if (!quoteLink) { showToast('Quote link not found on this post', 'error'); return; }
+
+        var quoteLink =
+            postEl.querySelector('.mini_buttons a[href*="CODE=02"]') ||
+            postEl.querySelector('a[href*="CODE=02"]');
+
+        if (!quoteLink) {
+            showToast('Quote link not found on this post', 'error');
+            return;
+        }
+
         var fastReplyHost = document.getElementById('modern-editor-fastreply');
         if (!fastReplyHost || !fastReplyHost.__editorInstance) {
             console.info('[EditorModule] Quote: falling back to full editor (no fast reply editor present)');
             window.location.href = quoteLink.href;
             return;
         }
+
         var bbcode;
         try {
-            var decoded = await fetchHtmlDecoded(quoteLink.href, { credentials: 'include' });
+            var decoded = await fetchHtmlDecoded(quoteLink.href, {
+                credentials: 'include'
+            });
             var doc = new DOMParser().parseFromString(decoded.text, 'text/html');
             var form = doc.querySelector('form[name="REPLIER"]');
             var postArea = form && form.querySelector('#Post');
             bbcode = postArea ? postArea.value : '';
-        } catch (err) { console.warn('[EditorModule] Quote fetch failed:', err); showToast('Could not load the quote', 'error'); return; }
-        if (!bbcode || !bbcode.trim()) { showToast('Quote came back empty', 'warning'); return; }
+        } catch (err) {
+            console.warn('[EditorModule] Quote fetch failed:', err);
+            showToast('Could not load the quote', 'error');
+            return;
+        }
+
+        if (!bbcode || !bbcode.trim()) {
+            showToast('Quote came back empty', 'warning');
+            return;
+        }
+
         var html;
-        try { html = await legacyToHtmlAsync(bbcode); }
-        catch (err) { console.warn('[EditorModule] Quote conversion failed:', err); showToast('Could not convert the quote', 'error'); return; }
+        try {
+            html = await legacyToHtmlAsync(bbcode);
+        } catch (err) {
+            console.warn('[EditorModule] Quote conversion failed:', err);
+            showToast('Could not convert the quote', 'error');
+            return;
+        }
+
         var editorInst = fastReplyHost.__editorInstance;
-        try { editorInst.chain().focus('end').insertContent(html).run(); }
-        catch (err) { console.warn('[EditorModule] Quote insert failed:', err); showToast('Could not insert the quote', 'error'); return; }
+        try {
+            editorInst.chain().focus('end').insertContent(html).run();
+        } catch (err) {
+            console.warn('[EditorModule] Quote insert failed:', err);
+            showToast('Could not insert the quote', 'error');
+            return;
+        }
+
         var docAfter = editorInst.state.doc;
         var endPos = docAfter.content.size;
         var lastBlock = docAfter.lastChild;
+
         if (lastBlock && lastBlock.type.name === 'blockquote') {
-            editorInst.chain().insertContentAt(endPos, { type: 'paragraph' }).setTextSelection(endPos + 1).focus().run();
+            editorInst.chain()
+                .insertContentAt(endPos, { type: 'paragraph' })
+                .setTextSelection(endPos + 1)
+                .focus()
+                .run();
         } else if (lastBlock && lastBlock.type.name === 'paragraph') {
-            editorInst.chain().setTextSelection(endPos - 1).focus().run();
+            editorInst.chain()
+                .setTextSelection(endPos - 1)
+                .focus()
+                .run();
         }
+
         fastReplyHost.scrollIntoView({ behavior: 'smooth', block: 'start' });
         showToast('Quote added', 'success');
     }
@@ -4082,6 +4551,7 @@ var EditorModule = (function (Utils, EventBus) {
     // ========================================================================
     function registerObservers() {
         if (!globalThis.forumObserver || typeof globalThis.forumObserver.register !== 'function') return;
+
         try {
             var id = globalThis.forumObserver.register({
                 id: 'editor-module-fastreply',
@@ -4092,6 +4562,7 @@ var EditorModule = (function (Utils, EventBus) {
             });
             if (id) _observerIds.push(id);
         } catch (e) { console.error('[EditorModule] observer (fastreply) failed:', e); }
+
         try {
             var id2 = globalThis.forumObserver.register({
                 id: 'editor-module-full',
@@ -4114,9 +4585,11 @@ var EditorModule = (function (Utils, EventBus) {
             return Promise.reject(new Error('forumObserver missing'));
         }
         isInitialized = true;
+
         if (document.body.id === 'topic' || document.body.id === 'send') {
             fetchCurrentUserData();
         }
+
         var promises = [];
         if (document.body.id === 'topic' && document.querySelector('.fast.send')) {
             promises.push(buildFastReplyEditor());
@@ -4124,7 +4597,9 @@ var EditorModule = (function (Utils, EventBus) {
         if (document.body.id === 'send' && document.querySelector('.send')) {
             promises.push(buildFullEditor());
         }
+
         registerObservers();
+
         return Promise.all(promises).then(function () {
             console.log('[EditorModule] Initialized');
         }).catch(function (err) {
@@ -4135,7 +4610,9 @@ var EditorModule = (function (Utils, EventBus) {
     function reset() {
         isInitialized = false;
         _activeFastEdits.forEach(function (entry) {
-            if (entry && entry.controller) { try { entry.controller.abort(); } catch (e) {} }
+            if (entry && entry.controller) {
+                try { entry.controller.abort(); } catch (e) {}
+            }
             cleanupFastEditEntry(entry);
         });
         _activeFastEdits.clear();
