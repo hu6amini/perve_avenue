@@ -2958,7 +2958,7 @@ var EditorModule = (function (Utils, EventBus) {
         });
 
         const NSFW = Mark.create({
-    name: 'nsfw', inclusive: false,
+    name: 'nsfw', inclusive: true,
     parseHTML() { return [{ tag: 'span', getAttrs: el => el.classList.contains('ff-nsfw') ? {} : false }]; },
     renderHTML() { return ['span', { class: 'ff-nsfw' }, 0]; },
     addCommands() {
