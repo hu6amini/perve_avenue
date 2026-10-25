@@ -846,19 +846,33 @@ var EditorModule = (function (Utils, EventBus) {
         html = html.replace(/\[url=([^\]]+)\](.*?)\[\/url\]/gi, '<a href="$1" target="_blank">$2</a>');
         html = html.replace(/\[img\](.*?)\[\/img\]/gi, '<img src="$1" alt="image" loading="lazy" decoding="async">');
 
-        html = html.replace(/\[QUOTE(?:=([^\]]+))?\]([\s\S]*?)\[\/QUOTE\]/gi, function(match, params, body) {
-            var author = '';
-            if (params) {
-                var parts = params.split(',');
-                if (parts.length > 0 && parts[0].trim()) {
-                    author = parts[0].trim();
-                }
-            }
-            if (author) {
-                return '<blockquote data-author="' + escapeHtml(author) + '">' + body + '</blockquote>';
-            }
-            return '<blockquote>' + body + '</blockquote>';
-        });
+        html = html.replace(/\[QUOTE(?:=([^\]]+))?\]([\s\S]*?)\[\/QUOTE\]/gi, function (match, params, body) {
+    var author = '';
+    var timestamp = '';
+    var url = '';
+
+    if (params) {
+        // Format: Author,Date,URL. Query strings can contain commas,
+        // so everything after the second comma is URL.
+        var parts = params.split(',');
+        if (parts.length >= 1) author = parts[0].trim();
+        if (parts.length >= 2) timestamp = parts[1].trim();
+        if (parts.length >= 3) {
+            url = parts.slice(2).join(',').trim();
+            // Legacy URLs are bare query strings (?t=…&st=…#entry…).
+            // Normalize to a same-origin path.
+            if (url && url.charAt(0) === '?') url = '/' + url;
+            else if (url && url.charAt(0) === '#') url = url;    // fragment-only is fine
+        }
+    }
+
+    var attrs = '';
+    if (author)    attrs += ' data-author="' + escapeHtml(author) + '"';
+    if (timestamp) attrs += ' data-timestamp="' + escapeHtml(timestamp) + '"';
+    if (url)       attrs += ' data-url="' + escapeHtml(url) + '"';
+
+    return '<blockquote' + attrs + '>' + body + '</blockquote>';
+});
         html = html.replace(/\[code\](.*?)\[\/code\]/gis, '<pre><code>$1</code></pre>');
         html = html.replace(/\[spoiler\](.*?)\[\/spoiler\]/gis, '<div class="spoiler">$1</div>');
         html = html.replace(/\[CENTER\](.*?)\[\/CENTER\]/gis, '<div style="text-align:center">$1</div>');
@@ -1000,17 +1014,21 @@ var EditorModule = (function (Utils, EventBus) {
                 }
             );
 
-            result = result.replace(/<blockquote([^>]*)>([\s\S]*?)<\/blockquote>/gi, function(match, attrs, inner) {
-                inner = inner.replace(/<p class="quote-author-header">[\s\S]*?<\/p>/gi, '');
-                var cleaned = inner.replace(/<p[^>]*>/gi, '').replace(/<\/p>\s*/gi, '\n\n');
-                cleaned = cleaned.replace(/\n+$/, '');
-                var authorMatch = attrs.match(/data-author="([^"]*)"/);
-                if (authorMatch) {
-                    var author = decodeHtmlEntities(authorMatch[1]);
-                    return '[QUOTE=' + author + ']' + cleaned + '[/QUOTE]';
-                }
-                return '[QUOTE]' + cleaned + '[/QUOTE]';
-            });
+            result = result.replace(/<blockquote([^>]*)>([\s\S]*?)<\/blockquote>/gi, function (match, attrs, inner) {
+    inner = inner.replace(/<p class="quote-author-header">[\s\S]*?<\/p>/gi, '');
+    var cleaned = inner.replace(/<p[^>]*>/gi, '').replace(/<\/p>\s*/gi, '\n\n').replace(/\n+$/, '');
+    var authorMatch = attrs.match(/data-author="([^"]*)"/);
+    var tsMatch     = attrs.match(/data-timestamp="([^"]*)"/);
+    var urlMatch    = attrs.match(/data-url="([^"]*)"/);
+
+    if (authorMatch) {
+        var pieces = [decodeHtmlEntities(authorMatch[1])];
+        if (tsMatch)  pieces.push(decodeHtmlEntities(tsMatch[1]));
+        if (urlMatch) pieces.push(decodeHtmlEntities(urlMatch[1]));
+        return '[QUOTE=' + pieces.join(',') + ']' + cleaned + '[/QUOTE]';
+    }
+    return '[QUOTE]' + cleaned + '[/QUOTE]';
+});
 
             result = result.replace(/<div\b([^>]*\bclass="[^"]*\bspoiler\b[^"]*"[^>]*)>([\s\S]*?)<\/div>/gi, function (_, attrs, inner) {
                 var cleaned = inner.replace(/<p[^>]*>/gi, '').replace(/<\/p>\s*/gi, '\n\n').replace(/\n+$/, '');
@@ -2283,16 +2301,26 @@ var EditorModule = (function (Utils, EventBus) {
         blockquoteBtn.onclick = function () { exec(function () { editorRef.current.chain().focus().toggleBlockquote().run(); }); };
 
         const CustomBlockquote = Blockquote.extend({
-            addAttributes() {
-                return {
-                    author: {
-                        default: null,
-                        parseHTML: el => el.getAttribute('data-author') || null,
-                        renderHTML: attrs => attrs.author ? { 'data-author': attrs.author } : {},
-                    },
-                };
+    addAttributes() {
+        return {
+            author: {
+                default: null,
+                parseHTML: el => el.getAttribute('data-author') || null,
+                renderHTML: a => a.author ? { 'data-author': a.author } : {},
             },
-        });
+            timestamp: {
+                default: null,
+                parseHTML: el => el.getAttribute('data-timestamp') || null,
+                renderHTML: a => a.timestamp ? { 'data-timestamp': a.timestamp } : {},
+            },
+            url: {
+                default: null,
+                parseHTML: el => el.getAttribute('data-url') || null,
+                renderHTML: a => a.url ? { 'data-url': a.url } : {},
+            },
+        };
+    },
+});
 
         const ImageUploadPlaceholder = Node.create({
             name: 'imageUploadPlaceholder',
@@ -4482,6 +4510,91 @@ var EditorModule = (function (Utils, EventBus) {
         showToast('Quote added', 'success');
     }
 
+   function startQuoteBatch(postEls) {
+    _quoteQueue = _quoteQueue
+        .then(function () { return doStartQuoteBatch(postEls); })
+        .catch(function (err) { console.warn('[EditorModule] Batch quote error:', err); });
+    return _quoteQueue;
+}
+
+async function doStartQuoteBatch(postEls) {
+    if (!postEls || postEls.length === 0) return;
+
+    var fastReplyHost = document.getElementById('modern-editor-fastreply');
+    if (!fastReplyHost || !fastReplyHost.__editorInstance) {
+        console.info('[EditorModule] Batch quote: no fast reply editor');
+        return;
+    }
+
+    // Fetch every quote in parallel. Each fetch returns the BBCode
+    // payload the legacy forum would have inserted into the reply
+    // textarea.
+    var fetches = postEls.map(function (postEl) {
+        var quoteLink =
+            postEl.querySelector('.mini_buttons a[href*="CODE=02"]') ||
+            postEl.querySelector('a[href*="CODE=02"]');
+        if (!quoteLink) return Promise.resolve(null);
+        return fetchHtmlDecoded(quoteLink.href, { credentials: 'include' })
+            .then(function (decoded) {
+                var doc = new DOMParser().parseFromString(decoded.text, 'text/html');
+                var form = doc.querySelector('form[name="REPLIER"]');
+                var postArea = form && form.querySelector('#Post');
+                return postArea ? postArea.value : null;
+            })
+            .catch(function () { return null; });
+    });
+
+    var bbcodeBlocks = (await Promise.all(fetches)).filter(function (b) {
+        return b && b.trim();
+    });
+    if (bbcodeBlocks.length === 0) return;
+
+    // Convert each to HTML through the existing pipeline.
+    var htmlBlocks = [];
+    for (var i = 0; i < bbcodeBlocks.length; i++) {
+        try {
+            htmlBlocks.push(await legacyToHtmlAsync(bbcodeBlocks[i]));
+        } catch (e) {
+            console.warn('[EditorModule] Quote conversion failed:', e);
+        }
+    }
+    if (htmlBlocks.length === 0) return;
+
+    // Insert everything in one transaction. Empty <p> between quotes
+    // gives the user a caret slot between blocks. TrailingEmbedParagraph
+    // and CustomBlockquote already handle the block boundaries.
+    var editorInst = fastReplyHost.__editorInstance;
+    var combined = htmlBlocks.join('<p></p>');
+    editorInst.chain().focus('end').insertContent(combined).run();
+
+    // Ensure a trailing paragraph so the user can type after the last
+    // quote without selecting the blockquote first.
+    var doc = editorInst.state.doc;
+    var last = doc.lastChild;
+    if (last && (last.type.name === 'blockquote' || last.type.name === 'paragraph')) {
+        var endPos = doc.content.size;
+        if (last.type.name === 'blockquote') {
+            editorInst.chain()
+                .insertContentAt(endPos, { type: 'paragraph' })
+                .setTextSelection(endPos + 1)
+                .focus()
+                .run();
+        } else if (last.content.size === 0) {
+            editorInst.chain()
+                .setTextSelection(endPos - 1)
+                .focus()
+                .run();
+        }
+    }
+
+    // One scroll at the end — not N scrolls during the loop.
+    fastReplyHost.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    showToast(
+        htmlBlocks.length + ' ' + (htmlBlocks.length === 1 ? 'quote' : 'quotes') + ' inserted',
+        'success'
+    );
+}
+
     function registerObservers() {
         if (!globalThis.forumObserver || typeof globalThis.forumObserver.register !== 'function') return;
 
@@ -4570,7 +4683,8 @@ var EditorModule = (function (Utils, EventBus) {
         cancelFastEdit: cancelFastEdit,
         isFastEditActive: isFastEditActive,
         focusFastEdit: focusFastEdit,
-        startQuote: startQuote
+        startQuote: startQuote,
+        startQuoteBatch: startQuoteBatch
     };
 })(
     typeof ForumDOMUtils !== 'undefined' ? ForumDOMUtils : window.ForumDOMUtils,
