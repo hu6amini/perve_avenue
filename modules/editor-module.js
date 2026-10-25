@@ -3961,23 +3961,34 @@ var EditorModule = (function (Utils, EventBus) {
         }
 
         function updateSendState() {
-            if (!submitBtn) return;
-            if (submitBtn.hasAttribute('data-saving')) {
-                submitBtn.disabled = true;
-                return;
-            }
-            var empty = editorContentIsEmpty(editor.getHTML());
-            var hasPlaceholder = false;
-            editor.state.doc.descendants(function (n) {
-                if (n.type.name === 'imageUploadPlaceholder') { hasPlaceholder = true; return false; }
-                return true;
-            });
-            var ready = !empty && !hasPlaceholder;
-            submitBtn.disabled = !ready;
-            submitBtn.setAttribute('aria-disabled', String(!ready));
-            if (ready) submitBtn.removeAttribute('title');
-            else submitBtn.setAttribute('title', hasPlaceholder ? 'Finish or remove the image placeholder' : 'Write something before submitting');
-        }
+    if (!submitBtn) return;
+    if (submitBtn.hasAttribute('data-saving')) {
+        submitBtn.disabled = true;
+        return;
+    }
+    var empty = editorContentIsEmpty(editor.getHTML());
+    var hasPlaceholder = false;
+    editor.state.doc.descendants(function (n) {
+        if (n.type.name === 'imageUploadPlaceholder') { hasPlaceholder = true; return false; }
+        return true;
+    });
+    var ready = !empty && !hasPlaceholder;
+    submitBtn.disabled = !ready;
+    submitBtn.setAttribute('aria-disabled', String(!ready));
+    if (ready) submitBtn.removeAttribute('title');
+    else submitBtn.setAttribute('title', hasPlaceholder ? 'Finish or remove the image placeholder' : 'Write something before submitting');
+
+    // Auto-hide the preview when the editor becomes empty — matches the
+    // messenger's behavior. Without this, a preview rendered from content
+    // that was subsequently deleted stays visible, showing text that no
+    // longer exists in the editor. Runs synchronously from onUpdate, so
+    // it fires on the keystroke that empties the editor, before
+    // scheduleLivePreviewRefresh's debounced timer would repaint stale
+    // content back into view.
+    if (empty && previewArea && previewArea.style.display !== 'none') {
+        previewArea.style.display = 'none';
+    }
+}
 
         previewBtn.onclick = function () {
             if (!editorRef.current || editorContentIsEmpty(editorRef.current.getHTML())) return;
