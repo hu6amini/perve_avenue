@@ -3471,8 +3471,26 @@ var EditorModule = (function (Utils, EventBus) {
                 scheduleEditorRebuild();
             }
         };
+
         var _origViewDispatch = editor.view.dispatch.bind(editor.view);
         editor.view.dispatch = function (tr) {
+            // Skip pure-focus transactions. TipTap's FocusEvents dispatches
+            // these on focusin — and during a drag from outside the editor
+            // into it, that fires mid-drag. ProseMirror's matchesNode then
+            // hits a `.eq` crash on an undefined node in our custom nodeView
+            // tree, which propagates up to our wrapper and triggers a full
+            // rebuild (flash), losing the user's selection. These
+            // transactions carry no doc/selection change, so skipping them
+            // is safe — TipTap updates editor.isFocused in the handler
+            // before dispatching.
+            try {
+                var focusMeta = typeof tr.getMeta === 'function' && tr.getMeta('focus');
+                if (focusMeta && tr.steps && tr.steps.length === 0) {
+                    return;
+                }
+            } catch (e) {
+                // Fall through to normal dispatch.
+            }
             try {
                 _origViewDispatch(tr);
             } catch (err) {
@@ -3496,9 +3514,6 @@ var EditorModule = (function (Utils, EventBus) {
             }
         });
 
-        // healViewDesync — only on doc-changing transactions, deferred
-        // by a frame so transient DOM states during selection drags
-        // never trigger a rebuild (that was causing the flash bug).
         var _healPending = false;
         function healViewDesync() {
             if (_healPending) return;
