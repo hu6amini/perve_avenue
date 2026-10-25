@@ -291,7 +291,7 @@ whenBodyReady(() => {
             // MessengerModule.initialize().
             const phaseEStart = performance.now();
             try {
-                await loadScript("https://cdn.jsdelivr.net/gh/hu6amini/perve_avenue@8d97ff87f594cf66517c77d49bb5f0c6bfdc54e4/core/forum-enhancer.min.js");
+                await loadScript("https://cdn.jsdelivr.net/gh/hu6amini/perve_avenue@f339697ffc51b36e8d5e4049c45d8a2395845c2c/core/forum-enhancer.min.js");
                 console.debug(`[Boot] Phase E completed in ${(performance.now() - phaseEStart).toFixed(2)}ms`);
                 console.log('[Boot] System Fully Enhanced');
             } catch (err) {
