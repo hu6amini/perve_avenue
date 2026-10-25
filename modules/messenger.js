@@ -5415,7 +5415,7 @@ var MessengerModule = (function(Utils, EventBus) {
 
                 const NSFW = Mark.create({
                     name: 'nsfw',
-                    inclusive: false,
+                    inclusive: true,
                     parseHTML() {
                         return [{
                             tag: 'span',
