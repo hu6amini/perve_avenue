@@ -223,16 +223,7 @@ var EditorModule = (function (Utils, EventBus) {
         return false;
     }
 
-    // ------------------------------------------------------------------------
-    // editorContentIsEmpty
-    //
-    // \p{Cc} (control) + \p{Cf} (format) covers every character with zero
-    // visual width: zero-width space, ZWNJ, ZWJ, the bidi marks and
-    // embedding controls, soft hyphen, BOM, etc. String.trim() does NOT
-    // strip most of these — it only handles Unicode whitespace. Without
-    // the strip, an "empty" document that still carries an invisible
-    // residual reads as non-empty and the placeholder stays hidden.
-    // ------------------------------------------------------------------------
+    // \p{Cc} (control) + \p{Cf} (format) covers every zero-width character.
     function editorContentIsEmpty(html) {
         if (!html || typeof html !== 'string') return true;
         var text = html
@@ -413,7 +404,7 @@ var EditorModule = (function (Utils, EventBus) {
         iframes.forEach(iframe => {
             const src = iframe.getAttribute('src') || '';
             const parsed = parseLegacyIframeProvider(src);
-            if (!parsed) return; // Non-media iframe — leave as-is
+            if (!parsed) return;
 
             const wrapper = document.createElement('div');
             wrapper.className = 'lite-embed-wrapper';
@@ -1039,16 +1030,13 @@ var EditorModule = (function (Utils, EventBus) {
 
             result = result.replace(/<blockquote([^>]*)>([\s\S]*?)<\/blockquote>/gi, function(match, attrs, inner) {
                 inner = inner.replace(/<p class="quote-author-header">[\s\S]*?<\/p>/gi, '');
-
                 var cleaned = inner.replace(/<p[^>]*>/gi, '').replace(/<\/p>\s*/gi, '\n\n');
                 cleaned = cleaned.replace(/\n+$/, '');
-
                 var authorMatch = attrs.match(/data-author="([^"]*)"/);
                 if (authorMatch) {
                     var author = decodeHtmlEntities(authorMatch[1]);
                     return '[QUOTE=' + author + ']' + cleaned + '[/QUOTE]';
                 }
-
                 return '[QUOTE]' + cleaned + '[/QUOTE]';
             });
 
@@ -1081,7 +1069,7 @@ var EditorModule = (function (Utils, EventBus) {
     }
 
     // ========================================================================
-    // SYNTAX HIGHLIGHTING (PREVIEW / READER)
+    // SYNTAX HIGHLIGHTING
     // ========================================================================
     function highlightCode(codeText) {
         if (codeText == null) return '';
@@ -1119,15 +1107,12 @@ var EditorModule = (function (Utils, EventBus) {
 
         Array.from(temp.querySelectorAll('blockquote')).forEach(function (bq) {
             var author = bq.getAttribute('data-author');
-
             var headerPara = bq.querySelector('.quote-author-header');
             if (headerPara) headerPara.remove();
-
             var innerHtml = bq.innerHTML;
             var quoteAuthorHtml = author
                 ? '<span class="quote-author">' + escapeHtml(author) + ' <span class="quote-said">said:</span></span>'
                 : '<span class="quote-author">Quote</span>';
-
             var modernHtml =
                 '<div class="modern-quote long-quote">' +
                     '<div class="quote-header"><div class="quote-meta">' +
@@ -1695,61 +1680,49 @@ var EditorModule = (function (Utils, EventBus) {
 
         var lowlight = createLowlight(common);
 
-        // ---------------------------------------------------------------------
-        // Post-delete safety net
-        //
-        // `deleteSelection` (what ProseMirror runs when the user has an
-        // active selection and presses Delete/Backspace) can leave an
-        // emptied blockquote/spoiler behind in the document — unlike
-        // `joinBackward` (single backspace at a boundary), which lifts
-        // the node out as a side-effect. NormalizeEmptyDoc is the primary
-        // cleanup, but its before/after count check can miss certain
-        // selection shapes. This function is independent of the plugin
-        // pipeline: it inspects the current doc and removes any top-level
-        // container that has no visible content. It runs from the
-        // keydown handler (below), after the delete transaction lands.
-        //
-        // Function is declared at function scope (not inside the
-        // `if (!opts.hideHeader)` block) so the keydown handler can
-        // reference it in strict mode.
-        // ---------------------------------------------------------------------
+        // -------------------------------------------------------------------
+        // Post-delete safety net. Runs from the keydown handler (below),
+        // after the delete transaction has landed. Independent of the
+        // plugin pipeline: reads the current doc, removes top-level
+        // blockquote/spoiler that has no visible content. Wrapped in
+        // try/catch so a dispatch failure can't strand state.
+        // -------------------------------------------------------------------
         function cleanupEmptyContainers(view) {
-            var doc = view.state.doc;
-            var toRemove = [];
-            doc.forEach(function (node, offset) {
-                if (node.type.name !== 'blockquote' && node.type.name !== 'spoiler') return;
-                var hasContent = false;
-                node.descendants(function (n) {
-                    if (hasContent) return;
-                    if (n.isText && n.text) {
-                        var visible = n.text.replace(/[\p{Cc}\p{Cf}]/gu, '');
-                        if (visible.trim()) { hasContent = true; return; }
-                        return;
-                    }
-                    var nm = n.type.name;
-                    if (nm === 'image' || nm === 'liteYouTube' || nm === 'liteVimeo' ||
-                        nm === 'linkPreview' || nm === 'imageUploadPlaceholder' ||
-                        nm === 'horizontalRule') {
-                        hasContent = true;
-                    }
-                });
-                if (!hasContent) toRemove.push({ pos: offset, size: node.nodeSize });
-            });
-            if (toRemove.length === 0) return;
-
-            var tr = view.state.tr;
-            for (var i = toRemove.length - 1; i >= 0; i--) {
-                tr.delete(toRemove[i].pos, toRemove[i].pos + toRemove[i].size);
-            }
-            if (tr.doc.childCount === 0) {
-                tr.insert(0, view.state.schema.nodes.paragraph.create());
-            }
             try {
-                tr.setSelection(TextSelection.near(tr.doc.resolve(
-                    Math.max(1, Math.min(tr.selection.from, tr.doc.content.size - 1))
-                )));
-            } catch (e) {}
-            view.dispatch(tr);
+                var doc = view.state.doc;
+                var toRemove = [];
+                doc.forEach(function (node, offset) {
+                    if (node.type.name !== 'blockquote' && node.type.name !== 'spoiler') return;
+                    var hasContent = false;
+                    node.descendants(function (n) {
+                        if (hasContent) return;
+                        if (n.isText && n.text) {
+                            var visible = n.text.replace(/[\p{Cc}\p{Cf}]/gu, '');
+                            if (visible.trim()) { hasContent = true; return; }
+                            return;
+                        }
+                        var nm = n.type.name;
+                        if (nm === 'image' || nm === 'liteYouTube' || nm === 'liteVimeo' ||
+                            nm === 'linkPreview' || nm === 'imageUploadPlaceholder' ||
+                            nm === 'horizontalRule') {
+                            hasContent = true;
+                        }
+                    });
+                    if (!hasContent) toRemove.push({ pos: offset, size: node.nodeSize });
+                });
+                if (toRemove.length === 0) return;
+
+                var tr = view.state.tr;
+                for (var i = toRemove.length - 1; i >= 0; i--) {
+                    tr.delete(toRemove[i].pos, toRemove[i].pos + toRemove[i].size);
+                }
+                if (tr.doc.childCount === 0) {
+                    tr.insert(0, view.state.schema.nodes.paragraph.create());
+                }
+                view.dispatch(tr);
+            } catch (e) {
+                console.error('[EditorModule] cleanupEmptyContainers failed:', e);
+            }
         }
 
         // ---- Replying-as header ----
@@ -3198,24 +3171,28 @@ var EditorModule = (function (Utils, EventBus) {
         });
 
         // =================================================================
-        // NormalizeEmptyDoc — structural cleanup after any transaction.
+        // NormalizeEmptyDoc
         //
-        // `isEffectivelyEmpty` strips every zero-width character via the
-        // Unicode categories \p{Cc} (control) and \p{Cf} (format). That
-        // covers U+200B..U+200F, U+2060..U+2064, U+FEFF, U+061C, U+180E,
-        // U+00AD, and the bidi embedding controls — everything that
-        // String.prototype.trim() misses because it only handles Unicode
-        // whitespace. Without the strip, a container that the user just
-        // emptied via deleteSelection would still be classified as
-        // non-empty (ProseMirror inserts a zero-width space into an empty
-        // paragraph to keep the caret stable), so Job 1 would never fire,
-        // the blockquote would linger in the doc, the placeholder would
-        // stay hidden, and any subsequent typing would stay inside the
-        // blockquote.
+        // Removes top-level blockquote/spoiler nodes whose visible content
+        // became empty after a delete.
         //
-        // Job 3 reuses the same predicate so multi-block documents whose
-        // blocks are all effectively empty also collapse to a single
-        // fresh paragraph.
+        // Why this is wrapped in try/catch: `appendTransaction` is invoked
+        // from inside `EditorState.apply`. If it throws, the whole dispatch
+        // unwinds — the browser's native `beforeinput` handler has already
+        // cleared the selection DOM, but `view.state` never advances, so
+        // the two desync. Catching the throw keeps `apply` alive and lets
+        // the delete transaction land cleanly. `cleanupEmptyContainers`
+        // (invoked from the keydown setTimeout) is the redundant path —
+        // if this plugin somehow can't complete, the setTimeout dispatch
+        // gets a second shot.
+        //
+        // No `setSelection` here: ProseMirror already maps selection
+        // through deletions. Manually re-setting it was the trigger for
+        // a `Cannot read properties of undefined (reading 'eq')` crash
+        // in the view's docView diff.
+        //
+        // Job 3 (multi-block collapse) was removed because Job 1 + Job 2
+        // cover the real-world cases and this branch was the riskiest.
         // =================================================================
         const NormalizeEmptyDoc = Extension.create({
             name: 'normalizeEmptyDoc',
@@ -3244,71 +3221,48 @@ var EditorModule = (function (Utils, EventBus) {
                 return [new Plugin({
                     key: new PluginKey('normalizeEmptyDoc'),
                     appendTransaction(trs, oldState, newState) {
-                        if (!trs.some(t => t.docChanged)) return null;
+                        try {
+                            if (!trs.some(t => t.docChanged)) return null;
 
-                        const beforeDoc = oldState.doc;
-                        const doc = newState.doc;
-                        const tr = newState.tr;
-                        let changed = false;
+                            const doc = newState.doc;
 
-                        // ---- Job 1: remove containers that just emptied ----
-                        let beforeNonEmpty = 0;
-                        beforeDoc.forEach(function (node) {
-                            if (CONTAINER_TYPES.has(node.type.name) && !isEffectivelyEmpty(node)) {
-                                beforeNonEmpty++;
-                            }
-                        });
-                        let afterNonEmpty = 0;
-                        doc.forEach(function (node) {
-                            if (CONTAINER_TYPES.has(node.type.name) && !isEffectivelyEmpty(node)) {
-                                afterNonEmpty++;
-                            }
-                        });
+                            let beforeNonEmpty = 0;
+                            oldState.doc.forEach(function (node) {
+                                if (CONTAINER_TYPES.has(node.type.name) && !isEffectivelyEmpty(node)) {
+                                    beforeNonEmpty++;
+                                }
+                            });
+                            let afterNonEmpty = 0;
+                            doc.forEach(function (node) {
+                                if (CONTAINER_TYPES.has(node.type.name) && !isEffectivelyEmpty(node)) {
+                                    afterNonEmpty++;
+                                }
+                            });
 
-                        if (afterNonEmpty < beforeNonEmpty) {
+                            // Only fire when a non-empty container just emptied.
+                            if (afterNonEmpty >= beforeNonEmpty) return null;
+
+                            const tr = newState.tr;
                             const toRemove = [];
                             doc.forEach(function (node, offset) {
                                 if (CONTAINER_TYPES.has(node.type.name) && isEffectivelyEmpty(node)) {
                                     toRemove.push({ pos: offset, size: node.nodeSize });
                                 }
                             });
+
                             for (let i = toRemove.length - 1; i >= 0; i--) {
                                 tr.delete(toRemove[i].pos, toRemove[i].pos + toRemove[i].size);
-                                changed = true;
                             }
-                        }
 
-                        // ---- Job 2: guarantee at least one block ----
-                        if (tr.doc.childCount === 0) {
-                            const p = newState.schema.nodes.paragraph.create();
-                            tr.insert(0, p);
-                            changed = true;
-                        }
-
-                        // ---- Job 3: collapse docs made entirely of effectively-empty nodes ----
-                        if (tr.doc.childCount > 1) {
-                            const allEmpty = tr.doc.content.content.every(function (c) {
-                                return isEffectivelyEmpty(c);
-                            });
-                            if (allEmpty) {
-                                const p = newState.schema.nodes.paragraph.create();
-                                tr.replaceWith(0, tr.doc.content.size, p);
-                                changed = true;
+                            if (tr.doc.childCount === 0) {
+                                tr.insert(0, newState.schema.nodes.paragraph.create());
                             }
-                        }
 
-                        if (!changed) return null;
-
-                        try {
-                            const safePos = Math.max(1, Math.min(tr.selection.from, tr.doc.content.size - 1));
-                            tr.setSelection(TextSelection.near(tr.doc.resolve(safePos)));
+                            return tr;
                         } catch (e) {
-                            try {
-                                tr.setSelection(TextSelection.near(tr.doc.resolve(1)));
-                            } catch (e2) {}
+                            console.error('[NormalizeEmptyDoc] appendTransaction failed:', e);
+                            return null;
                         }
-
-                        return tr;
                     }
                 })];
             }
@@ -3557,10 +3511,10 @@ var EditorModule = (function (Utils, EventBus) {
                 },
                 handleDOMEvents: {
                     keydown: function (view, event) {
-                        // Post-delete cleanup: let the delete run, then sweep
-                        // for empty containers. Chain into setTimeout because
-                        // view.state.doc needs to reflect the post-delete
-                        // state, not the pre-delete state.
+                        // Post-delete safety net. Fires on the next tick so the
+                        // delete transaction has fully landed. try/catch
+                        // is inside cleanupEmptyContainers, so this dispatch
+                        // can't strand view.state.
                         if ((event.key === 'Delete' || event.key === 'Backspace') &&
                             !view.state.selection.empty) {
                             setTimeout(function () {
@@ -3622,6 +3576,45 @@ var EditorModule = (function (Utils, EventBus) {
 
         editorRef.current = editor;
 
+        // -------------------------------------------------------------------
+        // healViewDesync
+        //
+        // Defensive: if ProseMirror's view is in a state where the DOM has
+        // been emptied but `view.state` still has content, the editor is
+        // unusable (no placeholder, typing goes into invisible structures).
+        // We can't call updateState(view.state) — that's exactly what throws
+        // when the docView is corrupted. setContent re-parses the HTML into
+        // a fresh state, which forces the view to rebuild its docView tree.
+        // If that also fails, log clearly so the user knows to refresh.
+        // -------------------------------------------------------------------
+        function healViewDesync() {
+            if (!editor || editor.isDestroyed || !editor.view) return;
+            var dom = editor.view.dom;
+            if (!dom || !dom.isConnected) return;
+            if (dom.childElementCount > 0) return;
+
+            var stateHasContent = false;
+            editor.state.doc.forEach(function (node) {
+                if (node.textContent.trim()) { stateHasContent = true; return; }
+                var nm = node.type.name;
+                if (nm === 'image' || nm === 'liteYouTube' || nm === 'liteVimeo' ||
+                    nm === 'linkPreview' || nm === 'horizontalRule') {
+                    stateHasContent = true;
+                }
+            });
+            if (!stateHasContent) return;
+
+            console.warn('[EditorModule] View desync detected — DOM empty, state has content. Attempting recovery via setContent.');
+            try {
+                editor.commands.setContent(editor.getHTML(), false);
+                console.log('[EditorModule] Recovery successful.');
+            } catch (e) {
+                console.error('[EditorModule] View desync recovery FAILED. The editor needs a page refresh to continue.', e);
+            }
+        }
+        editor.on('transaction', healViewDesync);
+        setTimeout(healViewDesync, 0);
+
         function updateActive() {
             undoBtn.disabled = !editor.can().undo();
             redoBtn.disabled = !editor.can().redo();
@@ -3656,7 +3649,6 @@ var EditorModule = (function (Utils, EventBus) {
             setupEmoticonAutocomplete(editor, editorRoot);
         }
 
-        // Helper: image hover toolbar
         function setupImageToolbar(root, ed) {
             var scrollContainer = root.parentNode;
 
@@ -3789,7 +3781,6 @@ var EditorModule = (function (Utils, EventBus) {
             ed.on('blur', function () { toolbarEl.style.display = 'none'; hovered = null; });
         }
 
-        // Helper: spoiler title edit
         function setupSpoilerTitleEdit(root, ed) {
             root.addEventListener('mousedown', function (e) {
                 if (e.button !== 0) return;
@@ -3814,7 +3805,6 @@ var EditorModule = (function (Utils, EventBus) {
             }, true);
         }
 
-        // Helper: emoticon autocomplete
         function setupEmoticonAutocomplete(ed, root) {
             var popup = null, items = [], sel = 0, itemEls = [], query = '';
 
@@ -3920,7 +3910,6 @@ var EditorModule = (function (Utils, EventBus) {
             });
         }
 
-        // Send-state
         function updateSendState() {
             if (!submitBtn) return;
             if (submitBtn.hasAttribute('data-saving')) {
@@ -3940,7 +3929,6 @@ var EditorModule = (function (Utils, EventBus) {
             else submitBtn.setAttribute('title', hasPlaceholder ? 'Finish or remove the image placeholder' : 'Write something before submitting');
         }
 
-        // Preview button
         previewBtn.onclick = function () {
             if (!editorRef.current || editorContentIsEmpty(editorRef.current.getHTML())) return;
             previewArea.style.display = 'block';
@@ -3948,7 +3936,6 @@ var EditorModule = (function (Utils, EventBus) {
             previewArea.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
         };
 
-        // Submit
         submitBtn.onclick = function (e) {
             e.preventDefault();
             if (!editorRef.current) return;
@@ -4024,7 +4011,7 @@ var EditorModule = (function (Utils, EventBus) {
     }
 
     // ========================================================================
-    // FAST REPLY BUILDER (body#topic)
+    // FAST REPLY BUILDER
     // ========================================================================
     async function buildFastReplyEditor() {
         var legacySend = document.querySelector('.fast.send');
@@ -4116,7 +4103,7 @@ var EditorModule = (function (Utils, EventBus) {
     }
 
     // ========================================================================
-    // FULL EDITOR BUILDER (body#send)
+    // FULL EDITOR BUILDER
     // ========================================================================
     async function buildFullEditor() {
         var legacySend = document.querySelector('.send');
@@ -4179,7 +4166,7 @@ var EditorModule = (function (Utils, EventBus) {
     }
 
     // ========================================================================
-    // FAST EDIT — protocol owned by EditorModule
+    // FAST EDIT
     // ========================================================================
     function findPostContent(scope) {
         if (!scope) return null;
@@ -4470,7 +4457,7 @@ var EditorModule = (function (Utils, EventBus) {
     }
 
     // ========================================================================
-    // QUOTE — fetch-and-inject, real-time
+    // QUOTE
     // ========================================================================
     function startQuote(postEl) {
         _quoteQueue = _quoteQueue
