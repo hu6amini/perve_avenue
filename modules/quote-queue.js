@@ -87,7 +87,7 @@ var QuoteQueueModule = (function (Utils) {
         var icon = btn.querySelector('i');
         if (icon) {
             icon.className = isQueued
-                ? 'fa-solid fa-quote-left'
+                ? 'fa-regular fa-check'
                 : 'fa-regular fa-quote-left';
         }
         card.classList.toggle('is-quote-queued', isQueued);
