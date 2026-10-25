@@ -3248,6 +3248,23 @@ var EditorModule = (function (Utils, EventBus) {
             }
         });
 
+        // -------------------------------------------------------------------
+        // BlockAtomSelection — atom highlight during selection.
+        //
+        // IMPORTANT: This plugin is DISABLED by default. It was the source
+        // of a recurring ProseMirror crash (`Cannot read properties of
+        // undefined (reading 'localsInner')`) that fires during selection
+        // drags across atom nodes. The crash originates in prosemirror-view's
+        // internal rendering of node decorations applied to atoms nested
+        // inside blockquotes/custom container nodes.
+        //
+        // To re-enable for testing: window.__enableBlockAtomSelection = true
+        //   then trigger a reload or rebuild.
+        //
+        // If you need this feature, the safe re-implementation would use
+        // Decoration.inline() for inline atoms only and skip block atoms
+        // entirely (or use a different visual indicator).
+        // -------------------------------------------------------------------
         const BlockAtomSelection = Extension.create({
             name: 'blockAtomSelection',
             addProseMirrorPlugins() {
@@ -3255,18 +3272,22 @@ var EditorModule = (function (Utils, EventBus) {
                     key: new PluginKey('blockAtomSelection'),
                     props: {
                         decorations(state) {
-                            const { from, to, empty } = state.selection;
-                            if (empty) return null;
-                            const decos = [];
-                            state.doc.nodesBetween(from, to, (node, pos) => {
-                                const n = node.type.name;
-                                if (n === 'liteYouTube' || n === 'liteVimeo') {
-                                    decos.push(Decoration.node(pos, pos + node.nodeSize, { class: 'lite-embed-in-selection' }));
-                                } else if (n === 'image' || n === 'linkPreview' || n === 'horizontalRule' || n === 'imageUploadPlaceholder') {
-                                    decos.push(Decoration.node(pos, pos + node.nodeSize, { class: 'atom-in-selection' }));
-                                }
-                            });
-                            return DecorationSet.create(state.doc, decos);
+                            if (!window.__enableBlockAtomSelection) return null;
+                            try {
+                                const { from, to, empty } = state.selection;
+                                if (empty) return null;
+                                const decos = [];
+                                state.doc.nodesBetween(from, to, (node, pos) => {
+                                    const n = node.type.name;
+                                    if (n === 'image' || n === 'linkPreview') {
+                                        decos.push(Decoration.inline(pos, pos + node.nodeSize, { class: 'atom-in-selection' }));
+                                    }
+                                });
+                                return decos.length ? DecorationSet.create(state.doc, decos) : null;
+                            } catch (err) {
+                                console.error('[BlockAtomSelection] decorations failed:', err);
+                                return null;
+                            }
                         }
                     }
                 })];
@@ -3467,6 +3488,14 @@ var EditorModule = (function (Utils, EventBus) {
             try {
                 _origViewUpdateState(state);
             } catch (err) {
+                var errMsg = String((err && err.message) || '');
+                if (errMsg.indexOf('localsInner') !== -1) {
+                    if (!editor.__localsInnerLogged) {
+                        console.warn('[EditorModule] Transient rendering glitch (localsInner) — ignoring, no rebuild:', err);
+                        editor.__localsInnerLogged = true;
+                    }
+                    return;
+                }
                 console.error('[EditorModule] view.updateState crashed — scheduling rebuild:', err);
                 scheduleEditorRebuild();
             }
@@ -3474,23 +3503,12 @@ var EditorModule = (function (Utils, EventBus) {
 
         var _origViewDispatch = editor.view.dispatch.bind(editor.view);
         editor.view.dispatch = function (tr) {
-            // Skip pure-focus transactions. TipTap's FocusEvents dispatches
-            // these on focusin — and during a drag from outside the editor
-            // into it, that fires mid-drag. ProseMirror's matchesNode then
-            // hits a `.eq` crash on an undefined node in our custom nodeView
-            // tree, which propagates up to our wrapper and triggers a full
-            // rebuild (flash), losing the user's selection. These
-            // transactions carry no doc/selection change, so skipping them
-            // is safe — TipTap updates editor.isFocused in the handler
-            // before dispatching.
             try {
                 var focusMeta = typeof tr.getMeta === 'function' && tr.getMeta('focus');
                 if (focusMeta && tr.steps && tr.steps.length === 0) {
                     return;
                 }
-            } catch (e) {
-                // Fall through to normal dispatch.
-            }
+            } catch (e) {}
             try {
                 _origViewDispatch(tr);
             } catch (err) {
