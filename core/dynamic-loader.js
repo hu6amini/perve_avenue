@@ -112,7 +112,7 @@ function injectStylesheet(url) {
 
 async function loadLightGallery() {
     const LIGHTGALLERY_CSS = [
-        "https://cdn.jsdelivr.net/gh/hu6amini/perve_avenue@00f081e7fcdae0063b8ddc80ae809170cb1a323f/lightgallery@2.7.1/lightgallery.min.css",
+        "https://cdn.jsdelivr.net/gh/hu6amini/perve_avenue@a16898b3d8cc8aca4130d7d74446fcf6989471e4/lightgallery@2.7.1/lightgallery.min.css",
         "https://cdn.jsdelivr.net/gh/hu6amini/perve_avenue@e44a482dc929aec9979f410815e3bf7bdc233da7/lightgallery@2.7.1/lg-zoom.min.css",
         "https://cdn.jsdelivr.net/gh/hu6amini/perve_avenue@c5a5f520f3985fb7ef4d90892360aba8bf55a2c0/lightgallery@2.7.1/lg-thumbnail.min.css",
         "https://cdn.jsdelivr.net/gh/hu6amini/perve_avenue@b6a816af149a4736f9ee02135f35997b7c03eb4d/lightgallery@2.7.1/lg-fullscreen.min.css",
@@ -219,7 +219,7 @@ async function bootSystem() {
                 loadScript("https://cdn.jsdelivr.net/gh/hu6amini/perve_avenue@76cb279cfa160ad31ee3810d21c6d56ca30c0be1/modules/posts.min.js"),
                 loadScript("https://cdn.jsdelivr.net/gh/hu6amini/perve_avenue@403484e8351e4fd2b9f757b5c340979cf7d452b8/modules/modals.min.js"),
                 loadScript("https://cdn.jsdelivr.net/gh/hu6amini/perve_avenue@2c2bed7b7d8311bad20a87eb830437e91dca4cf5/modules/editor-module.min.js"),
-                loadScript("https://cdn.jsdelivr.net/gh/hu6amini/perve_avenue@38fc938cb030128c968b01749ffd02b509c869cc/modules/quote-queue.js")
+                loadScript("https://cdn.jsdelivr.net/gh/hu6amini/perve_avenue@38fc938cb030128c968b01749ffd02b509c869cc/modules/quote-queue.min.js")
             ]);
 
             const failed = results.filter(r => r.status === 'rejected');
