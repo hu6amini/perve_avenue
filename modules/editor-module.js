@@ -229,20 +229,20 @@ var EditorModule = (function (Utils, EventBus) {
     // document that still carries a zero-width space reads as non-empty and
     // the placeholder stays hidden.
     function editorContentIsEmpty(html) {
-        if (!html || typeof html !== 'string') return true;
-        var text = html
-            .replace(/<[^>]*>/g, '')
-            .replace(/&nbsp;/gi, ' ')
-            .replace(/&zeroWidthSpace;/gi, '')
-            .replace(/[\u200B-\u200D\uFEFF\u2060]/g, '')
-            .replace(/\s+/g, ' ')
-            .trim();
-        if (text.length > 0) return false;
-        if (/<img[^>]+src\s*=/i.test(html)) return false;
-        if (/<hr\b/i.test(html)) return false;
-        if (/<(video|audio|iframe)\b/i.test(html)) return false;
-        return true;
-    }
+    if (!html || typeof html !== 'string') return true;
+    var text = html
+        .replace(/<[^>]*>/g, '')
+        .replace(/&nbsp;/gi, ' ')
+        .replace(/&zeroWidthSpace;/gi, '')
+        .replace(/[\u200B-\u200F\u2060-\u2064\u2066-\u2069\uFEFF\u061C\u180E]/g, '')
+        .replace(/\s+/g, ' ')
+        .trim();
+    if (text.length > 0) return false;
+    if (/<img[^>]+src\s*=/i.test(html)) return false;
+    if (/<hr\b/i.test(html)) return false;
+    if (/<(video|audio|iframe)\b/i.test(html)) return false;
+    return true;
+}
 
     function ensureTrailingParagraphInHtml(html) {
         if (!html || typeof html !== 'string') return html;
@@ -3161,12 +3161,16 @@ var EditorModule = (function (Utils, EventBus) {
                     node.descendants(function (n) {
                         if (hasContent) return;
                         if (n.isText && n.text) {
-                            // Strip zero-width / invisible chars before the
-                            // whitespace check. trim() alone misses U+200B.
-                            const visible = n.text.replace(/[\u200B-\u200D\uFEFF\u2060]/g, '');
-                            if (visible.trim()) { hasContent = true; return; }
-                            return;
-                        }
+    // Strip zero-width AND bidi/invisible control characters before trim.
+    // trim() alone misses U+200E, U+200F, and the bidi embedding controls,
+    // all of which can survive a selection-delete as residual text.
+    const visible = n.text.replace(
+        /[\u200B-\u200F\u2060-\u2064\u2066-\u2069\uFEFF\u061C\u180E]/g,
+        ''
+    );
+    if (visible.trim()) { hasContent = true; return; }
+    return;
+}
                         const name = n.type.name;
                         if (name === 'image' || name === 'liteYouTube' || name === 'liteVimeo' ||
                             name === 'linkPreview' || name === 'imageUploadPlaceholder' ||
@@ -3227,16 +3231,17 @@ var EditorModule = (function (Utils, EventBus) {
                         // Reuses isEffectivelyEmpty so paragraphs whose
                         // only text nodes carry invisible characters also
                         // collapse into a single fresh paragraph.
-                        if (tr.doc.childCount > 1) {
-                            const allEmpty = tr.doc.content.content.every(function (c) {
-                                return c.type.name === 'paragraph' && isEffectivelyEmpty(c);
-                            });
-                            if (allEmpty) {
-                                const p = newState.schema.nodes.paragraph.create();
-                                tr.replaceWith(0, tr.doc.content.size, p);
-                                changed = true;
-                            }
-                        }
+                        // ---- Job 3: collapse docs made entirely of effectively-empty nodes ----
+if (tr.doc.childCount > 1) {
+    const allEmpty = tr.doc.content.content.every(function (c) {
+        return isEffectivelyEmpty(c);
+    });
+    if (allEmpty) {
+        const p = newState.schema.nodes.paragraph.create();
+        tr.replaceWith(0, tr.doc.content.size, p);
+        changed = true;
+    }
+}
 
                         if (!changed) return null;
 
