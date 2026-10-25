@@ -234,7 +234,7 @@ var EditorModule = (function (Utils, EventBus) {
         .replace(/<[^>]*>/g, '')
         .replace(/&nbsp;/gi, ' ')
         .replace(/&zeroWidthSpace;/gi, '')
-        .replace(/[\u200B-\u200F\u2060-\u2064\u2066-\u2069\uFEFF\u061C\u180E]/g, '')
+        .replace(/[\p{Cc}\p{Cf}]/gu, '')   // ← was [/[\u200B-\u200D\uFEFF\u2060]/]
         .replace(/\s+/g, ' ')
         .trim();
     if (text.length > 0) return false;
@@ -1699,6 +1699,50 @@ var EditorModule = (function (Utils, EventBus) {
                 if (currentHeader) host.appendChild(currentHeader);
             }
 
+           // Post-delete safety net. ProseMirror's deleteSelection leaves
+// empty containers behind in certain selection shapes, and
+// NormalizeEmptyDoc's before/after count check can miss them.
+// This runs after the delete transaction has landed and removes
+// any top-level blockquote/spoiler that has no visible content.
+function cleanupEmptyContainers(view) {
+    var doc = view.state.doc;
+    var toRemove = [];
+    doc.forEach(function (node, offset) {
+        if (node.type.name !== 'blockquote' && node.type.name !== 'spoiler') return;
+        var hasContent = false;
+        node.descendants(function (n) {
+            if (hasContent) return;
+            if (n.isText && n.text) {
+                var visible = n.text.replace(/[\p{Cc}\p{Cf}]/gu, '');
+                if (visible.trim()) { hasContent = true; return; }
+                return;
+            }
+            var nm = n.type.name;
+            if (nm === 'image' || nm === 'liteYouTube' || nm === 'liteVimeo' ||
+                nm === 'linkPreview' || nm === 'imageUploadPlaceholder' ||
+                nm === 'horizontalRule') {
+                hasContent = true;
+            }
+        });
+        if (!hasContent) toRemove.push({ pos: offset, size: node.nodeSize });
+    });
+    if (toRemove.length === 0) return;
+
+    var tr = view.state.tr;
+    for (var i = toRemove.length - 1; i >= 0; i--) {
+        tr.delete(toRemove[i].pos, toRemove[i].pos + toRemove[i].size);
+    }
+    if (tr.doc.childCount === 0) {
+        tr.insert(0, view.state.schema.nodes.paragraph.create());
+    }
+    try {
+        tr.setSelection(TextSelection.near(tr.doc.resolve(
+            Math.max(1, Math.min(tr.selection.from, tr.doc.content.size - 1))
+        )));
+    } catch (e) {}
+    view.dispatch(tr);
+}
+
             fetchCurrentUserData().then(function (user) {
                 if (!user) return;
                 var newHeader = buildUserHeader(user, opts.headerLabel || 'Replying as:');
@@ -3161,13 +3205,13 @@ var EditorModule = (function (Utils, EventBus) {
                     node.descendants(function (n) {
                         if (hasContent) return;
                         if (n.isText && n.text) {
-    // Strip zero-width AND bidi/invisible control characters before trim.
-    // trim() alone misses U+200E, U+200F, and the bidi embedding controls,
-    // all of which can survive a selection-delete as residual text.
-    const visible = n.text.replace(
-        /[\u200B-\u200F\u2060-\u2064\u2066-\u2069\uFEFF\u061C\u180E]/g,
-        ''
-    );
+    // \p{Cc} = control chars, \p{Cf} = format chars (zero-width space,
+    // bidi controls, soft hyphen, ZWJ, ZWNJ, etc). Every character in
+    // those categories has zero visual width; String.trim() doesn't
+    // strip most of them. Without this strip, an invisible residual
+    // left behind by deleteSelection keeps the blockquote classified
+    // as "non-empty" and the plugin never fires.
+    const visible = n.text.replace(/[\p{Cc}\p{Cf}]/gu, '');
     if (visible.trim()) { hasContent = true; return; }
     return;
 }
@@ -3502,20 +3546,30 @@ if (tr.doc.childCount > 1) {
                     return false;
                 },
                 handleDOMEvents: {
-                    keydown: function (view, event) {
-                        var mod = event.ctrlKey || event.metaKey;
-                        if (mod && event.key === 'Enter') {
-                            event.preventDefault();
-                            if (submitBtn && !submitBtn.disabled) submitBtn.click();
-                            return true;
-                        }
-                        if (mod && !event.shiftKey && (event.key === 'k' || event.key === 'K')) { event.preventDefault(); linkBtn.click(); return true; }
-                        if (mod && !event.shiftKey && (event.key === 'e' || event.key === 'E')) { event.preventDefault(); editor.chain().focus().toggleCode().run(); return true; }
-                        if (event.ctrlKey && event.shiftKey && (event.key === 's' || event.key === 'S')) { event.preventDefault(); spoilerBtn.click(); return true; }
-                        if (event.ctrlKey && event.shiftKey && (event.key === 'n' || event.key === 'N')) { event.preventDefault(); nsfwBtn.click(); return true; }
-                        return false;
-                    }
-                }
+    keydown: function (view, event) {
+        // Post-delete cleanup: let the delete run, then sweep for
+        // empty containers. Chain into the setTimeout because we
+        // need view.state.doc to reflect the post-delete state.
+        if ((event.key === 'Delete' || event.key === 'Backspace') &&
+            !view.state.selection.empty) {
+            setTimeout(function () {
+                if (view.dom && view.dom.isConnected) cleanupEmptyContainers(view);
+            }, 0);
+        }
+
+        var mod = event.ctrlKey || event.metaKey;
+        if (mod && event.key === 'Enter') {
+            event.preventDefault();
+            if (submitBtn && !submitBtn.disabled) submitBtn.click();
+            return true;
+        }
+        if (mod && !event.shiftKey && (event.key === 'k' || event.key === 'K')) { event.preventDefault(); linkBtn.click(); return true; }
+        if (mod && !event.shiftKey && (event.key === 'e' || event.key === 'E')) { event.preventDefault(); editor.chain().focus().toggleCode().run(); return true; }
+        if (event.ctrlKey && event.shiftKey && (event.key === 's' || event.key === 'S')) { event.preventDefault(); spoilerBtn.click(); return true; }
+        if (event.ctrlKey && event.shiftKey && (event.key === 'n' || event.key === 'N')) { event.preventDefault(); nsfwBtn.click(); return true; }
+        return false;
+    }
+}
             },
             onCreate: function ({ editor }) {
                 (function ensureTrailingParagraph() {
