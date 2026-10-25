@@ -29,6 +29,7 @@
             messenger: true,
             'slick-carousel': true,
             boards: true, // ← new
+            'quote-queue': true,
             editor: true,
             navigation: false,
             sidebar: false,
@@ -308,6 +309,13 @@ if (typeof ThemeModule !== 'undefined') {
             log('ForumBoardsModule not found, boards enhancement disabled', 'warn');
             ENHANCER_CONFIG.modules.boards = false;
         }
+        // After the boards registration:
+if (typeof QuoteQueueModule !== 'undefined') {
+    registerModule('quote-queue', QuoteQueueModule, ['forumObserver']);
+} else {
+    log('QuoteQueueModule not found, multi-quote disabled', 'warn');
+    ENHANCER_CONFIG.modules['quote-queue'] = false;
+}
                  // --- EDITOR MODULE (NEW) ---
         if (typeof EditorModule !== 'undefined') {
             registerModule('editor', EditorModule, ['forumObserver']);
