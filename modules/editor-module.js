@@ -1893,7 +1893,15 @@ var EditorModule = (function (Utils, EventBus) {
             return b;
         }
 
-        function exec(cmd) { if (!editorRef.current) return; cmd(); editorRef.current.commands.focus(); }
+        function exec(cmd) {
+    if (!editorRef.current) return;
+    try {
+        cmd();
+    } catch (err) {
+        console.error('[EditorModule] Editor command failed:', err);
+    }
+    editorRef.current.commands.focus();
+}
 
         var _backdrop = null;
         var _mobileMode = window.matchMedia('(max-width: 680px)').matches;
@@ -2950,10 +2958,17 @@ var EditorModule = (function (Utils, EventBus) {
         });
 
         const NSFW = Mark.create({
-            name: 'nsfw', inclusive: false,
-            parseHTML() { return [{ tag: 'span', getAttrs: el => el.classList.contains('ff-nsfw') ? {} : false }]; },
-            renderHTML() { return ['span', { class: 'ff-nsfw' }, 0]; }
-        });
+    name: 'nsfw', inclusive: false,
+    parseHTML() { return [{ tag: 'span', getAttrs: el => el.classList.contains('ff-nsfw') ? {} : false }]; },
+    renderHTML() { return ['span', { class: 'ff-nsfw' }, 0]; },
+    addCommands() {
+        return {
+            setNSFW:    () => ({ commands }) => commands.setMark(this.name),
+            toggleNSFW: () => ({ commands }) => commands.toggleMark(this.name),
+            unsetNSFW:  () => ({ commands }) => commands.unsetMark(this.name),
+        };
+    },
+});
 
         const CustomMention = Mention.extend({
             addAttributes() {
