@@ -1626,7 +1626,7 @@
 
 .attachment-preview { background: var(--bg-color); padding: var(--space-md); text-align: center; }
 .attachment-preview img { border-radius: var(--radius); display: block; object-fit: contain; margin: 3px; }
-.attachment-image-link { display: block; max-width: 800px; }
+.attachment-image-link { display: block; max-width: 800px; text-align: left; }
 
 .attachment-stats {
   background: var(--bg-color);
