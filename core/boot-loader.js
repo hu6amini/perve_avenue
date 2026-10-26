@@ -1,9 +1,8 @@
-/* Optimised Boot Loader – v6 */
+/* Optimised Boot Loader – v7 */
 "use strict";
 (function () {
   let logBuffer = "[Bypass Active]:";
 
-  // Configuration
   const config = {
     safeList: [
       "jq.js",
@@ -20,18 +19,19 @@
     skipRelease: [
       "challenges.cloudflare.com",
       "turnstile",
-     
       "recaptcha"
     ],
     emojiEditorPages: ["topic", "send", "blog"],
     capturedStyleKeys: {
       emoji: "emoji-picker",
       ffbEmbed: "ffb_embedlink",
-      elModal: "el-modal"
+      elModal: "el-modal",
+      csFramework: "cs-framework",
+      notifications: "notifications",
+      uiDatepicker: "ui-datepicker"
     }
   };
 
-  // State management
   const state = {
     turnstileLoaded: false,
     recaptchaSrc: null,
@@ -43,22 +43,40 @@
     observerDisconnected: false
   };
 
-  // Utility: Check if filename is in safe list
-  const isSafeAsset = (fileName) => {
-    return config.safeList.some((item) => fileName.includes(item));
-  };
+  // Rules run in order; first match wins, one block per key. `key`
+  // holds the CSS-string identifier used to index state.capturedCSS /
+  // state.injected. Injection triggers are wired separately below so
+  // each block fires at the right user interaction.
+  const STYLE_CAPTURE_RULES = [
+    {
+      key: config.capturedStyleKeys.ffbEmbed,
+      test: (t) => t.includes('.ffb_embedlink')
+    },
+    {
+      key: config.capturedStyleKeys.elModal,
+      test: (t) => t.includes('.el-modal')
+    },
+    {
+      key: config.capturedStyleKeys.csFramework,
+      test: (t) => t.includes('.cs-toast') && t.includes('.cs-modal') && t.includes('.cs-btn')
+    },
+    {
+      key: config.capturedStyleKeys.notifications,
+      test: (t) => t.includes('.script-notification-modal')
+    },
+    {
+      key: config.capturedStyleKeys.uiDatepicker,
+      test: (t) => t.includes('.ui-datepicker') && t.includes('.ui-timepicker')
+    }
+  ];
 
-  // Utility: Extract filename from URL
-  const getFileName = (url) => {
-    return url.split("/").pop().split("?")[0];
-  };
+  const isSafeAsset = (fileName) => config.safeList.some((item) => fileName.includes(item));
+  const getFileName = (url) => url.split("/").pop().split("?")[0];
+  const shouldSkipRelease = (src) => config.skipRelease.some((item) => src.includes(item));
 
-  // Utility: Check if should skip release
-  const shouldSkipRelease = (src) => {
-    return config.skipRelease.some((item) => src.includes(item));
-  };
-
-  // 1. Core processing of <script> and <link rel="stylesheet">
+  // ---------------------------------------------------------------
+  // <script> / <link> processing — unchanged
+  // ---------------------------------------------------------------
   const processElement = (el) => {
     const isScript = el.tagName === "SCRIPT";
     const isLink = el.tagName === "LINK" && el.rel === "stylesheet";
@@ -80,7 +98,7 @@
         return;
       }
 
-      // Force-trap reCAPTCHA (may have async, but we want to lazy-load it)
+      // Force-trap reCAPTCHA (lazy-load on first form interaction)
       if (isScript && src.includes("recaptcha/api.js")) {
         state.recaptchaSrc = src;
         el.type = "text/plain";
@@ -90,7 +108,7 @@
         return;
       }
 
-      // Trap synchronous scripts (without async/defer)
+      // Trap synchronous scripts
       if (isScript && !el.hasAttribute("async") && !el.hasAttribute("defer") && el.type !== "text/plain") {
         el.type = "text/plain";
         el.dataset.original = src;
@@ -99,7 +117,7 @@
         return;
       }
 
-      // Downgrade render-blocking CSS to print (then activate on load)
+      // Downgrade render-blocking CSS
       if (isLink) {
         if (el.dataset.activated || el.media === "print") return;
         el.media = "print";
@@ -110,54 +128,62 @@
         el.onload = activate;
         try {
           if (el.sheet && el.sheet.cssRules) activate.call(el);
-        } catch (e) {
-          /* CORS – onload will handle it */
-        }
+        } catch (e) { /* CORS – onload will handle it */ }
         logBuffer += "\n- Downgraded CSS: " + fileName;
       }
     }
   };
 
-  // 2. Capture and manage CSS styles (emoji, ffb_embedlink, el-modal)
+  // ---------------------------------------------------------------
+  // Style capture
+  // ---------------------------------------------------------------
   const processCSSStyle = (styleEl) => {
     const text = styleEl.textContent || "";
+    if (!text) return false;
 
-    // Capture emoji-picker CSS (both the ID-based and class-based blocks)
-    if ((styleEl.id === 'emoji-picker-css' || text.includes(".emoji-picker")) && !state.injected[config.capturedStyleKeys.emoji]) {
+    // Emoji-picker CSS is multi-part — accumulate, inject as one block.
+    if ((styleEl.id === 'emoji-picker-css' || text.includes(".emoji-picker")) &&
+        !state.injected[config.capturedStyleKeys.emoji]) {
       if (!state.emojiCSSParts) state.emojiCSSParts = [];
       state.emojiCSSParts.push(text);
       styleEl.remove();
       return true;
     }
 
-    // Capture ffb_embedlink CSS
-    if (text.includes(".ffb_embedlink") && !state.capturedCSS[config.capturedStyleKeys.ffbEmbed]) {
-      state.capturedCSS[config.capturedStyleKeys.ffbEmbed] = text;
-      styleEl.remove();
-      return true;
-    }
+    for (let i = 0; i < STYLE_CAPTURE_RULES.length; i++) {
+      const rule = STYLE_CAPTURE_RULES[i];
+      if (state.capturedCSS[rule.key]) continue;
+      if (!rule.test(text)) continue;
 
-    // Capture el-modal CSS
-    if (text.includes(".el-modal") && !state.capturedCSS[config.capturedStyleKeys.elModal]) {
-      state.capturedCSS[config.capturedStyleKeys.elModal] = text;
+      state.capturedCSS[rule.key] = text;
       styleEl.remove();
+
+      // The cs-framework block also carries the cursor affordance for
+      // the "(elenco)" scripts-credits link. Preserve that one rule so
+      // the link keeps its clickable look before the modal framework
+      // is injected.
+      if (rule.key === config.capturedStyleKeys.csFramework && text.includes('[data-credits]')) {
+        const mini = document.createElement('style');
+        mini.textContent = '[data-credits]{cursor:pointer}';
+        document.head.appendChild(mini);
+      }
+
       return true;
     }
 
     return false;
   };
 
-  // 3. Inject captured CSS (generic)
-  const injectCapturedCSS = (key, styleId = null) => {
+  const injectCapturedCSS = (key, styleId) => {
     if (!state.capturedCSS[key] || state.injected[key]) return;
     state.injected[key] = true;
     const style = document.createElement("style");
     if (styleId) style.id = styleId;
     style.textContent = state.capturedCSS[key];
     document.head.appendChild(style);
+    logBuffer += "\n- Injected CSS: " + key;
   };
 
-  // 4. Inject emoji CSS (handles multiple blocks)
   const injectEmojiCSS = () => {
     if (!state.emojiCSSParts || state.emojiCSSParts.length === 0 || state.emojiCSSLoaded) return;
     state.emojiCSSLoaded = true;
@@ -167,83 +193,125 @@
     document.head.appendChild(style);
   };
 
-  // 5. Unified MutationObserver for all DOM changes
+  // ---------------------------------------------------------------
+  // Unified MutationObserver
+  // ---------------------------------------------------------------
   const observer = new MutationObserver((mutations) => {
-    for (const mutation of mutations) {
-      for (const node of mutation.addedNodes) {
-        if (node.nodeType !== 1) continue; // Only process Element nodes
+    for (let m = 0; m < mutations.length; m++) {
+      const added = mutations[m].addedNodes;
+      for (let n = 0; n < added.length; n++) {
+        const node = added[n];
+        if (node.nodeType !== 1) continue;
 
-        // Process scripts and stylesheets
+        // Scripts / stylesheets
         processElement(node);
-
-        // Process child scripts and stylesheets
         if (node.querySelectorAll) {
-          try {
-            node.querySelectorAll("script, link[rel='stylesheet']").forEach(processElement);
-          } catch (e) {
-            /* Error querying, continue */
-          }
+          try { node.querySelectorAll("script, link[rel='stylesheet']").forEach(processElement); } catch (e) {}
         }
 
-        // Process captured CSS styles
-        if (node.tagName === "STYLE") {
-          processCSSStyle(node);
+        // Styles
+        if (node.tagName === "STYLE") processCSSStyle(node);
+        if (node.querySelectorAll) {
+          try { node.querySelectorAll("style").forEach(processCSSStyle); } catch (e) {}
         }
 
-        // Check for emoji-picker CSS in child styles
-        if (node.querySelectorAll) {
-          try {
-            node.querySelectorAll("style").forEach(processCSSStyle);
-          } catch (e) {
-            /* Error querying, continue */
-          }
-        }
+        // Deferred-CSS triggers. Skip the queries entirely if nothing
+        // is pending — the observer fires for every DOM mutation.
+        const pending =
+          (state.capturedCSS[config.capturedStyleKeys.ffbEmbed]     && !state.injected[config.capturedStyleKeys.ffbEmbed]) ||
+          (state.capturedCSS[config.capturedStyleKeys.elModal]      && !state.injected[config.capturedStyleKeys.elModal]) ||
+          (state.capturedCSS[config.capturedStyleKeys.csFramework]  && !state.injected[config.capturedStyleKeys.csFramework]) ||
+          (state.capturedCSS[config.capturedStyleKeys.notifications]&& !state.injected[config.capturedStyleKeys.notifications]);
+        if (!pending) continue;
 
-        // Inject CSS when target elements appear
-        if (node.querySelectorAll) {
-          try {
-            if (node.querySelector && state.capturedCSS[config.capturedStyleKeys.ffbEmbed] && !state.injected[config.capturedStyleKeys.ffbEmbed]) {
-              if (node.querySelector(".ffb_embedlink")) {
-                injectCapturedCSS(config.capturedStyleKeys.ffbEmbed);
-              }
+        try {
+          const self  = (sel) => node.matches && node.matches(sel);
+          const child = (sel) => node.querySelector && node.querySelector(sel);
+
+          if (state.capturedCSS[config.capturedStyleKeys.ffbEmbed] && !state.injected[config.capturedStyleKeys.ffbEmbed]) {
+            if (self('.ffb_embedlink') || child('.ffb_embedlink')) {
+              injectCapturedCSS(config.capturedStyleKeys.ffbEmbed);
             }
-            if (node.querySelector && state.capturedCSS[config.capturedStyleKeys.elModal] && !state.injected[config.capturedStyleKeys.elModal]) {
-              if (node.querySelector(".el-modal")) {
-                injectCapturedCSS(config.capturedStyleKeys.elModal);
-              }
+          }
+          if (state.capturedCSS[config.capturedStyleKeys.elModal] && !state.injected[config.capturedStyleKeys.elModal]) {
+            if (self('.el-modal') || child('.el-modal')) {
+              injectCapturedCSS(config.capturedStyleKeys.elModal);
             }
-          } catch (e) {
-            /* Error querying, continue */
           }
-        }
-
-        // Check if node itself has target classes
-        if (node.classList) {
-          if (node.classList.contains("ffb_embedlink") && state.capturedCSS[config.capturedStyleKeys.ffbEmbed]) {
-            injectCapturedCSS(config.capturedStyleKeys.ffbEmbed);
+          if (state.capturedCSS[config.capturedStyleKeys.csFramework] && !state.injected[config.capturedStyleKeys.csFramework]) {
+            if (self('.cs-toast, .cs-modal, .FFB_popup_credits') ||
+                child('.cs-toast, .cs-modal, .FFB_popup_credits')) {
+              injectCapturedCSS(config.capturedStyleKeys.csFramework);
+            }
           }
-          if (node.classList.contains("el-modal") && state.capturedCSS[config.capturedStyleKeys.elModal]) {
-            injectCapturedCSS(config.capturedStyleKeys.elModal);
+          if (state.capturedCSS[config.capturedStyleKeys.notifications] && !state.injected[config.capturedStyleKeys.notifications]) {
+            if (self('.script-notification-modal') || child('.script-notification-modal')) {
+              injectCapturedCSS(config.capturedStyleKeys.notifications);
+            }
           }
-        }
+        } catch (e) { /* ignore selector errors */ }
       }
     }
   });
 
   observer.observe(document.documentElement, { childList: true, subtree: true });
 
+  // ---------------------------------------------------------------
   // Initial scan of existing elements
+  // ---------------------------------------------------------------
   document.querySelectorAll("script, link[rel='stylesheet'], style").forEach((el) => {
-    if (el.tagName === "STYLE") {
-      processCSSStyle(el);
-    } else {
-      processElement(el);
-    }
+    if (el.tagName === "STYLE") processCSSStyle(el);
+    else processElement(el);
   });
 
-  // ============================================================
-  // 6. Lazy-load Turnstile on first form interaction
-  // ============================================================
+  // If any trigger element already exists, inject its CSS now.
+  // MutationObserver only sees NEW nodes, so this covers the case
+  // where a trigger element was in the initial HTML.
+  (function injectIfPresent() {
+    const triggers = {};
+    triggers[config.capturedStyleKeys.ffbEmbed]      = '.ffb_embedlink';
+    triggers[config.capturedStyleKeys.elModal]       = '.el-modal';
+    triggers[config.capturedStyleKeys.csFramework]   = '.cs-toast, .cs-modal, .FFB_popup_credits';
+    triggers[config.capturedStyleKeys.notifications] = '.script-notification-modal';
+    triggers[config.capturedStyleKeys.uiDatepicker]  = '.hasDatepicker, .ui-datepicker';
+
+    Object.keys(triggers).forEach((key) => {
+      if (state.capturedCSS[key] && !state.injected[key]) {
+        try {
+          if (document.querySelector(triggers[key])) injectCapturedCSS(key);
+        } catch (e) {}
+      }
+    });
+  })();
+
+  // ---------------------------------------------------------------
+  // uiDatepicker — inject on the specific interactions that trigger it
+  // ---------------------------------------------------------------
+  function maybeInjectDatepicker() {
+    const key = config.capturedStyleKeys.uiDatepicker;
+    if (state.capturedCSS[key] && !state.injected[key]) injectCapturedCSS(key);
+  }
+
+  document.addEventListener('click', function (e) {
+    const t = e.target;
+    if (!t || !t.closest) return;
+    if (t.closest('#ADDCRON') || t.closest('#TopicTime') ||
+        t.closest('.hasDatepicker') || t.closest('.ui-datepicker-trigger')) {
+      maybeInjectDatepicker();
+    }
+  }, { capture: true, passive: true });
+
+  document.addEventListener('focusin', function (e) {
+    const t = e.target;
+    if (!t) return;
+    if (t.id === 'TopicTime' || (t.classList && t.classList.contains('hasDatepicker'))) {
+      maybeInjectDatepicker();
+    }
+  }, { passive: true });
+
+  // ---------------------------------------------------------------
+  // Turnstile / reCAPTCHA — unchanged
+  // ---------------------------------------------------------------
   function loadTurnstile() {
     if (state.turnstileLoaded) return;
     state.turnstileLoaded = true;
@@ -257,9 +325,6 @@
     if (e.target.closest("form")) loadTurnstile();
   }, { once: true, passive: true });
 
-  // ============================================================
-  // 7. Lazy-load reCAPTCHA on first form interaction
-  // ============================================================
   function loadRecaptcha() {
     if (state.recaptchaLoaded || !state.recaptchaSrc) return;
     state.recaptchaLoaded = true;
@@ -273,9 +338,9 @@
     if (e.target.closest("form")) loadRecaptcha();
   }, { once: true, passive: true });
 
-  // ============================================================
-  // 8. Lazy-load emoji-picker CSS on editor pages
-  // ============================================================
+  // ---------------------------------------------------------------
+  // Emoji picker CSS — lazy-load on editor pages
+  // ---------------------------------------------------------------
   document.addEventListener("click", function (e) {
     const btn = e.target.closest(".ve-btn-emoji") || e.target.closest("#emoticons");
     if (!btn) return;
@@ -284,9 +349,9 @@
     }
   }, { passive: true });
 
-  // ============================================================
-  // 9. Release trapped assets at idle (with priority hints)
-  // ============================================================
+  // ---------------------------------------------------------------
+  // Release trapped assets at idle — unchanged
+  // ---------------------------------------------------------------
   window.addEventListener("load", () => {
     const releaseAssets = () => {
       console.log(logBuffer);
@@ -295,7 +360,7 @@
         const src = oldScript.dataset.original;
         if (!src) return;
 
-        // Use minified versions if available
+        // Swap in minified variants where available
         if (src.includes("media-optimizer.js") && !src.includes(".min.js")) {
           const minSrc = src.replace(/media-optimizer\.js$/, "media-optimizer.min.js");
           const newScript = document.createElement("script");
@@ -314,7 +379,6 @@
           return;
         }
 
-        // Skip assets we handle separately
         if (shouldSkipRelease(src)) return;
 
         // Popper.js guard: delay tippy if Popper isn't ready
@@ -352,9 +416,9 @@
     }
   });
 
-  // ============================================================
-  // 10. Cleanup on page unload
-  // ============================================================
+  // ---------------------------------------------------------------
+  // Cleanup on page unload — unchanged
+  // ---------------------------------------------------------------
   window.addEventListener("beforeunload", () => {
     if (observer) observer.disconnect();
     state.observerDisconnected = true;
