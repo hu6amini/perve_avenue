@@ -13,8 +13,8 @@
       "media-optimizer.min.js",
       "event-bus.min.js",
       "forum-enhancer.min.js",
-      "modern-forum.min.css",
-      "all.min.css"
+      "modern-forum.css",
+      "all.css"
     ],
     skipRelease: [
       "challenges.cloudflare.com",
