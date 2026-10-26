@@ -8,6 +8,7 @@
     safeList: [
       "jq.js",
       "plugin_v3.js",
+      "script-loader",
       "boot-loader.min.js",
       "dynamic-loader.min.js",
       "media-optimizer.min.js",
@@ -19,7 +20,7 @@
     skipRelease: [
       "challenges.cloudflare.com",
       "turnstile",
-
+     
       "recaptcha"
     ],
     emojiEditorPages: ["topic", "send", "blog"],
@@ -70,16 +71,6 @@
     const isSafe = isSafeAsset(fileName);
 
     if (!isSafe) {
-      // Re-trap guard (Option B). Scripts released by releaseAssets carry a
-      // data-boot-released="1" marker. Without this guard, the observer would
-      // re-trap those just-released scripts before their fetch completes, and
-      // the trap would set type="text/plain" in time to prevent execution —
-      // the "script-loader never runs" symptom. The guard also protects other
-      // scripts whose release path uses defer=false (event-bus) or type=module
-      // (media-optimizer), which otherwise fall through to the sync-trap branch
-      // and get re-trapped the same way.
-      if (el.dataset && el.dataset.bootReleased === "1") return;
-
       // Force-trap the heavy script-loader
       if (isScript && src.includes("script-loader")) {
         el.type = "text/plain";
@@ -296,12 +287,6 @@
   // ============================================================
   // 9. Release trapped assets at idle (with priority hints)
   // ============================================================
-  // Every released script carries data-boot-released="1". The marker is
-  // checked at the top of processElement's !isSafe block, so the observer
-  // will not re-trap a release before its fetch completes. Without that
-  // guard, script-loader (and event-bus, which uses defer=false) would be
-  // re-trapped by the observer and never execute — the "missing widget"
-  // and "double execution" symptoms both trace back to this cycle.
   window.addEventListener("load", () => {
     const releaseAssets = () => {
       console.log(logBuffer);
@@ -316,7 +301,6 @@
           const newScript = document.createElement("script");
           newScript.src = minSrc;
           newScript.type = "module";
-          newScript.dataset.bootReleased = "1";
           oldScript.parentNode.replaceChild(newScript, oldScript);
           return;
         }
@@ -326,7 +310,6 @@
           const newScript = document.createElement("script");
           newScript.src = minSrc;
           newScript.defer = false; // event-bus must run immediately
-          newScript.dataset.bootReleased = "1";
           oldScript.parentNode.replaceChild(newScript, oldScript);
           return;
         }
@@ -337,7 +320,6 @@
           const newScript = document.createElement("script");
           newScript.src = minSrc;
           newScript.defer = true;
-          newScript.dataset.bootReleased = "1";
           oldScript.parentNode.replaceChild(newScript, oldScript);
           return;
         }
@@ -351,7 +333,6 @@
             const newScript = document.createElement("script");
             newScript.src = src;
             newScript.defer = true;
-            newScript.dataset.bootReleased = "1";
             oldScript.parentNode.replaceChild(newScript, oldScript);
           }, 50);
           return;
@@ -360,7 +341,6 @@
         const newScript = document.createElement("script");
         newScript.src = src;
         newScript.defer = true;
-        newScript.dataset.bootReleased = "1";
         oldScript.parentNode.replaceChild(newScript, oldScript);
       });
 
