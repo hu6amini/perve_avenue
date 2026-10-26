@@ -13,14 +13,13 @@
       "media-optimizer.min.js",
       "event-bus.min.js",
       "forum-enhancer.min.js",
-      "script-loader",
       "modern-forum.min.css",
       "all.min.css"
     ],
     skipRelease: [
       "challenges.cloudflare.com",
       "turnstile",
-     
+
       "recaptcha"
     ],
     emojiEditorPages: ["topic", "send", "blog"],
@@ -242,6 +241,58 @@
   });
 
   // ============================================================
+  // 5a. EARLY RELEASE of script-loader at DOMContentLoaded
+  // ============================================================
+  // script-loader is trapped above like any other synchronous script,
+  // but it is NOT a normal script — it is a loader that injects further
+  // scripts and must run early enough for those injectees to establish
+  // globals before downstream code queries them. The idle callback in
+  // section 9 releases it too late: at that point its internal setup
+  // runs against a document that has already fired DOMContentLoaded,
+  // downstream inline scripts have already executed and errored, and
+  // the reactions widget (among other injected content) never appears.
+  //
+  // This block releases ONLY script-loader at DOMContentLoaded, which is
+  // typically 500-1500ms earlier than the idle callback on a real forum
+  // page. Everything else remains trapped and is released at idle.
+  //
+  // This is still LATE relative to the original synchronous execution
+  // (during parse) — if the script-loader payload depends on
+  // document.write or a document.readyState === 'loading' code path,
+  // this will not restore it. Test carefully: if reactions still don't
+  // appear, script-loader needs its original parse-time execution, and
+  // the only fix is "script-loader" in the safeList (accepting the
+  // perf cost) or releasing it in a <head> inline script before
+  // boot-loader runs.
+  const releaseScriptLoaderEarly = () => {
+    const trapped = document.querySelectorAll(
+      'script[type="text/plain"][data-original*="script-loader"]'
+    );
+    if (trapped.length === 0) return;
+
+    trapped.forEach((oldScript) => {
+      const src = oldScript.dataset.original;
+      if (!src) return;
+      const newScript = document.createElement("script");
+      newScript.src = src;
+      newScript.defer = true;
+      oldScript.parentNode.replaceChild(newScript, oldScript);
+      logBuffer += "\n- Early release (DOMContentLoaded): script-loader";
+    });
+  };
+
+  if (document.readyState === "loading") {
+    // Normal case: boot-loader runs from a <head> script during parse.
+    // DOMContentLoaded will fire after the document is parsed.
+    document.addEventListener("DOMContentLoaded", releaseScriptLoaderEarly, { once: true });
+  } else {
+    // boot-loader was injected after DOMContentLoaded already fired
+    // (userscript, extension, dynamic insertion). Release now — still
+    // earlier than idle.
+    releaseScriptLoaderEarly();
+  }
+
+  // ============================================================
   // 6. Lazy-load Turnstile on first form interaction
   // ============================================================
   function loadTurnstile() {
@@ -285,8 +336,11 @@
   }, { passive: true });
 
   // ============================================================
-  // 9. Release trapped assets at idle (with priority hints)
+  // 9. Release remaining trapped assets at idle (with priority hints)
   // ============================================================
+  // script-loader was already released by section 5a. This block
+  // handles everything else: media-optimizer, event-bus, handlebars,
+  // tippy, and the rest of the synchronous payload.
   window.addEventListener("load", () => {
     const releaseAssets = () => {
       console.log(logBuffer);
