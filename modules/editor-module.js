@@ -485,6 +485,127 @@ var EditorModule = (function (Utils, EventBus) {
         return tempDiv.innerHTML;
     }
 
+   function buildLinkPreviewSpan(url, title, description, imageSrc) {
+    if (!url) return null;
+    var span = document.createElement('span');
+    span.setAttribute('data-type', 'link-preview');
+    span.setAttribute('data-href', url);
+    if (title) span.setAttribute('data-title', title);
+    if (description) span.setAttribute('data-description', description);
+    if (imageSrc) span.setAttribute('data-image-src', imageSrc);
+    return span;
+}
+
+function parseEmbedContainerForEditor(container) {
+    // .ffb_embedlink format: children[0] = hidden favicon div,
+    // children[1] = visible part with [previewDiv, contentDiv]
+    try {
+        var visiblePart = container.children[1];
+        if (!visiblePart) return null;
+        var previewDiv = visiblePart.children[0];
+        var contentDiv = visiblePart.children[1] || visiblePart.children[0];
+        if (!contentDiv) return null;
+
+        var imageSrc = '';
+        if (previewDiv) {
+            var previewImg = previewDiv.querySelector('img');
+            if (previewImg) imageSrc = previewImg.getAttribute('src') || '';
+        }
+
+        var titleLink = contentDiv.querySelector('a');
+        var title = titleLink ? titleLink.textContent.trim() : '';
+        var url = titleLink ? titleLink.getAttribute('href') : '';
+        if (!url) return null;
+
+        var clone = contentDiv.cloneNode(true);
+        clone.querySelectorAll('a').forEach(function (a) { a.remove(); });
+        var description = clone.textContent.trim()
+            .replace(/\s*Leggi altro su\s*/gi, '')
+            .replace(/\s*[>›]\s*$/, '')
+            .trim();
+
+        return buildLinkPreviewSpan(url, title, description, imageSrc);
+    } catch (e) {
+        return null;
+    }
+}
+
+function transformLegacyEmbedLinks(html) {
+    if (!html || typeof html !== 'string') return html;
+    if (html.indexOf('ffb_embedlink') === -1 &&
+        !/Leggi altro su|Read more on|Continua a leggere/i.test(html)) return html;
+
+    var tempDiv = document.createElement('div');
+    tempDiv.innerHTML = html;
+
+    // --- Strategy 1: .ffb_embedlink containers (posts.js format) ---
+    tempDiv.querySelectorAll('.ffb_embedlink').forEach(function (container) {
+        var span = parseEmbedContainerForEditor(container);
+        if (span) container.parentNode.replaceChild(span, container);
+    });
+
+    // --- Strategy 2: flat 3-paragraph form (what your DOM shows) ---
+    tempDiv.querySelectorAll('a.ffb_embedlink_preview').forEach(function (previewAnchor) {
+        if (previewAnchor.closest('[data-type="link-preview"]')) return;
+
+        var url = previewAnchor.getAttribute('href') || '';
+        if (!url) return;
+
+        var previewImg = previewAnchor.querySelector('img');
+        var imageSrc = previewImg ? (previewImg.getAttribute('src') || '') : '';
+
+        var imagePara = previewAnchor.closest('p');
+        if (!imagePara) return;
+
+        var faviconPara = imagePara.previousElementSibling;
+        var infoPara = imagePara.nextElementSibling;
+
+        // favicon paragraph: <p> with an <img> and an <a> (the domain)
+        var faviconValid = false;
+        if (faviconPara && faviconPara.tagName === 'P' &&
+            faviconPara.querySelector('img') && faviconPara.querySelector('a')) {
+            faviconValid = true;
+        }
+
+        // info paragraph: <p> with title <a>, description, and "Leggi altro su"
+        var infoValid = false;
+        var title = '';
+        var description = '';
+        if (infoPara && infoPara.tagName === 'P') {
+            var infoText = infoPara.textContent || '';
+            var hasReadMore = /Leggi altro su|Read more on|Continua a leggere/i.test(infoText);
+            var endsWithArrow = /[>›]\s*$/.test(infoText.trim());
+
+            if (hasReadMore || endsWithArrow) {
+                infoValid = true;
+                var infoLinks = infoPara.querySelectorAll('a');
+                if (infoLinks.length >= 1) title = infoLinks[0].textContent.trim();
+
+                description = infoText;
+                if (title) description = description.replace(title, '');
+                description = description
+                    .replace(/\s*Leggi altro su\s+[\w.]+\s*[>›]?\s*$/i, '')
+                    .replace(/\s*Read more on\s+[\w.]+\s*[>›]?\s*$/i, '')
+                    .replace(/\s*Continua a leggere\s+[\w.]+\s*[>›]?\s*$/i, '')
+                    .trim();
+            }
+        }
+
+        if (!title) title = previewAnchor.getAttribute('title') || '';
+
+        var span = buildLinkPreviewSpan(url, title, description, imageSrc);
+        if (!span) return;
+
+        var insertBefore = faviconValid ? faviconPara : imagePara;
+        insertBefore.parentNode.insertBefore(span, insertBefore);
+        if (faviconValid) faviconPara.remove();
+        imagePara.remove();
+        if (infoValid) infoPara.remove();
+    });
+
+    return tempDiv.innerHTML;
+}
+
     function searchMentions(query) {
         if (!query || query.length < 1) return Promise.resolve([]);
         if (_mentionSearchAbort) {
@@ -957,6 +1078,7 @@ var EditorModule = (function (Utils, EventBus) {
         var html = legacyToHtml(expanded);
         html = transformLegacyIframes(html);
         html = paragraphizeLegacyHtml(html);
+        html = transformLegacyEmbedLinks(html);
         html = transformBareVideoUrls(html);
 
         return await enrichImageDimensions(html);
@@ -2827,21 +2949,45 @@ var EditorModule = (function (Utils, EventBus) {
         });
 
         const LinkPreview = Node.create({
-            name: 'linkPreview',
-            inline: true, group: 'inline', atom: true, draggable: true, selectable: true,
-            addAttributes() {
-                return {
-                    href: { default: '' },
-                    title: { default: '' },
-                    description: { default: '' },
-                    author: { default: '' },
-                    imageSrc: { default: '' },
-                    loading: { default: false },
-                };
+    name: 'linkPreview',
+    inline: true, group: 'inline', atom: true, draggable: true, selectable: true,
+    addAttributes() {
+        return {
+            href: {
+                default: '',
+                parseHTML: el => el.getAttribute('data-href') || '',
+                renderHTML: attrs => attrs.href ? { 'data-href': attrs.href } : {},
             },
-            parseHTML() {
-                return [{ tag: 'span[data-type="link-preview"]' }];
+            title: {
+                default: '',
+                parseHTML: el => el.getAttribute('data-title') || '',
+                renderHTML: attrs => attrs.title ? { 'data-title': attrs.title } : {},
             },
+            description: {
+                default: '',
+                parseHTML: el => el.getAttribute('data-description') || '',
+                renderHTML: attrs => attrs.description ? { 'data-description': attrs.description } : {},
+            },
+            author: {
+                default: '',
+                parseHTML: el => el.getAttribute('data-author') || '',
+                renderHTML: attrs => attrs.author ? { 'data-author': attrs.author } : {},
+            },
+            imageSrc: {
+                default: '',
+                parseHTML: el => el.getAttribute('data-image-src') || '',
+                renderHTML: attrs => attrs.imageSrc ? { 'data-image-src': attrs.imageSrc } : {},
+            },
+            loading: {
+                default: false,
+                parseHTML: el => el.getAttribute('data-loading') === 'true',
+                renderHTML: attrs => attrs.loading ? { 'data-loading': 'true' } : {},
+            },
+        };
+    },
+    parseHTML() {
+        return [{ tag: 'span[data-type="link-preview"]' }];
+    },
             renderHTML({ node, HTMLAttributes }) {
                 var href = node.attrs.href;
                 var title = node.attrs.title;
