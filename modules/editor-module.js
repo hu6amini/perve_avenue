@@ -4112,25 +4112,48 @@ function transformLegacyEmbedLinks(html) {
         submitBtn.disabled = true;
         return;
     }
+
     var empty = editorContentIsEmpty(editor.getHTML());
     var hasPlaceholder = false;
     editor.state.doc.descendants(function (n) {
         if (n.type.name === 'imageUploadPlaceholder') { hasPlaceholder = true; return false; }
         return true;
     });
-    var ready = !empty && !hasPlaceholder;
-    submitBtn.disabled = !ready;
-    submitBtn.setAttribute('aria-disabled', String(!ready));
-    if (ready) submitBtn.removeAttribute('title');
-    else submitBtn.setAttribute('title', hasPlaceholder ? 'Finish or remove the image placeholder' : 'Write something before submitting');
 
-    // Auto-hide the preview when the editor becomes empty — matches the
-    // messenger's behavior. Without this, a preview rendered from content
-    // that was subsequently deleted stays visible, showing text that no
-    // longer exists in the editor. Runs synchronously from onUpdate, so
-    // it fires on the keystroke that empties the editor, before
-    // scheduleLivePreviewRefresh's debounced timer would repaint stale
-    // content back into view.
+    // Send: needs content AND no pending image placeholders.
+    // A placeholder marks an image that was intended but hasn't arrived;
+    // sending would drop it silently.
+    var sendReady = !empty && !hasPlaceholder;
+    submitBtn.disabled = !sendReady;
+    submitBtn.setAttribute('aria-disabled', String(!sendReady));
+    if (sendReady) {
+        submitBtn.removeAttribute('title');
+    } else {
+        submitBtn.setAttribute('title', hasPlaceholder
+            ? 'Finish or remove the image placeholder'
+            : 'Write something before submitting');
+    }
+
+    // Preview: needs content only. Placeholders don't block — the
+    // preview renderer already skips re-rendering while a placeholder
+    // is present (see updateLivePreview's hasPlaceholder check), so
+    // letting the user open the pane is safe; it just shows whatever
+    // was last rendered.
+    if (previewBtn) {
+        var previewReady = !empty;
+        previewBtn.disabled = !previewReady;
+        previewBtn.setAttribute('aria-disabled', String(!previewReady));
+        if (previewReady) {
+            previewBtn.removeAttribute('title');
+        } else {
+            previewBtn.setAttribute('title', 'Write something to preview it');
+        }
+    }
+
+    // Auto-hide the preview when the editor becomes empty — matches
+    // the messenger. Without this, a preview rendered from content
+    // that was subsequently deleted stays visible, showing text that
+    // no longer exists in the editor.
     if (empty && previewArea && previewArea.style.display !== 'none') {
         previewArea.style.display = 'none';
     }
