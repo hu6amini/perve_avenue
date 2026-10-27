@@ -1490,13 +1490,12 @@ var MessengerModule = (function(Utils, EventBus) {
     }
 
     function shouldUseInitialAvatar(avatarUrl) {
-        if (!avatarUrl || typeof avatarUrl !== 'string') return true;
-        var lower = avatarUrl.toLowerCase();
-        if (lower.indexOf('img.forumfree.net') !== -1) return true;
-        if (lower.indexOf('style_images/default_avatar.png') !== -1) return true;
-        if (lower.indexOf('default_avatar') !== -1) return true;
-        return false;
-    }
+    if (!avatarUrl || typeof avatarUrl !== 'string') return true;
+    var lower = avatarUrl.toLowerCase();
+    if (lower.indexOf('style_images/default_avatar.png') !== -1) return true;
+    if (lower.indexOf('default_avatar') !== -1) return true;
+    return false;
+}
 
     function buildReplyingAsHeader(user) {
         if (!user) return null;
