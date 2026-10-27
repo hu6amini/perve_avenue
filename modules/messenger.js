@@ -179,6 +179,33 @@
 //      surfaces the author as "Alice said:" instead of a generic
 //      "Quote". No new DOM contract — same tag names, same wrapper,
 //      same caption.
+// v23: full parity with editor-module.js:
+//      - convertEmojisForEditor: unicode → twemoji, forumfree
+//        emoticon URLs → twemoji URLs, stored twemoji imgs size-
+//        normalised. Wired into legacyToHtmlAsync between
+//        transformBareVideoUrls and enrichImageDimensions, so the
+//        enricher skips the newly converted twemoji imgs.
+//      - transformLegacyEmbedLinks + helpers: legacy .ffb_embedlink
+//        containers and the flat 3-paragraph form that TipTap produces
+//        when it parses the legacy markup without knowing the shape
+//        both become <span data-type="link-preview"> with data-*
+//        attributes. LinkPreview's addAttributes now round-trips
+//        those attributes through parse and render.
+//      - [QUOTE=...] parser + serializer: author/timestamp/URL are
+//        parsed from the comma-separated tail using the same rules
+//        editor-module.js uses, so "4/27/2026, 11:25 PM" doesn't get
+//        split mid-timestamp and a trailing "?t=…&st=…#entry…" URL
+//        survives the round-trip.
+//      - CustomBlockquote: added, replaces StarterKit's blockquote.
+//        Without it, ProseMirror drops data-author/timestamp/url
+//        during parse, so quotes lost their author headers on the
+//        way through the editor.
+//      - UnicodeEmojiRule: converts typed unicode emoji into twemoji
+//        inline nodes as the user types.
+//      - exec(): wrapped in try/catch so a missing command (e.g. a
+//        mark whose addCommands wasn't declared) surfaces as a
+//        console error instead of a silent no-op button.
+
 var MessengerModule = (function(Utils, EventBus) {
     'use strict';
 
@@ -186,21 +213,9 @@ var MessengerModule = (function(Utils, EventBus) {
     var observerCallbacks = [];
     var _originalEmoticon = null;
 
-    // Per-section cleanup state. Populated when buildComposeSection
-    // creates resources that outlive the function scope — the TipTap
-    // Editor instance and any document- or window-level event
-    // listeners. reset() drains these so the module can be torn down
-    // and rebuilt without accumulating handlers or leaking the editor.
-    // Element-level listeners attached to DOM nodes owned by the
-    // module do not need tracking, because removing the DOM removes
-    // the listener with it.
     var _editorInstance = null;
     var _boundHandlers = [];
     var _dropdownBackdrop = null;
-
-    // Sender avatar cache for the messages list. Keyed by MID. Lives
-    // at module scope so a page with many messages from the same
-    // handful of senders only fetches each sender's data once.
     var _senderAvatarCache = new Map();
 
     function addGlobalListener(el, type, handler, opts) {
@@ -208,36 +223,13 @@ var MessengerModule = (function(Utils, EventBus) {
         _boundHandlers.push({ el: el, type: type, handler: handler, opts: opts });
     }
 
-    // Centralised configuration. A site dropping this module in can
-    // adjust every tunable here without hunting through the body. The
-    // alias vars below exist so the rest of the file reads without
-    // CONFIG. prefixes.
     var CONFIG = {
-        // Maximum message length in characters. 0 disables the limit.
         MAX_MESSAGE_LENGTH: 0,
-
-        // Timeout for the OG worker fetch that powers link previews
-        // and lite-embed captions.
         OG_FETCH_TIMEOUT: 8000,
-
-        // Worker endpoints. The upload worker proxies multipart
-        // uploads to ImgBB; the OG worker fetches link metadata.
         UPLOAD_WORKER_URL: 'https://imgbb-upload-proxy.nhristakiev.workers.dev/',
         OG_WORKER_URL: 'https://og-worker.nhristakiev.workers.dev/?url=',
-
-        // Twemoji SVG host. Swap this if you self-host the assets.
         TWEMOJI_BASE: 'https://twemoji.maxcdn.com/v/latest/svg/',
-
-        // ImgBB free-tier cap. Mirrored in the dropzone hint text;
-        // keep the two in sync if the tier changes.
         MAX_UPLOAD_BYTES: 32 * 1024 * 1024,
-
-        // Image URL detection for the paste handler. Extension check
-        // first (fast, matches the common case), hostname check second
-        // (catches image hosts that serve URLs without an extension in
-        // the path — Discord CDN is the motivating example). Both lists
-        // are deliberately flat so they're easy to extend as new hosts
-        // and formats appear in the wild.
         IMAGE_URL_EXTENSIONS: /\.(?:jpe?g|png|gif|webp|svg|bmp|avif|ico)(?:[?#]|$)/i,
         IMAGE_URL_HOSTS: [
             'i.imgur.com',
@@ -251,7 +243,6 @@ var MessengerModule = (function(Utils, EventBus) {
         ]
     };
 
-    // Aliases so the rest of the file reads without CONFIG. prefixes.
     var MAX_MESSAGE_LENGTH   = CONFIG.MAX_MESSAGE_LENGTH;
     var OG_FETCH_TIMEOUT     = CONFIG.OG_FETCH_TIMEOUT;
     var UPLOAD_WORKER_URL    = CONFIG.UPLOAD_WORKER_URL;
@@ -261,10 +252,6 @@ var MessengerModule = (function(Utils, EventBus) {
     var IMAGE_URL_EXTENSIONS = CONFIG.IMAGE_URL_EXTENSIONS;
     var IMAGE_URL_HOSTS      = CONFIG.IMAGE_URL_HOSTS;
 
-    // Consistent fetch timeout helper. Creates its own AbortController,
-    // wires it to a timer, and clears the timer on both success and
-    // failure. Replaces the ad-hoc pattern that was inlined in two
-    // places and gives callers a uniform way to bound network waits.
     function fetchWithTimeout(url, opts, timeoutMs) {
         var controller = new AbortController();
         var timer = setTimeout(function() { controller.abort(); }, timeoutMs);
@@ -285,11 +272,6 @@ var MessengerModule = (function(Utils, EventBus) {
         return false;
     }
 
-    // Live File objects for in-flight uploads, keyed by uploadId. A File
-    // can't be a ProseMirror attribute (it wouldn't serialize and can't
-    // be compared for equality), so the node carries only an id and the
-    // bytes live here. Cleared by the node view's destroy() and by the
-    // success/cancel handlers.
     var _uploadRegistry = new Map();
 
     var currentUrl = window.location.href;
@@ -300,9 +282,6 @@ var MessengerModule = (function(Utils, EventBus) {
         currentSection = 'contacts';
     }
 
-    // ------------------------------------------------------------------------
-    // SHARED AVATAR COLOR PALETTE
-    // ------------------------------------------------------------------------
     var AVATAR_COLORS = [
         '059669', '10B981', '34D399', '6EE7B7', 'A7F3D0',
         '0D9488', '14B8A6', '2DD4BF', '5EEAD4', '99F6E4',
@@ -365,9 +344,6 @@ var MessengerModule = (function(Utils, EventBus) {
         return 'group-' + sanitizeGroupName(user.group.name || 'member');
     }
 
-    // ------------------------------------------------------------------------
-    // HELPERS
-    // ------------------------------------------------------------------------
     function decodeHtmlEntities(str) {
         if (!str || typeof str !== 'string') return str;
         if (str.indexOf('&') === -1) return str;
@@ -481,12 +457,6 @@ var MessengerModule = (function(Utils, EventBus) {
         return temp.innerHTML;
     }
 
-    // ------------------------------------------------------------------------
-    // VIDEO URL PARSERS
-    // Shared verbatim with editor-module.js so the same URL shapes get
-    // recognised regardless of which module parses them. Used by the
-    // iframe transform, the bare-URL transform, and the paste handler.
-    // ------------------------------------------------------------------------
     function parseYouTubeUrl(url) {
         if (!url || typeof url !== 'string') return null;
         var m = url.match(/(?:youtube\.com\/(?:watch\?(?:.*&)?v=|embed\/|shorts\/)|youtu\.be\/)([A-Za-z0-9_-]{6,})/);
@@ -621,7 +591,7 @@ var MessengerModule = (function(Utils, EventBus) {
         iframes.forEach(function(iframe) {
             var src = iframe.getAttribute('src') || '';
             var parsed = parseLegacyIframeProvider(src);
-            if (!parsed) return; // Non-media iframe — leave as-is
+            if (!parsed) return;
 
             var wrapper = document.createElement('div');
             wrapper.className = 'lite-embed-wrapper';
@@ -650,19 +620,6 @@ var MessengerModule = (function(Utils, EventBus) {
         return tempDiv.innerHTML;
     }
 
-    // A paragraph whose entire text content is a bare YouTube/Vimeo URL
-    // is a video embed in disguise — the forum stored the URL as BBCode
-    // text and relied on its own renderer to autoplay the iframe. Once
-    // the content flows through TipTap (quoting a post, opening the
-    // editor with a URL-only quote, etc.), the URL just becomes a plain
-    // link. Convert those standalone paragraphs to lite-embed wrappers
-    // so the user sees the same facade they see in the post.
-    //
-    // Only paragraphs whose textContent is EXACTLY a single URL qualify.
-    // "Check out https://youtube.com/…" is left alone. Nor does this
-    // touch inline links, images, or any other element — it only
-    // matches <p>…</p> whose entire trimmed text is a URL with a
-    // recognized hostname.
     function transformBareVideoUrls(html) {
         if (!html || typeof html !== 'string') return html;
         if (html.indexOf('http') === -1) return html;
@@ -673,7 +630,6 @@ var MessengerModule = (function(Utils, EventBus) {
         var paragraphs = tempDiv.querySelectorAll('p');
         paragraphs.forEach(function(p) {
             var text = (p.textContent || '').trim();
-            // Must be exactly one URL — no surrounding prose
             if (!/^https?:\/\/\S+$/.test(text)) return;
 
             if (isYouTubeHostname(text)) {
@@ -717,14 +673,166 @@ var MessengerModule = (function(Utils, EventBus) {
         return tempDiv.innerHTML;
     }
 
-    // Wraps loose inline runs in <p> elements, strips redundant <br>s,
-    // and recurses into blockquotes / spoiler content so that the
-    // inner paragraphs are also normalised. The quote-cleaning regexes
-    // in legacyToHtml produce content like "line1\nline2" — this turns
-    // that into " <p>line1</p><p>line2</p> " so TipTap's paragraph
-    // schema accepts it. Also handles the case where the legacy body
-    // was a single continuous run of inline content between two block
-    // elements — a very common shape for old forum posts.
+    function convertEmojisForEditor(html) {
+        if (!html || typeof html !== 'string') return html;
+        if (html.indexOf('<img') === -1 && html.search(/[\u{1F000}-\u{1FFFF}\u{2600}-\u{27BF}\u{FE0F}]/u) === -1) {
+            return html;
+        }
+
+        var tempDiv = document.createElement('div');
+        tempDiv.innerHTML = html;
+
+        if (window.FF_EMOJI_MAP && typeof window.FF_EMOJI_MAP.get === 'function') {
+            tempDiv.querySelectorAll('img').forEach(function (img) {
+                var src = img.getAttribute('src') || '';
+                var filename = window.FF_EMOJI_MAP.get(src);
+                if (!filename) return;
+                img.setAttribute('src', TWEMOJI_BASE + filename);
+                if (!img.classList.contains('twemoji')) img.classList.add('twemoji');
+            });
+        }
+
+        tempDiv.querySelectorAll('img[src*="twemoji"]').forEach(function (img) {
+            if (!img.getAttribute('width')) img.setAttribute('width', '24');
+            if (!img.getAttribute('height')) img.setAttribute('height', '24');
+            if (!img.classList.contains('twemoji')) img.classList.add('twemoji');
+        });
+
+        if (window.twemoji && typeof window.twemoji.parse === 'function') {
+            try {
+                window.twemoji.parse(tempDiv, {
+                    base: 'https://twemoji.maxcdn.com/v/latest/',
+                    folder: 'svg',
+                    ext: '.svg',
+                    className: 'twemoji'
+                });
+                tempDiv.querySelectorAll('img.twemoji').forEach(function (img) {
+                    if (!img.getAttribute('width')) img.setAttribute('width', '24');
+                    if (!img.getAttribute('height')) img.setAttribute('height', '24');
+                });
+            } catch (e) {
+                console.warn('[MessengerModule] twemoji.parse failed:', e);
+            }
+        }
+
+        return tempDiv.innerHTML;
+    }
+
+    function buildLinkPreviewSpan(url, title, description, imageSrc) {
+        if (!url) return null;
+        var span = document.createElement('span');
+        span.setAttribute('data-type', 'link-preview');
+        span.setAttribute('data-href', url);
+        if (title) span.setAttribute('data-title', title);
+        if (description) span.setAttribute('data-description', description);
+        if (imageSrc) span.setAttribute('data-image-src', imageSrc);
+        return span;
+    }
+
+    function parseEmbedContainerForEditor(container) {
+        try {
+            var visiblePart = container.children[1];
+            if (!visiblePart) return null;
+            var previewDiv = visiblePart.children[0];
+            var contentDiv = visiblePart.children[1] || visiblePart.children[0];
+            if (!contentDiv) return null;
+
+            var imageSrc = '';
+            if (previewDiv) {
+                var previewImg = previewDiv.querySelector('img');
+                if (previewImg) imageSrc = previewImg.getAttribute('src') || '';
+            }
+
+            var titleLink = contentDiv.querySelector('a');
+            var title = titleLink ? titleLink.textContent.trim() : '';
+            var url = titleLink ? titleLink.getAttribute('href') : '';
+            if (!url) return null;
+
+            var clone = contentDiv.cloneNode(true);
+            clone.querySelectorAll('a').forEach(function (a) { a.remove(); });
+            var description = clone.textContent.trim()
+                .replace(/\s*Leggi altro su\s*/gi, '')
+                .replace(/\s*[>›]\s*$/, '')
+                .trim();
+
+            return buildLinkPreviewSpan(url, title, description, imageSrc);
+        } catch (e) {
+            return null;
+        }
+    }
+
+    function transformLegacyEmbedLinks(html) {
+        if (!html || typeof html !== 'string') return html;
+        if (html.indexOf('ffb_embedlink') === -1 &&
+            !/Leggi altro su|Read more on|Continua a leggere/i.test(html)) return html;
+
+        var tempDiv = document.createElement('div');
+        tempDiv.innerHTML = html;
+
+        tempDiv.querySelectorAll('.ffb_embedlink').forEach(function (container) {
+            var span = parseEmbedContainerForEditor(container);
+            if (span) container.parentNode.replaceChild(span, container);
+        });
+
+        tempDiv.querySelectorAll('a.ffb_embedlink_preview').forEach(function (previewAnchor) {
+            if (previewAnchor.closest('[data-type="link-preview"]')) return;
+
+            var url = previewAnchor.getAttribute('href') || '';
+            if (!url) return;
+
+            var previewImg = previewAnchor.querySelector('img');
+            var imageSrc = previewImg ? (previewImg.getAttribute('src') || '') : '';
+
+            var imagePara = previewAnchor.closest('p');
+            if (!imagePara) return;
+
+            var faviconPara = imagePara.previousElementSibling;
+            var infoPara = imagePara.nextElementSibling;
+
+            var faviconValid = false;
+            if (faviconPara && faviconPara.tagName === 'P' &&
+                faviconPara.querySelector('img') && faviconPara.querySelector('a')) {
+                faviconValid = true;
+            }
+
+            var infoValid = false;
+            var title = '';
+            var description = '';
+            if (infoPara && infoPara.tagName === 'P') {
+                var infoText = infoPara.textContent || '';
+                var hasReadMore = /Leggi altro su|Read more on|Continua a leggere/i.test(infoText);
+                var endsWithArrow = /[>›]\s*$/.test(infoText.trim());
+
+                if (hasReadMore || endsWithArrow) {
+                    infoValid = true;
+                    var infoLinks = infoPara.querySelectorAll('a');
+                    if (infoLinks.length >= 1) title = infoLinks[0].textContent.trim();
+
+                    description = infoText;
+                    if (title) description = description.replace(title, '');
+                    description = description
+                        .replace(/\s*Leggi altro su\s+[\w.]+\s*[>›]?\s*$/i, '')
+                        .replace(/\s*Read more on\s+[\w.]+\s*[>›]?\s*$/i, '')
+                        .replace(/\s*Continua a leggere\s+[\w.]+\s*[>›]?\s*$/i, '')
+                        .trim();
+                }
+            }
+
+            if (!title) title = previewAnchor.getAttribute('title') || '';
+
+            var span = buildLinkPreviewSpan(url, title, description, imageSrc);
+            if (!span) return;
+
+            var insertBefore = faviconValid ? faviconPara : imagePara;
+            insertBefore.parentNode.insertBefore(span, insertBefore);
+            if (faviconValid) faviconPara.remove();
+            imagePara.remove();
+            if (infoValid) infoPara.remove();
+        });
+
+        return tempDiv.innerHTML;
+    }
+
     function paragraphizeLegacyHtml(html) {
         if (!html || typeof html !== 'string') return html;
         try {
@@ -816,12 +924,6 @@ var MessengerModule = (function(Utils, EventBus) {
         }
     }
 
-    // Walk every <img> in the HTML and add width/height attributes for
-    // any that don't already declare them. Runs in parallel; capped at
-    // 4 seconds per image so a dead URL can't stall the whole load. The
-    // browser reserves layout space as soon as width/height are present,
-    // which prevents the cumulative-layout-shift spike you get when
-    // images pop in one by one after the text has already reflowed.
     function enrichImageDimensions(html) {
         if (!html || html.indexOf('<img') === -1) return Promise.resolve(html);
 
@@ -878,9 +980,6 @@ var MessengerModule = (function(Utils, EventBus) {
         });
     }
 
-    // ------------------------------------------------------------------------
-    // SYNTAX HIGHLIGHTING (READER / PREVIEW SIDE ONLY)
-    // ------------------------------------------------------------------------
     var CODE_HIGHLIGHT_KEYWORDS = [
         'abstract','as','assert','async','await','bool','break','case','catch','class','const','continue',
         'def','default','del','delete','do','elif','else','enum','except','export','extends','False','false',
@@ -934,9 +1033,6 @@ var MessengerModule = (function(Utils, EventBus) {
         return html;
     }
 
-    // ------------------------------------------------------------------------
-    // SEND CONFIRMATION
-    // ------------------------------------------------------------------------
     var LAST_SEND_KEY = 'messenger-last-send-v1';
     var LAST_SEND_TTL = 60000;
 
@@ -1051,9 +1147,6 @@ var MessengerModule = (function(Utils, EventBus) {
         return banner;
     }
 
-    // ------------------------------------------------------------------------
-    // RECENTS + PER-RECIPIENT DRAFTS
-    // ------------------------------------------------------------------------
     var RECENTS_KEY = 'messenger-recents-v1';
     var RECENTS_MAX = 8;
 
@@ -1135,9 +1228,6 @@ var MessengerModule = (function(Utils, EventBus) {
         }
     }
 
-    // ------------------------------------------------------------------------
-    // PUBLIC API
-    // ------------------------------------------------------------------------
     function initialize() {
         if (isInitialized) return Promise.resolve();
         if (document.body.id !== 'msg') return Promise.resolve();
@@ -1226,9 +1316,6 @@ var MessengerModule = (function(Utils, EventBus) {
             _originalEmoticon = null;
         }
 
-        // Unregister any observers that never fired their own
-        // self-cleanup — e.g. when the module is reset before the
-        // target element appeared on the page.
         observerCallbacks.forEach(function(id) {
             if (globalThis.forumObserver && typeof globalThis.forumObserver.unregister === 'function') {
                 try { globalThis.forumObserver.unregister(id); } catch (e) {}
@@ -1236,18 +1323,12 @@ var MessengerModule = (function(Utils, EventBus) {
         });
         observerCallbacks = [];
 
-        // Remove every listener registered through addGlobalListener.
-        // Reverse iteration so a callback that (indirectly) causes
-        // another registration can't extend the array mid-loop.
         for (var i = _boundHandlers.length - 1; i >= 0; i--) {
             var h = _boundHandlers[i];
             try { h.el.removeEventListener(h.type, h.handler, h.opts); } catch (e) {}
         }
         _boundHandlers = [];
 
-        // Tear down the editor. Its extensions, node views, and
-        // ProseMirror plugins all register their own listeners and
-        // timers; destroy() is the only path that releases them.
         if (_editorInstance) {
             try {
                 if (typeof _editorInstance.destroy === 'function') {
@@ -1257,10 +1338,6 @@ var MessengerModule = (function(Utils, EventBus) {
             _editorInstance = null;
         }
 
-        // The dropdown backdrop is appended to document.body, so it
-        // survives the removal of #modern-messenger. Tear it down here
-        // so a reset() + initialize() cycle doesn't leave an orphan
-        // overlay sitting on top of the page.
         if (_dropdownBackdrop && _dropdownBackdrop.parentNode) {
             _dropdownBackdrop.parentNode.removeChild(_dropdownBackdrop);
         }
@@ -1280,9 +1357,6 @@ var MessengerModule = (function(Utils, EventBus) {
         });
     }
 
-    // ------------------------------------------------------------------------
-    // TOAST NOTIFICATIONS
-    // ------------------------------------------------------------------------
     function ensureToastContainer() {
         var c = document.getElementById('messenger-toasts');
         if (!c) {
@@ -1349,9 +1423,6 @@ var MessengerModule = (function(Utils, EventBus) {
         }, duration);
     }
 
-    // ------------------------------------------------------------------------
-    // CURRENT USER RESOLUTION
-    // ------------------------------------------------------------------------
     var _currentUserCache = null;
 
     function getCurrentUserId() {
@@ -1507,11 +1578,6 @@ var MessengerModule = (function(Utils, EventBus) {
         setTimeout(tryAttach, 200);
     }
 
-    // ------------------------------------------------------------------------
-    // SENDER AVATAR RESOLUTION (messages list)
-    // ------------------------------------------------------------------------
-    // Cached per-MID so a page with many messages from the same
-    // handful of senders fires one fetch each.
     function fetchSenderAvatar(mid) {
         if (!mid) return Promise.resolve(null);
         if (_senderAvatarCache.has(mid)) return Promise.resolve(_senderAvatarCache.get(mid));
@@ -1522,10 +1588,6 @@ var MessengerModule = (function(Utils, EventBus) {
                 var user = data['m' + mid] || data.info;
                 var result = {
                     avatar: (user && typeof user.avatar === 'string' && user.avatar) ? user.avatar : null,
-                    // Field name is unconfirmed — inspect the JSON shape of
-                    // /api.php?mid=X once to find out what the group is
-                    // called. Common candidates: user.group, user.role,
-                    // user.userGroup, user.user_group, user.position.
                     group: (user && typeof user.group === 'string') ? user.group : null
                 };
                 _senderAvatarCache.set(mid, result);
@@ -1537,9 +1599,6 @@ var MessengerModule = (function(Utils, EventBus) {
             });
     }
 
-    // ------------------------------------------------------------------------
-    // MENTION SEARCH
-    // ------------------------------------------------------------------------
     var _mentionSearchAbort = null;
 
     function searchMentions(query) {
@@ -1576,9 +1635,6 @@ var MessengerModule = (function(Utils, EventBus) {
         });
     }
 
-    // ------------------------------------------------------------------------
-    // RECIPIENT AUTOCOMPLETE
-    // ------------------------------------------------------------------------
     function attachRecipientAutocomplete(inputEl, onCommit) {
         if (!inputEl) return;
 
@@ -1797,14 +1853,6 @@ var MessengerModule = (function(Utils, EventBus) {
         });
     }
 
-    // ------------------------------------------------------------------------
-    // CONTACTS CHIP INPUT
-    // ------------------------------------------------------------------------
-    // Replaces the newline-separated <textarea> that the legacy contacts
-    // page uses for the friends list and the blocked users list. Each
-    // name is a removable pill; adding uses the same autocomplete the
-    // compose recipient field uses. The hidden textarea stays as the
-    // form field the server submits, kept in sync on every add/remove.
     function buildContactsChipInput(hiddenTextarea, placeholder) {
         var container = document.createElement('div');
         container.className = 'contacts-chip-input';
@@ -1821,8 +1869,6 @@ var MessengerModule = (function(Utils, EventBus) {
         addInput.setAttribute('spellcheck', 'false');
         container.appendChild(addInput);
 
-        // Seed from the existing textarea value. Trim, filter, and
-        // dedupe case-insensitively while preserving first-seen case.
         var names = (hiddenTextarea && hiddenTextarea.value || '')
             .split(/\n+/)
             .map(function(s) { return s.trim(); })
@@ -1882,13 +1928,10 @@ var MessengerModule = (function(Utils, EventBus) {
             addInput.value = '';
         }
 
-        // Reuse the recipient autocomplete for search + free-text commit.
         attachRecipientAutocomplete(addInput, function(user) {
             if (user && user.name) addName(user.name);
         });
 
-        // Extra keyboard: Backspace on empty removes the last chip (Gmail
-        // pattern); comma commits the typed text as a chip.
         addInput.addEventListener('keydown', function(e) {
             if (e.key === 'Backspace' && !addInput.value && names.length > 0) {
                 e.preventDefault();
@@ -1904,9 +1947,6 @@ var MessengerModule = (function(Utils, EventBus) {
             }
         });
 
-        // Clicking anywhere inside the chip container that isn't a
-        // chip-remove button focuses the add input — standard chip-input
-        // behaviour for Gmail/Notion-style controls.
         container.addEventListener('click', function(e) {
             if (e.target.closest('.contacts-chip-remove')) return;
             addInput.focus();
@@ -1917,9 +1957,6 @@ var MessengerModule = (function(Utils, EventBus) {
         return container;
     }
 
-    // ------------------------------------------------------------------------
-    // SEMANTIC COLOR PALETTE
-    // ------------------------------------------------------------------------
     var LEGACY_COLOR_MAP = {
         green: 'primary', darkgreen: 'primary', limegreen: 'primary',
         blue: 'info', darkblue: 'info', navy: 'info', dodgerblue: 'info', cyan: 'info', teal: 'info',
@@ -1944,9 +1981,6 @@ var MessengerModule = (function(Utils, EventBus) {
         return LEGACY_COLOR_MAP[key] || null;
     }
 
-    // ------------------------------------------------------------------------
-    // CONVERTERS
-    // ------------------------------------------------------------------------
     function legacyToHtml(legacy) {
         if (!legacy) return '';
         var html = legacy;
@@ -2019,22 +2053,45 @@ var MessengerModule = (function(Utils, EventBus) {
         html = html.replace(/\[url=([^\]]+)\](.*?)\[\/url\]/gi, '<a href="$1" target="_blank">$2</a>');
         html = html.replace(/\[img\](.*?)\[\/img\]/gi, '<img src="$1" alt="image" loading="lazy" decoding="async">');
 
-        // Use data-author to avoid overlapping the CSS pseudo-elements.
-        // Handles both [QUOTE]body[/QUOTE] and [QUOTE=Alice]body[/QUOTE].
-        // The optional comma-separated second part of [QUOTE=Alice,123]
-        // is ignored — only the first segment (the author name) matters.
+        // [QUOTE=...] parser (parity with editor-module.js).
+        // Legacy format: [QUOTE=Author,Date, Time URL]
+        //   - Splits author at first comma, date at second, everything
+        //     else is the "tail". The tail can contain a comma inside the
+        //     time part ("11:25 PM"), so slice(2).join(',') preserves it.
+        //   - The URL is the trailing whitespace-delimited token that
+        //     starts with ?, /, #, or http(s):// — trimmed off if present.
         html = html.replace(/\[QUOTE(?:=([^\]]+))?\]([\s\S]*?)\[\/QUOTE\]/gi, function(match, params, body) {
             var author = '';
+            var timestamp = '';
+            var url = '';
+
             if (params) {
                 var parts = params.split(',');
-                if (parts.length > 0 && parts[0].trim()) {
-                    author = parts[0].trim();
+                if (parts.length >= 1) author = parts[0].trim();
+
+                if (parts.length >= 2) {
+                    var date = parts[1].trim();
+                    var tail = parts.slice(2).join(',').trim();
+
+                    var urlMatch = tail.match(/^(.*?)\s+([?#\/]\S*$|https?:\/\/\S+$)/);
+                    if (urlMatch) {
+                        var timePart = urlMatch[1].trim();
+                        timestamp = date + (timePart ? ', ' + timePart : '');
+                        url = urlMatch[2].trim();
+                    } else {
+                        timestamp = date + (tail ? ', ' + tail : '');
+                    }
+
+                    if (url && url.charAt(0) === '?') url = '/' + url;
                 }
             }
-            if (author) {
-                return '<blockquote data-author="' + escapeHtml(author) + '">' + body + '</blockquote>';
-            }
-            return '<blockquote>' + body + '</blockquote>';
+
+            var attrs = '';
+            if (author)    attrs += ' data-author="' + escapeHtml(author) + '"';
+            if (timestamp) attrs += ' data-timestamp="' + escapeHtml(timestamp) + '"';
+            if (url)       attrs += ' data-url="' + escapeHtml(url) + '"';
+
+            return '<blockquote' + attrs + '>' + body + '</blockquote>';
         });
         html = html.replace(/\[code\](.*?)\[\/code\]/gis, '<pre><code>$1</code></pre>');
         html = html.replace(/\[spoiler\](.*?)\[\/spoiler\]/gis, '<div class="spoiler">$1</div>');
@@ -2089,10 +2146,12 @@ var MessengerModule = (function(Utils, EventBus) {
         }
 
         var html = legacyToHtml(expanded);
-        html = transformLegacyIframes(html);       // <iframe> → lite-embed wrapper
-        html = paragraphizeLegacyHtml(html);       // wrap loose inline runs
-        html = transformBareVideoUrls(html);       // URL-only <p> → lite embed
-        return await enrichImageDimensions(html);  // reserve width/height
+        html = transformLegacyIframes(html);
+        html = paragraphizeLegacyHtml(html);
+        html = transformLegacyEmbedLinks(html);
+        html = transformBareVideoUrls(html);
+        html = convertEmojisForEditor(html);
+        return await enrichImageDimensions(html);
     }
 
     function htmlToLegacy(html) {
@@ -2105,12 +2164,6 @@ var MessengerModule = (function(Utils, EventBus) {
         for (var i = 0; i < maxIterations; i++) {
             var before = result;
 
-            // v16: drop any upload placeholder markers. The node is a
-            // runtime-only construct — on success it is replaced by a
-            // real image node, on failure it stays until dismissed.
-            // This is defensive: if the user somehow triggers submit
-            // while an upload is still in flight, the marker is
-            // removed from the payload rather than sent as-is.
             result = result.replace(
                 /<span[^>]*\bff-upload-placeholder-marker\b[^>]*>\s*<\/span>/gi,
                 ''
@@ -2137,21 +2190,34 @@ var MessengerModule = (function(Utils, EventBus) {
                 }
             );
 
-            // Read from data-author. The injected header paragraph (added
-            // by CustomBlockquote on the editor side) is stripped here so
-            // an authored quote round-trips as [QUOTE=Author] rather than
-            // [QUOTE]Author said:\n…
+            // <blockquote> → [QUOTE=...] serializer (parity with editor-module.js).
+            // Rebuild the legacy format exactly:
+            //   [QUOTE=Author]
+            //   [QUOTE=Author,Date]
+            //   [QUOTE=Author,Date, Time]
+            //   [QUOTE=Author,Date, Time URL]
+            // The leading "/" added during parse is stripped back off so
+            // the round-trip is byte-identical.
             result = result.replace(/<blockquote([^>]*)>([\s\S]*?)<\/blockquote>/gi, function(match, attrs, inner) {
-                // Remove the injected author header paragraph
                 inner = inner.replace(/<p class="quote-author-header">[\s\S]*?<\/p>/gi, '');
-
-                var cleaned = inner.replace(/<p[^>]*>/gi, '').replace(/<\/p>\s*/gi, '\n');
-                cleaned = cleaned.replace(/\n+$/, '');
+                var cleaned = inner.replace(/<p[^>]*>/gi, '').replace(/<\/p>\s*/gi, '\n\n').replace(/\n+$/, '');
 
                 var authorMatch = attrs.match(/data-author="([^"]*)"/);
+                var tsMatch     = attrs.match(/data-timestamp="([^"]*)"/);
+                var urlMatch    = attrs.match(/data-url="([^"]*)"/);
+
                 if (authorMatch) {
                     var author = decodeHtmlEntities(authorMatch[1]);
-                    return '[QUOTE=' + author + ']' + cleaned + '[/QUOTE]';
+                    var ts     = tsMatch  ? decodeHtmlEntities(tsMatch[1])  : '';
+                    var url    = urlMatch ? decodeHtmlEntities(urlMatch[1]) : '';
+
+                    if (url.charAt(0) === '/') url = url.slice(1);
+
+                    var params = author;
+                    if (ts)  params += ',' + ts;
+                    if (url) params += ' ' + url;
+
+                    return '[QUOTE=' + params + ']' + cleaned + '[/QUOTE]';
                 }
 
                 return '[QUOTE]' + cleaned + '[/QUOTE]';
@@ -2197,9 +2263,6 @@ var MessengerModule = (function(Utils, EventBus) {
         return result;
     }
 
-    // ------------------------------------------------------------------------
-    // PREVIEW HTML TRANSFORM
-    // ------------------------------------------------------------------------
     function transformPreviewHtml(html) {
         if (!html || typeof html !== 'string') return html;
 
@@ -2209,7 +2272,6 @@ var MessengerModule = (function(Utils, EventBus) {
         Array.from(temp.querySelectorAll('blockquote')).forEach(function(bq) {
             var author = bq.getAttribute('data-author');
 
-            // Strip the injected header paragraph (added by CustomBlockquote)
             var headerPara = bq.querySelector('.quote-author-header');
             if (headerPara) headerPara.remove();
 
@@ -2321,9 +2383,6 @@ var MessengerModule = (function(Utils, EventBus) {
         return temp.innerHTML;
     }
 
-    // ------------------------------------------------------------------------
-    // PREVIEW INTERACTION HANDLERS
-    // ------------------------------------------------------------------------
     function handlePreviewQuoteExpand(btn) {
         var quote = btn.closest('.modern-quote');
         if (!quote) return;
@@ -2610,9 +2669,6 @@ var MessengerModule = (function(Utils, EventBus) {
         });
     }
 
-    // ------------------------------------------------------------------------
-    // ASCII EMOTICON MAP (Converse.js)
-    // ------------------------------------------------------------------------
     var ASCII_EMOTICON_MAP = {
         '*\\0/*':'1f646', '*\\O/*':'1f646', '-___-':'1f611', ':\'-)':'1f602',
         '\':-)':'1f605', '\':-D':'1f605', '>:-)':'1f606', '\':-(':'1f613',
@@ -2645,9 +2701,6 @@ var MessengerModule = (function(Utils, EventBus) {
         '=]':'1f642', '=)':'1f642', ':]':'1f642'
     };
 
-    // ------------------------------------------------------------------------
-    // CODE LANGUAGE SUGGESTIONS
-    // ------------------------------------------------------------------------
     var CODE_LANGUAGE_SUGGESTIONS = [
         "Ren'Py", 'Python', 'JavaScript', 'TypeScript', 'Lua',
         'HTML', 'CSS', 'JSON', 'XML', 'YAML',
@@ -2657,9 +2710,6 @@ var MessengerModule = (function(Utils, EventBus) {
         'Markdown', 'Plain text'
     ];
 
-    // ------------------------------------------------------------------------
-    // EMOJI PICKER
-    // ------------------------------------------------------------------------
     var EMOJI_GROUPS = [
         { name: 'Emojis', emojis: [
             '😀','😃','😄','😁','😆','😅','🤣','😂','🙂','😉','😊','😇','🥰','😍','🤩','😘','🥲','😏','😋','😛','😜','🤪','😝','🤗','🤭','🤫','🤔','🤤','🥳','😎','🤓','🧐','🙃','🤐','🤨','😒','🙄','😬','😌','😔','😪','😴','😷','🤒','🤕','🤢','🤮','🤧','🥵','🥶','😵','🤯','😕','😟','🙁','😮','😲','😳','🥺','😨','😥','😢','😭','😱','😖','😣','😞','😓','😩','😫','😤','😡','😠','🤬','😈','👿','💀','💩','🤡','👋','👌','👍','👎','✊','👏','🙏','💪','👀','🤦','🤷','🎉','❤️','💔','🔥','💯','💥'
@@ -2726,9 +2776,6 @@ var MessengerModule = (function(Utils, EventBus) {
         return codePoints.join('-');
     }
 
-    // ========================================================================
-    // COMPOSE SECTION
-    // ========================================================================
     function buildComposeSection() {
         var recipientInput   = document.querySelector('input[name="entered_name"]');
         var contactSelect    = document.querySelector('select[name="from_contact"]');
@@ -2857,9 +2904,6 @@ var MessengerModule = (function(Utils, EventBus) {
         var recipientChipName   = container.querySelector('.modern-recipient-chip-name');
         var recipientChipRemove = container.querySelector('.modern-recipient-chip-remove');
 
-        // ------------------------------------------------------------------
-        // DRAFT MANAGEMENT
-        // ------------------------------------------------------------------
         function getCurrentDraftKey() {
             return (currentRecipient && currentRecipient.id)
                 ? String(currentRecipient.id)
@@ -2922,15 +2966,9 @@ var MessengerModule = (function(Utils, EventBus) {
             if (document.visibilityState === 'hidden') flushPendingDraft();
         });
 
-        // ------------------------------------------------------------------
-        // LIVE PREVIEW REFRESH
-        // ------------------------------------------------------------------
         function updateLivePreview() {
             if (!editor || editorContentIsEmpty(editor.getHTML())) return;
 
-            // v17: skip the re-render while any placeholder exists — its
-            // own card is its UI, and the preview would just repaint on
-            // every progress tick during an upload.
             var hasPlaceholder = false;
             editor.state.doc.content.content.some(function(child) {
                 if (child.type.name === 'imageUploadPlaceholder') {
@@ -2970,13 +3008,6 @@ var MessengerModule = (function(Utils, EventBus) {
             var hasSubject   = !!(modernTitle && modernTitle.value.trim().length > 0);
             var hasBody      = !!(editor && !editorContentIsEmpty(editor.getHTML()));
 
-            // v17: any placeholder — idle, uploading, or failed — blocks
-            // Send. An idle placeholder means "the user is about to add
-            // an image"; a failed one means the image never arrived. In
-            // both cases, sending would silently drop content the user
-            // intended to include. The placeholder is stripped from the
-            // serialized payload by htmlToLegacy, so the send itself
-            // would succeed — which is exactly the problem.
             var hasPlaceholder = false;
             if (editor) {
                 editor.state.doc.descendants(function(node) {
@@ -3294,14 +3325,6 @@ var MessengerModule = (function(Utils, EventBus) {
                 return;
             }
 
-            // Rebuild the header rather than mutating it in place. The sync-
-            // built header has no group info — user.group isn't part of the
-            // menuwrap DOM — so its wrapper class is always 'group-member'.
-            // Mutating name / href / avatar on that header leaves the class
-            // stale. Building a fresh header and swapping it in carries the
-            // correct group class, the correct avatar, and the correct
-            // profile link all at once. There are no event listeners on the
-            // header, so replacing it is safe.
             var newHeader = buildReplyingAsHeader(user);
             if (!newHeader) return;
 
@@ -3310,7 +3333,6 @@ var MessengerModule = (function(Utils, EventBus) {
             } else if (replyingAsPlaceholder.parentNode) {
                 replyingAsPlaceholder.parentNode.replaceChild(newHeader, replyingAsPlaceholder);
             } else {
-                // Header position is gone — shouldn't fire, but don't crash.
                 return;
             }
 
@@ -3333,7 +3355,11 @@ var MessengerModule = (function(Utils, EventBus) {
 
         function exec(cmd) {
             if (!editor) return;
-            cmd();
+            try {
+                cmd();
+            } catch (err) {
+                console.error('[MessengerModule] Editor command failed:', err);
+            }
             editor.commands.focus();
         }
 
@@ -3388,11 +3414,6 @@ var MessengerModule = (function(Utils, EventBus) {
         colorDropdownContainer.appendChild(colorDropdownMenu);
         toolbar.appendChild(colorDropdownContainer);
 
-        // --- Mobile-aware dropdown helpers -----------------------------
-        // On desktop the menus anchor to their trigger and the JS positioner
-        // flips them above the button or right-aligns them if there's no room.
-        // On mobile (≤680px) they render as bottom sheets with a backdrop,
-        // matching the platform picker that Discord, Slack, and Notion use.
         var _lastMobileMode = isMobileSheetMode();
 
         function isMobileSheetMode() {
@@ -3426,8 +3447,6 @@ var MessengerModule = (function(Utils, EventBus) {
             var vh = window.innerHeight;
             var margin = 8;
 
-            // Horizontal — prefer left-aligned; fall back to right-aligned;
-            // fall back to clamping the width to the available space.
             var spaceRight = vw - btnRect.left - margin;
             var spaceLeft = btnRect.right - margin;
             if (menuRect.width <= spaceRight) {
@@ -3442,7 +3461,6 @@ var MessengerModule = (function(Utils, EventBus) {
                 menu.style.maxWidth = Math.max(120, spaceRight) + 'px';
             }
 
-            // Vertical — prefer below; flip above if no room; else cap height.
             var spaceBelow = vh - btnRect.bottom - margin;
             var spaceAbove = btnRect.top - margin;
             if (menuRect.height <= spaceBelow) {
@@ -3668,12 +3686,6 @@ var MessengerModule = (function(Utils, EventBus) {
         addSeparator();
 
         var linkBtn = makeToolbarButton('fa-regular fa-link', 'Insert link', { shortcut: 'Control+K' });
-
-        // v17: image button is now a plain insert. It drops an idle
-        // imageUploadPlaceholder at the cursor; that placeholder carries
-        // the dropzone, the file picker, and the "insert by URL" link.
-        // The old By URL / Upload from computer dropdown has been
-        // removed — its two options live inside the placeholder.
         var imageBtn = makeToolbarButton('fa-regular fa-image', 'Insert image');
 
         addSeparator();
@@ -3690,10 +3702,6 @@ var MessengerModule = (function(Utils, EventBus) {
             }
         });
 
-        // Close any open dropdown when the viewport crosses the mobile
-        // breakpoint — the positioning model flips between anchored menu
-        // and bottom sheet, so a mid-open transition would leave a stale
-        // layout behind.
         addGlobalListener(window, 'resize', function() {
             var nowMobile = isMobileSheetMode();
             if (nowMobile !== _lastMobileMode) {
@@ -3793,9 +3801,6 @@ var MessengerModule = (function(Utils, EventBus) {
             }
         };
 
-        // Clicks inside the panel background (labels, spacing, group
-        // separators) must not bubble out to the document handler,
-        // otherwise the panel closes on its own content.
         emojiPickerPanel.addEventListener('click', function(e) {
             e.stopPropagation();
         });
@@ -4568,6 +4573,7 @@ var MessengerModule = (function(Utils, EventBus) {
                 const lowlightModule = await import('https://esm.sh/lowlight@3');
                 const characterCountModule = await import('https://esm.sh/@tiptap/extension-character-count@2.5.2');
                 const typographyModule = await import('https://esm.sh/@tiptap/extension-typography@2.5.2');
+                const blockquoteModule = await import('https://esm.sh/@tiptap/extension-blockquote@2.5.2');
 
                 const StarterKit = starterKitModule.StarterKit || (starterKitModule.default && starterKitModule.default.StarterKit);
                 const Placeholder = placeholderModule.Placeholder || (placeholderModule.default && placeholderModule.default.Placeholder);
@@ -4588,11 +4594,18 @@ var MessengerModule = (function(Utils, EventBus) {
                     typographyModule.Typography ||
                     (typographyModule.default && typographyModule.default.Typography);
 
+                const Blockquote =
+                    blockquoteModule.Blockquote ||
+                    (blockquoteModule.default && blockquoteModule.default.Blockquote) ||
+                    blockquoteModule.default ||
+                    blockquoteModule;
+
                 if (!Mention) throw new Error('Mention extension not found');
                 if (!CodeBlockLowlight) throw new Error('CodeBlockLowlight extension not found');
                 if (!createLowlight || !common) throw new Error('lowlight createLowlight or common not found');
                 if (!CharacterCount) throw new Error('CharacterCount extension not found');
                 if (!Typography) throw new Error('Typography extension not found');
+                if (!Blockquote) throw new Error('Blockquote extension not found');
 
                 const lowlight = createLowlight(common);
 
@@ -4601,6 +4614,33 @@ var MessengerModule = (function(Utils, EventBus) {
                     autolink: true,
                     linkOnPaste: true,
                     HTMLAttributes: { target: '_blank', rel: 'noopener noreferrer' },
+                });
+
+                // CustomBlockquote — preserves data-author / data-timestamp /
+                // data-url on blockquote nodes. Without it, ProseMirror's
+                // default blockquote drops those attributes during parse,
+                // so quotes lose their author headers when they pass through
+                // the editor. Matches editor-module.js.
+                const CustomBlockquote = Blockquote.extend({
+                    addAttributes() {
+                        return {
+                            author: {
+                                default: null,
+                                parseHTML: el => el.getAttribute('data-author') || null,
+                                renderHTML: a => a.author ? { 'data-author': a.author } : {},
+                            },
+                            timestamp: {
+                                default: null,
+                                parseHTML: el => el.getAttribute('data-timestamp') || null,
+                                renderHTML: a => a.timestamp ? { 'data-timestamp': a.timestamp } : {},
+                            },
+                            url: {
+                                default: null,
+                                parseHTML: el => el.getAttribute('data-url') || null,
+                                renderHTML: a => a.url ? { 'data-url': a.url } : {},
+                            },
+                        };
+                    },
                 });
 
                 const CustomImage = BaseImage.extend({
@@ -4861,7 +4901,6 @@ var MessengerModule = (function(Utils, EventBus) {
                                 });
 
                                 xhr.addEventListener('abort', function() {
-                                    // Cleanup handled by the click handler.
                                 });
 
                                 const form = new FormData();
@@ -5023,7 +5062,6 @@ var MessengerModule = (function(Utils, EventBus) {
                     },
                 });
 
-                // Inline emoji node.
                 const Emoji = Node.create({
                     name: 'emoji',
                     inline: true,
@@ -5105,6 +5143,35 @@ var MessengerModule = (function(Utils, EventBus) {
                     }
                 });
 
+                // UnicodeEmojiRule — converts a unicode emoji at the cursor
+                // into a twemoji inline node the moment the user finishes
+                // typing it (fires on the following character or space).
+                // Matches editor-module.js.
+                const UnicodeEmojiRule = Extension.create({
+                    name: 'unicodeEmojiRule',
+                    addInputRules() {
+                        return [new InputRule({
+                            find: /([\u{1F300}-\u{1F9FF}\u{2600}-\u{27BF}\u{1F000}-\u{1F02F}])$/u,
+                            handler: function({ state, range, match }) {
+                                const emojiChar = match[1];
+                                const cp = emojiToCodePoint(emojiChar);
+                                state.tr.replaceWith(
+                                    range.to - emojiChar.length,
+                                    range.to,
+                                    state.schema.nodes.emoji.create({
+                                        src: TWEMOJI_BASE + cp + '.svg',
+                                        alt: emojiChar,
+                                        loading: 'lazy',
+                                        decoding: 'async',
+                                        width: 24,
+                                        height: 24
+                                    })
+                                );
+                            }
+                        })];
+                    }
+                });
+
                 const LinkPreview = Node.create({
                     name: 'linkPreview',
                     inline: true,
@@ -5114,12 +5181,36 @@ var MessengerModule = (function(Utils, EventBus) {
                     selectable: true,
                     addAttributes() {
                         return {
-                            href: { default: '' },
-                            title: { default: '' },
-                            description: { default: '' },
-                            author: { default: '' },
-                            imageSrc: { default: '' },
-                            loading: { default: false },
+                            href: {
+                                default: '',
+                                parseHTML: el => el.getAttribute('data-href') || '',
+                                renderHTML: attrs => attrs.href ? { 'data-href': attrs.href } : {},
+                            },
+                            title: {
+                                default: '',
+                                parseHTML: el => el.getAttribute('data-title') || '',
+                                renderHTML: attrs => attrs.title ? { 'data-title': attrs.title } : {},
+                            },
+                            description: {
+                                default: '',
+                                parseHTML: el => el.getAttribute('data-description') || '',
+                                renderHTML: attrs => attrs.description ? { 'data-description': attrs.description } : {},
+                            },
+                            author: {
+                                default: '',
+                                parseHTML: el => el.getAttribute('data-author') || '',
+                                renderHTML: attrs => attrs.author ? { 'data-author': attrs.author } : {},
+                            },
+                            imageSrc: {
+                                default: '',
+                                parseHTML: el => el.getAttribute('data-image-src') || '',
+                                renderHTML: attrs => attrs.imageSrc ? { 'data-image-src': attrs.imageSrc } : {},
+                            },
+                            loading: {
+                                default: false,
+                                parseHTML: el => el.getAttribute('data-loading') === 'true',
+                                renderHTML: attrs => attrs.loading ? { 'data-loading': 'true' } : {},
+                            },
                         };
                     },
                     parseHTML() {
@@ -5965,11 +6056,6 @@ var MessengerModule = (function(Utils, EventBus) {
                     },
                 });
 
-                // Load initial content through the async pipeline so the
-                // iframe / bare-URL transforms run. Previously this used
-                // legacyToHtml (sync) which skipped the transforms — a quote
-                // containing a YouTube iframe would render as a raw iframe
-                // tag inside the blockquote, and the editor would drop it.
                 var textareaRaw = originalTextarea ? (originalTextarea.value || '') : '';
                 var initialHtml = textareaRaw ? await legacyToHtmlAsync(textareaRaw) : '';
 
@@ -5990,7 +6076,8 @@ var MessengerModule = (function(Utils, EventBus) {
                 editor = new Editor({
                     element: editorElement,
                     extensions: [
-                        StarterKit.configure({ codeBlock: false }),
+                        StarterKit.configure({ codeBlock: false, blockquote: false }),
+                        CustomBlockquote,
                         CustomCodeBlock,
 
                         Placeholder.configure({
@@ -6014,6 +6101,7 @@ var MessengerModule = (function(Utils, EventBus) {
                         SemanticColor,
                         CustomMention,
                         EmoticonRule,
+                        UnicodeEmojiRule,
                         TrailingEmbedParagraph,
                         NormalizeEmptyDoc,
                         DeleteAdjacentAtom,
@@ -6044,7 +6132,6 @@ var MessengerModule = (function(Utils, EventBus) {
                                 .replace(/ {2,}/g, ' ');
                         },
                         handlePaste: function(view, event) {
-                            // 1. File paste (images)
                             var files = event.clipboardData ? event.clipboardData.files : null;
                             if (files && files.length) {
                                 var imgs = Array.prototype.slice.call(files).filter(function(f) {
@@ -6057,7 +6144,6 @@ var MessengerModule = (function(Utils, EventBus) {
                                 }
                             }
 
-                            // 2. Inline-code paste
                             if (view.state.selection.empty) {
                                 var $from = view.state.selection.$from;
                                 var codeMarkType = view.state.schema.marks.code;
@@ -6077,7 +6163,6 @@ var MessengerModule = (function(Utils, EventBus) {
                                 }
                             }
 
-                            // 3. Shift+paste (plain text override)
                             if (event.shiftKey) {
                                 var text = event.clipboardData.getData('text/plain');
                                 if (text) {
@@ -6087,7 +6172,6 @@ var MessengerModule = (function(Utils, EventBus) {
                                 }
                             }
 
-                            // 4. Image URL paste
                             if (view.state.selection.empty) {
                                 var imageUrlText = event.clipboardData
                                     ? event.clipboardData.getData('text/plain')
@@ -6128,7 +6212,6 @@ var MessengerModule = (function(Utils, EventBus) {
                                 }
                             }
 
-                            // 5. Lite embeds
                             var clipboard = event.clipboardData;
                             if (clipboard) {
                                 var htmlData = clipboard.getData('text/html');
@@ -6181,7 +6264,6 @@ var MessengerModule = (function(Utils, EventBus) {
                                 }
                             }
 
-                            // 6. Fall through to the default paste handler
                             return false;
                         },
                     },
@@ -6577,9 +6659,6 @@ var MessengerModule = (function(Utils, EventBus) {
         return container;
     }
 
-    // ========================================================================
-    // MESSAGES SECTION
-    // ========================================================================
     function buildModernMessagesSection() {
         var container = document.createElement('div');
         container.className = 'modern-messenger-section';
@@ -6663,8 +6742,6 @@ var MessengerModule = (function(Utils, EventBus) {
                     + '<div class="msg-select"><input type="checkbox" class="modern-checkbox-input" name="' + escapeHtml(msgName) + '" id="msg-' + i + '" aria-label="Select message"></div>';
                 listContainer.appendChild(msgRow);
 
-                // Swap the colored initial for the real avatar once
-                // /api.php?mid=X resolves. Failures keep the initial.
                 if (senderMid) {
                     (function(rowEl, mid) {
                         fetchSenderAvatar(mid).then(function(result) {
@@ -6764,9 +6841,6 @@ var MessengerModule = (function(Utils, EventBus) {
         return container;
     }
 
-    // ========================================================================
-    // CONTACTS SECTION
-    // ========================================================================
     function buildModernContactsSection() {
         var container = document.createElement('div');
         container.className = 'modern-messenger-section';
@@ -6778,7 +6852,6 @@ var MessengerModule = (function(Utils, EventBus) {
             var privacySelect   = document.querySelector('select[name="nobody_can_contact"]');
             var updateButton    = document.querySelector('input[value="Update Contact list"]');
 
-            // Friends card — chips
             var friendsCard = document.createElement('div');
             friendsCard.className = 'contacts-card';
 
@@ -6797,7 +6870,6 @@ var MessengerModule = (function(Utils, EventBus) {
             friendsCard.appendChild(friendsHelp);
             container.appendChild(friendsCard);
 
-            // Blocked card — chips
             var blockedCard = document.createElement('div');
             blockedCard.className = 'contacts-card';
 
@@ -6816,7 +6888,6 @@ var MessengerModule = (function(Utils, EventBus) {
             blockedCard.appendChild(blockedHelp);
             container.appendChild(blockedCard);
 
-            // Privacy card — unchanged
             var privacyVal = privacySelect ? privacySelect.value : '0';
             var privacyCard = document.createElement('div');
             privacyCard.className = 'contacts-card';
@@ -6828,7 +6899,6 @@ var MessengerModule = (function(Utils, EventBus) {
                 + '</div>';
             container.appendChild(privacyCard);
 
-            // Actions
             var actionsDiv = document.createElement('div');
             actionsDiv.className = 'contacts-actions';
             actionsDiv.innerHTML = '<button class="modern-btn modern-btn-primary" id="update-contacts"><i class="fa-regular fa-floppy-disk"></i> Update contact list</button>';
@@ -6857,9 +6927,6 @@ var MessengerModule = (function(Utils, EventBus) {
         return container;
     }
 
-    // ========================================================================
-    // CORE BUILDER
-    // ========================================================================
     function buildModernMessenger() {
         var wrapper = document.getElementById('modern-forum-wrapper');
         if (!wrapper) return;
