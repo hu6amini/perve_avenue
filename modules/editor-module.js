@@ -498,7 +498,7 @@ var EditorModule = (function (Utils, EventBus) {
     //    by twemoji.js at module load; skips silently if that module
     //    hasn't loaded yet (it'd be rare — both are in the same boot
     //    phase — but the guard keeps the editor functional).
-    if (window.FF_EMOJI_MAP && typeof window.FF_EMOJI_MAP.forEach === 'function') {
+    if (window.FF_EMOJI_MAP && typeof window.FF_EMOJI_MAP.get === 'function') {
         tempDiv.querySelectorAll('img').forEach(function (img) {
             var src = img.getAttribute('src') || '';
             var filename = window.FF_EMOJI_MAP.get(src);
