@@ -666,18 +666,23 @@
 .link-preview-card .embedded-link-image {
     flex: 0 0 180px;
     width: 180px;
-    height: auto;
+    min-height: 140px;
     align-self: stretch;
+    position: relative;
     overflow: hidden;
+    background: var(--bg-color);
 }
 
 .link-preview-card .link-preview-image {
+    position: absolute;
+    inset: 0;
     width: 100%;
     height: 100%;
     object-fit: cover;
     object-position: center;
     display: block;
 }
+
 .link-preview-content {
   flex: 1 1 0%;
   min-width: 0;
@@ -790,14 +795,7 @@
     .link-preview-card .embedded-link-image {
         flex: none;
         width: 100%;
-        height: auto;
-        max-height: 160px;
-    }
-    .link-preview-card .link-preview-image {
-        width: 100%;
-        height: auto;
-        max-height: 160px;
-        object-fit: cover;
+        height: 160px;
     }
 }
 
