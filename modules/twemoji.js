@@ -62,6 +62,14 @@ var TwemojiModule = (function() {
         ['https://img.forumfree.net/html/emoticons/new/blink.svg', '1f440.svg'] 
     ]);
 
+    // Expose for editor-module.js. The map is definitionally part of the
+// module's public contract — anything that converts forumfree URLs to
+// twemoji URLs needs the same source of truth. If the map grows, the
+// editor picks up the new entries automatically.
+if (typeof window !== 'undefined') {
+    window.FF_EMOJI_MAP = EMOJI_MAP;
+}
+
     const TWEMOJI_CONFIG = { 
         folder: 'svg',
         ext: '.svg',
