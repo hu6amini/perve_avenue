@@ -485,6 +485,66 @@ var EditorModule = (function (Utils, EventBus) {
         return tempDiv.innerHTML;
     }
 
+   function convertEmojisForEditor(html) {
+    if (!html || typeof html !== 'string') return html;
+    if (html.indexOf('<img') === -1 && html.search(/[\u{1F000}-\u{1FFFF}\u{2600}-\u{27BF}\u{FE0F}]/u) === -1) {
+        return html;
+    }
+
+    var tempDiv = document.createElement('div');
+    tempDiv.innerHTML = html;
+
+    // 1. Forumfree emoticon URLs → twemoji URLs. Reads the map exposed
+    //    by twemoji.js at module load; skips silently if that module
+    //    hasn't loaded yet (it'd be rare — both are in the same boot
+    //    phase — but the guard keeps the editor functional).
+    if (window.FF_EMOJI_MAP && typeof window.FF_EMOJI_MAP.forEach === 'function') {
+        tempDiv.querySelectorAll('img').forEach(function (img) {
+            var src = img.getAttribute('src') || '';
+            var filename = window.FF_EMOJI_MAP.get(src);
+            if (!filename) return;
+            img.setAttribute('src', TWEMOJI_BASE + filename);
+            if (!img.classList.contains('twemoji')) img.classList.add('twemoji');
+        });
+    }
+
+    // 2. Existing twemoji imgs from previous saves — normalise size.
+    //    These already have correct srcs; they just lack dimensions if
+    //    they came from the reader side (where twemoji.parse runs
+    //    without width/height). Setting the attributes here means
+    //    CustomImage's parseHTML reads a definite size and the CSS
+    //    fix has a defined baseline.
+    tempDiv.querySelectorAll('img[src*="twemoji"]').forEach(function (img) {
+        if (!img.getAttribute('width')) img.setAttribute('width', '24');
+        if (!img.getAttribute('height')) img.setAttribute('height', '24');
+        if (!img.classList.contains('twemoji')) img.classList.add('twemoji');
+    });
+
+    // 3. Unicode emojis → twemoji imgs. twemoji.parse skips code, pre,
+    //    script, style, textarea and similar — so [code]😀[/code]
+    //    survives untouched, which is what we want (an <img> inside a
+    //    code block would break the CodeBlock node).
+    if (window.twemoji && typeof window.twemoji.parse === 'function') {
+        try {
+            window.twemoji.parse(tempDiv, {
+                base: 'https://twemoji.maxcdn.com/v/latest/',
+                folder: 'svg',
+                ext: '.svg',
+                className: 'twemoji'
+            });
+            // twemoji.parse produces imgs without width/height.
+            tempDiv.querySelectorAll('img.twemoji').forEach(function (img) {
+                if (!img.getAttribute('width')) img.setAttribute('width', '24');
+                if (!img.getAttribute('height')) img.setAttribute('height', '24');
+            });
+        } catch (e) {
+            console.warn('[EditorModule] twemoji.parse failed:', e);
+        }
+    }
+
+    return tempDiv.innerHTML;
+}
+
    function buildLinkPreviewSpan(url, title, description, imageSrc) {
     if (!url) return null;
     var span = document.createElement('span');
@@ -1080,6 +1140,7 @@ function transformLegacyEmbedLinks(html) {
         html = paragraphizeLegacyHtml(html);
         html = transformLegacyEmbedLinks(html);
         html = transformBareVideoUrls(html);
+        html = convertEmojisForEditor(html);
 
         return await enrichImageDimensions(html);
     }
