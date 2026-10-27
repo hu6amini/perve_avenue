@@ -6680,65 +6680,71 @@ var MessengerModule = (function(Utils, EventBus) {
             var listContainer = document.createElement('div');
             listContainer.className = 'messages-list';
             for (var i = 0; i < messageRows.length; i++) {
-                var row = messageRows[i];
-                var isUnread   = row.classList.contains('on');
-                var titleLink  = row.querySelector('.bb h4 a');
-                var senderLink = row.querySelector('.xx a');
-                var dateSpan   = row.querySelector('.zz .when');
-                var date       = dateSpan ? (dateSpan.getAttribute('title') || dateSpan.textContent) : '';
-                var origCheckbox = row.querySelector('input[type="checkbox"]');
-                var msgName = origCheckbox ? origCheckbox.name : '';
+    var row = messageRows[i];
+    var isUnread   = row.classList.contains('on');
+    var titleLink  = row.querySelector('.bb h4 a');
+    var senderLink = row.querySelector('.xx a');
+    var dateSpan   = row.querySelector('.zz .when');
+    var date       = dateSpan ? (dateSpan.getAttribute('title') || dateSpan.textContent) : '';
+    var origCheckbox = row.querySelector('input[type="checkbox"]');
+    var msgName = origCheckbox ? origCheckbox.name : '';
 
-                var senderName = senderLink ? senderLink.textContent.trim() : 'Unknown';
-                var senderHref = senderLink ? senderLink.getAttribute('href') : '#';
-                var senderMid = null;
-                if (senderHref) {
-                    var midMatch = senderHref.match(/[?&]MID=(\d+)/);
-                    if (midMatch) senderMid = midMatch[1];
-                }
+    var senderName = senderLink ? senderLink.textContent.trim() : 'Unknown';
+    var senderHref = senderLink ? senderLink.getAttribute('href') : '#';
+    var senderMid = null;
+    if (senderHref) {
+        var midMatch = senderHref.match(/[?&]MID=(\d+)/);
+        if (midMatch) senderMid = midMatch[1];
+    }
 
-                var initial = getInitialFromName(senderName);
-                var bgColor = getColorFromNickname(senderName, senderMid);
+    // The legacy row already carries the sender's avatar in .yy.thumbs —
+    // either an <img> with the actual avatar or a .default-avatar div
+    // when the user has no custom avatar. Read it synchronously instead
+    // of calling /api.php, which returns 403 on the messenger subdomain.
+    // data-original holds the raw upload URL; src is the media-optimizer's
+    // weserv-rewritten version at its own size. Re-optimize data-original
+    // at 48×48 so the avatar isn't a downsized 250×250.
+    var avatarImg = row.querySelector('.yy.thumbs img');
+    var avatarSrc = null;
+    if (avatarImg) {
+        var origVal = avatarImg.getAttribute('data-original');
+        var srcVal = avatarImg.getAttribute('src');
+        if (origVal && /^https?:\/\//i.test(origVal)) {
+            avatarSrc = origVal;
+        } else if (srcVal && /^https?:\/\//i.test(srcVal)) {
+            avatarSrc = srcVal;
+        }
+    }
 
-                var msgRow = document.createElement('div');
-                msgRow.className = 'message-row' + (isUnread ? ' unread' : ' read');
-                msgRow.innerHTML = ''
-                    + '<div class="msg-status"><i class="fa-regular ' + (isUnread ? 'fa-envelope' : 'fa-envelope-open') + '"></i></div>'
-                    + '<div class="msg-title"><a href="' + escapeHtml(titleLink ? titleLink.getAttribute('href') : '#') + '">' + escapeHtml(titleLink ? titleLink.textContent.trim() : '(no title)') + '</a></div>'
-                    + '<div class="msg-sender">'
-                    +   '<a href="' + escapeHtml(senderHref) + '" class="msg-sender-link">'
-                    +     '<span class="msg-sender-avatar" style="background-color:#' + bgColor + ';">' + escapeHtml(initial) + '</span>'
-                    +     '<span class="msg-sender-name">' + escapeHtml(senderName) + '</span>'
-                    +   '</a>'
-                    + '</div>'
-                    + '<div class="msg-date">' + escapeHtml(formatDate(date)) + '</div>'
-                    + '<div class="msg-select"><input type="checkbox" class="modern-checkbox-input" name="' + escapeHtml(msgName) + '" id="msg-' + i + '" aria-label="Select message"></div>';
-                listContainer.appendChild(msgRow);
+    var initial = getInitialFromName(senderName);
+    var bgColor = getColorFromNickname(senderName, senderMid);
 
-                // Swap the colored initial for the real avatar once
-                // /api.php?mid=X resolves. Failures keep the initial.
-                if (senderMid) {
-                    (function(rowEl, mid) {
-                        fetchSenderAvatar(mid).then(function(result) {
-                            if (!result || !result.avatar) return;
-                            if (shouldUseInitialAvatar(result.avatar)) return;
-                            var avatarEl = rowEl.querySelector('.msg-sender-avatar');
-                            if (!avatarEl) return;
-                            var img = document.createElement('img');
-                            img.src = optimizeAvatarUrl(result.avatar, 48, 48) || result.avatar;
-                            img.alt = '';
-                            img.loading = 'lazy';
-                            img.decoding = 'async';
-                            avatarEl.innerHTML = '';
-                            avatarEl.style.backgroundColor = '';
-                            avatarEl.appendChild(img);
-                            if (result.group) {
-                                avatarEl.classList.add('group-' + result.group);
-                            }
-                        }).catch(function() {});
-                    })(msgRow, senderMid);
-                }
-            }
+    var avatarHtml;
+    if (avatarSrc && !shouldUseInitialAvatar(avatarSrc)) {
+        var optimizedSrc = optimizeAvatarUrl(avatarSrc, 48, 48) || avatarSrc;
+        avatarHtml = '<span class="msg-sender-avatar msg-sender-avatar--image">'
+            + '<img src="' + escapeHtml(optimizedSrc) + '" alt="" width="48" height="48" loading="lazy" decoding="async">'
+            + '</span>';
+    } else {
+        avatarHtml = '<span class="msg-sender-avatar" style="background-color:#' + bgColor + ';">' + escapeHtml(initial) + '</span>';
+    }
+
+    var msgRow = document.createElement('div');
+    msgRow.className = 'message-row' + (isUnread ? ' unread' : ' read');
+    msgRow.innerHTML = ''
+        + '<div class="msg-status"><i class="fa-regular ' + (isUnread ? 'fa-envelope' : 'fa-envelope-open') + '"></i></div>'
+        + '<div class="msg-title"><a href="' + escapeHtml(titleLink ? titleLink.getAttribute('href') : '#') + '">' + escapeHtml(titleLink ? titleLink.textContent.trim() : '(no title)') + '</a></div>'
+        + '<div class="msg-sender">'
+        +   '<a href="' + escapeHtml(senderHref) + '" class="msg-sender-link">'
+        +     avatarHtml
+        +     '<span class="msg-sender-name">' + escapeHtml(senderName) + '</span>'
+        +   '</a>'
+        + '</div>'
+        + '<div class="msg-date">' + escapeHtml(formatDate(date)) + '</div>'
+        + '<div class="msg-select"><input type="checkbox" class="modern-checkbox-input" name="' + escapeHtml(msgName) + '" id="msg-' + i + '" aria-label="Select message"></div>';
+    listContainer.appendChild(msgRow);
+}
+            
             container.appendChild(listContainer);
 
             var actionBar = document.createElement('div');
