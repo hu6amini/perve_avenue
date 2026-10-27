@@ -717,6 +717,57 @@ var MessengerModule = (function(Utils, EventBus) {
         return tempDiv.innerHTML;
     }
 
+        function convertEmojisForEditor(html) {
+        if (!html || typeof html !== 'string') return html;
+        if (html.indexOf('<img') === -1 &&
+            html.search(/[\u{1F000}-\u{1FFFF}\u{2600}-\u{27BF}\u{FE0F}]/u) === -1) {
+            return html;
+        }
+
+        var tempDiv = document.createElement('div');
+        tempDiv.innerHTML = html;
+
+        // 1. Forumfree emoticon URLs → twemoji URLs. Reads the map exposed
+        //    by twemoji.js at module load.
+        if (window.FF_EMOJI_MAP && typeof window.FF_EMOJI_MAP.get === 'function') {
+            tempDiv.querySelectorAll('img').forEach(function (img) {
+                var src = img.getAttribute('src') || '';
+                var filename = window.FF_EMOJI_MAP.get(src);
+                if (!filename) return;
+                img.setAttribute('src', TWEMOJI_BASE + filename);
+                if (!img.classList.contains('twemoji')) img.classList.add('twemoji');
+            });
+        }
+
+        // 2. Existing twemoji imgs from previous saves — normalise size.
+        tempDiv.querySelectorAll('img[src*="twemoji"]').forEach(function (img) {
+            if (!img.getAttribute('width')) img.setAttribute('width', '24');
+            if (!img.getAttribute('height')) img.setAttribute('height', '24');
+            if (!img.classList.contains('twemoji')) img.classList.add('twemoji');
+        });
+
+        // 3. Unicode emojis → twemoji imgs. twemoji.parse skips code, pre,
+        //    script, style, textarea and similar.
+        if (window.twemoji && typeof window.twemoji.parse === 'function') {
+            try {
+                window.twemoji.parse(tempDiv, {
+                    base: 'https://twemoji.maxcdn.com/v/latest/',
+                    folder: 'svg',
+                    ext: '.svg',
+                    className: 'twemoji'
+                });
+                tempDiv.querySelectorAll('img.twemoji').forEach(function (img) {
+                    if (!img.getAttribute('width')) img.setAttribute('width', '24');
+                    if (!img.getAttribute('height')) img.setAttribute('height', '24');
+                });
+            } catch (e) {
+                console.warn('[MessengerModule] twemoji.parse failed:', e);
+            }
+        }
+
+        return tempDiv.innerHTML;
+    }
+
     // Wraps loose inline runs in <p> elements, strips redundant <br>s,
     // and recurses into blockquotes / spoiler content so that the
     // inner paragraphs are also normalised. The quote-cleaning regexes
@@ -2092,6 +2143,7 @@ var MessengerModule = (function(Utils, EventBus) {
         html = transformLegacyIframes(html);       // <iframe> → lite-embed wrapper
         html = paragraphizeLegacyHtml(html);       // wrap loose inline runs
         html = transformBareVideoUrls(html);       // URL-only <p> → lite embed
+        html = convertEmojisForEditor(html);
         return await enrichImageDimensions(html);  // reserve width/height
     }
 
