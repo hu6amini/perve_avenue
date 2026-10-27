@@ -2861,6 +2861,31 @@ function transformLegacyEmbedLinks(html) {
             }
         });
 
+       const UnicodeEmojiRule = Extension.create({
+    name: 'unicodeEmojiRule',
+    addInputRules() {
+        return [new InputRule({
+            find: /([\u{1F300}-\u{1F9FF}\u{2600}-\u{27BF}\u{1F000}-\u{1F02F}])$/u,
+            handler: function ({ state, range, match }) {
+                var emoji = match[1];
+                var cp = emojiToCodePoint(emoji);
+                state.tr.replaceWith(
+                    range.from + (range.to - range.from - emoji.length),
+                    range.to,
+                    state.schema.nodes.emoji.create({
+                        src: TWEMOJI_BASE + cp + '.svg',
+                        alt: emoji,
+                        loading: 'lazy',
+                        decoding: 'async',
+                        width: 24,
+                        height: 24
+                    })
+                );
+            }
+        })];
+    }
+});
+
         const LiteYouTube = Node.create({
             name: 'liteYouTube',
             group: 'block', atom: true, draggable: true, selectable: true,
