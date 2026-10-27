@@ -4412,8 +4412,8 @@ section.modern-stats { flex-direction: column; width: 100%; }
    which the ordinary width/height CSS doesn't beat without !important. */
 .modern-wysiwyg .ProseMirror img.twemoji,
 .modern-wysiwyg .ProseMirror img[src*="twemoji"] {
-    width: 24px !important;
-    height: 24px !important;
+    width: 20px;
+    height: 20px;
     vertical-align: text-bottom;
     display: inline-block;
     margin: 0 1px;
