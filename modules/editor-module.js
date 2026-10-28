@@ -3613,7 +3613,7 @@ function transformLegacyEmbedLinks(html) {
         // ForceImageSelection — Bypasses the browser's native text-selection
         // engine to allow right-to-left dragging across images.
         // -------------------------------------------------------------------
-        const ForceImageSelection = Extension.create({
+                const ForceImageSelection = Extension.create({
             name: 'forceImageSelection',
             addProseMirrorPlugins() {
                 let isDragging = false;
@@ -3629,6 +3629,7 @@ function transformLegacyEmbedLinks(html) {
                                     if (coords) {
                                         isDragging = true;
                                         anchorPos = coords.pos;
+                                        view.dom.classList.add('is-dragging-text'); // <--- Add class
                                     }
                                 }
                                 return false;
@@ -3638,6 +3639,7 @@ function transformLegacyEmbedLinks(html) {
                                 if (event.buttons !== 1) {
                                     isDragging = false;
                                     anchorPos = null;
+                                    view.dom.classList.remove('is-dragging-text'); // <--- Remove class
                                     return false;
                                 }
 
@@ -3670,6 +3672,14 @@ function transformLegacyEmbedLinks(html) {
                             mouseup(view) {
                                 isDragging = false;
                                 anchorPos = null;
+                                view.dom.classList.remove('is-dragging-text'); // <--- Remove class
+                                return false;
+                            },
+                            mouseleave(view) {
+                                // Failsafe in case the mouse leaves the window while dragging
+                                isDragging = false;
+                                anchorPos = null;
+                                view.dom.classList.remove('is-dragging-text');
                                 return false;
                             }
                         }
