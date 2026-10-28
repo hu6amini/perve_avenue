@@ -4544,9 +4544,12 @@ section.modern-stats { flex-direction: column; width: 100%; }
 .modern-wysiwyg .ProseMirror img.atom-in-selection,
 .modern-wysiwyg .ProseMirror .emoji.atom-in-selection {
     background-color: rgba(5, 150, 105, 0.25) !important;
-    box-shadow: 0 0 0 2px var(--primary-color) !important;
-    border-radius: 4px !important;
     outline: none !important;
+}
+
+/* Hide the blinking caret while dragging to select */
+.modern-wysiwyg .ProseMirror.is-dragging-text {
+    caret-color: transparent !important;
 }
 
 /* ------------------------------------------------------------------
