@@ -1540,28 +1540,28 @@ function transformLegacyEmbedLinks(html) {
 
     function attachPreviewHandlers(previewArea) {
         previewArea.addEventListener('click', function (e) {
-            var nsfwImg = e.target.closest('.nsfw-image');
-            if (nsfwImg && previewArea.contains(nsfwImg)) {
-                e.preventDefault(); e.stopPropagation();
-                var r = nsfwImg.classList.toggle('revealed');
-                nsfwImg.setAttribute('aria-pressed', String(r));
-                return;
-            }
-            var nsfwTag = e.target.closest('.nsfw-tag');
-            if (nsfwTag && previewArea.contains(nsfwTag)) {
-                e.preventDefault(); e.stopPropagation();
-                handlePreviewNSFWToggle(nsfwTag);
-                return;
-            }
-            var qe = e.target.closest('.quote-expand-btn');
-            if (qe && previewArea.contains(qe)) { e.preventDefault(); handlePreviewQuoteExpand(qe); return; }
-            var ce = e.target.closest('.code-expand-btn');
-            if (ce && previewArea.contains(ce)) { e.preventDefault(); handlePreviewCodeExpand(ce); return; }
-            var cc = e.target.closest('.code-copy-btn');
-            if (cc && previewArea.contains(cc)) { e.preventDefault(); handlePreviewCodeCopy(cc); return; }
-            var sh = e.target.closest('.spoiler-header');
-            if (sh && previewArea.contains(sh)) { e.preventDefault(); handlePreviewSpoilerToggle(sh); return; }
-        });
+    var nsfwImg = e.target.closest('.nsfw-image');
+    if (nsfwImg && previewArea.contains(nsfwImg)) {
+        e.preventDefault(); e.stopPropagation();
+        var r = nsfwImg.classList.toggle('revealed');
+        nsfwImg.setAttribute('aria-pressed', String(r));
+        return;
+    }
+    var nsfwTag = e.target.closest('.nsfw-tag');
+    if (nsfwTag && previewArea.contains(nsfwTag)) {
+        e.preventDefault(); e.stopPropagation();
+        handlePreviewNSFWToggle(nsfwTag);
+        return;
+    }
+    var qe = e.target.closest('.quote-expand-btn');
+    if (qe && previewArea.contains(qe)) { e.preventDefault(); e.stopPropagation(); handlePreviewQuoteExpand(qe); return; }
+    var ce = e.target.closest('.code-expand-btn');
+    if (ce && previewArea.contains(ce)) { e.preventDefault(); e.stopPropagation(); handlePreviewCodeExpand(ce); return; }
+    var cc = e.target.closest('.code-copy-btn');
+    if (cc && previewArea.contains(cc)) { e.preventDefault(); e.stopPropagation(); handlePreviewCodeCopy(cc); return; }
+    var sh = e.target.closest('.spoiler-header');
+    if (sh && previewArea.contains(sh)) { e.preventDefault(); e.stopPropagation(); handlePreviewSpoilerToggle(sh); return; }
+});
         previewArea.addEventListener('keydown', function (e) {
             if (e.key !== 'Enter' && e.key !== ' ' && e.key !== 'Spacebar') return;
             var nsfwImg = e.target.closest('.nsfw-image');
