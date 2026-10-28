@@ -218,7 +218,7 @@ async function bootSystem() {
                 loadScript("https://cdn.jsdelivr.net/gh/hu6amini/perve_avenue@220ae070412ae9665a55ebed1c95b55163ccb67b/modules/boards.min.js"),
                 loadScript("https://cdn.jsdelivr.net/gh/hu6amini/perve_avenue@76cb279cfa160ad31ee3810d21c6d56ca30c0be1/modules/posts.min.js"),
                 loadScript("https://cdn.jsdelivr.net/gh/hu6amini/perve_avenue@403484e8351e4fd2b9f757b5c340979cf7d452b8/modules/modals.min.js"),
-                loadScript("https://cdn.jsdelivr.net/gh/hu6amini/perve_avenue@96ee2d241f1a1362b2f350f040f65a87da9ebe9d/modules/editor-module.min.js"),
+                loadScript("https://cdn.jsdelivr.net/gh/hu6amini/perve_avenue@e7e5bf35628b9ee72f556e5d40e3ed3b2ec5f316/modules/editor-module.min.js"),
                 loadScript("https://cdn.jsdelivr.net/gh/hu6amini/perve_avenue@38fc938cb030128c968b01749ffd02b509c869cc/modules/quote-queue.min.js")
             ]);
 
