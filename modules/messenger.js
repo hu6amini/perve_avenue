@@ -4206,7 +4206,9 @@ var MessengerModule = (function(Utils, EventBus) {
             function isNsfwEligible(img) {
     if (!img) return false;
     if (img.classList.contains('twemoji')) return false;
+    if (img.classList.contains('ProseMirror-separator')) return false;
     var src = img.getAttribute('src') || '';
+    if (!src) return false;
     if (src.indexOf('twemoji') !== -1) return false;
     var alt = img.getAttribute('alt') || '';
     if (alt.startsWith(':') && alt.endsWith(':')) return false;
