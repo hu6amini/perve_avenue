@@ -4536,8 +4536,14 @@ section.modern-stats { flex-direction: column; width: 100%; }
 
 .ProseMirror img[src*="twemoji"] {
   display: inline-block;
-  user-select: all;
+  user-select: text;
   caret-color: var(--text-primary);
+}
+
+.modern-wysiwyg .ProseMirror img.emoji-in-selection {
+    background-color: rgba(5, 150, 105, 0.18);
+    box-shadow: 0 0 0 1.5px var(--primary-color);
+    border-radius: 3px;
 }
 
 /* ------------------------------------------------------------------
