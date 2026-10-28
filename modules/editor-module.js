@@ -2797,7 +2797,7 @@ function transformLegacyEmbedLinks(html) {
         });
 
         const CustomImage = BaseImage.extend({
-            inline: true, group: 'inline', draggable: true, selectable: true,
+            inline: true, group: 'inline', draggable: false, selectable: true,
             addAttributes() {
                 return Object.assign({}, this.parent && this.parent(), {
                     src: { default: null },
@@ -2820,7 +2820,8 @@ function transformLegacyEmbedLinks(html) {
                 return ['img', Object.assign({}, HTMLAttributes, {
                     src: node.attrs.src, alt: node.attrs.alt,
                     loading: node.attrs.loading, decoding: node.attrs.decoding,
-                    width: node.attrs.width, height: node.attrs.height
+                    width: node.attrs.width, height: node.attrs.height,
+                    draggable: 'false'
                 })];
             }
         });
@@ -3580,76 +3581,102 @@ function transformLegacyEmbedLinks(html) {
         });
 
         // -------------------------------------------------------------------
-        // BlockAtomSelection — atom highlight during selection.
-        //
-        // IMPORTANT: This plugin is DISABLED by default. It was the source
-        // of a recurring ProseMirror crash (`Cannot read properties of
-        // undefined (reading 'localsInner')`) that fires during selection
-        // drags across atom nodes. The crash originates in prosemirror-view's
-        // internal rendering of node decorations applied to atoms nested
-        // inside blockquotes/custom container nodes.
-        //
-        // To re-enable for testing: window.__enableBlockAtomSelection = true
-        //   then trigger a reload or rebuild.
-        //
-        // If you need this feature, the safe re-implementation would use
-        // Decoration.inline() for inline atoms only and skip block atoms
-        // entirely (or use a different visual indicator).
+        // InlineAtomSelectionHighlight — Safely highlights images and emojis
+        // when they are part of a text selection.
         // -------------------------------------------------------------------
-        const BlockAtomSelection = Extension.create({
-            name: 'blockAtomSelection',
+        const InlineAtomSelectionHighlight = Extension.create({
+            name: 'inlineAtomSelectionHighlight',
             addProseMirrorPlugins() {
                 return [new Plugin({
-                    key: new PluginKey('blockAtomSelection'),
+                    key: new PluginKey('inlineAtomSelectionHighlight'),
                     props: {
                         decorations(state) {
-                            if (!window.__enableBlockAtomSelection) return null;
-                            try {
-                                const { from, to, empty } = state.selection;
-                                if (empty) return null;
-                                const decos = [];
-                                state.doc.nodesBetween(from, to, (node, pos) => {
-                                    const n = node.type.name;
-                                    if (n === 'image' || n === 'linkPreview') {
-                                        decos.push(Decoration.inline(pos, pos + node.nodeSize, { class: 'atom-in-selection' }));
-                                    }
-                                });
-                                return decos.length ? DecorationSet.create(state.doc, decos) : null;
-                            } catch (err) {
-                                console.error('[BlockAtomSelection] decorations failed:', err);
-                                return null;
-                            }
+                            const { from, to, empty } = state.selection;
+                            if (empty) return null; 
+                            
+                            const decos = [];
+                            state.doc.nodesBetween(from, to, (node, pos) => {
+                                if (node.type.name === 'emoji' || node.type.name === 'image') {
+                                    decos.push(Decoration.node(pos, pos + node.nodeSize, {
+                                        class: 'atom-in-selection'
+                                    }));
+                                }
+                            });
+                            return decos.length ? DecorationSet.create(state.doc, decos) : null;
                         }
                     }
                 })];
             }
         });
 
-       const InlineAtomSelectionHighlight = Extension.create({
-    name: 'inlineAtomSelectionHighlight',
-    addProseMirrorPlugins() {
-        return [new Plugin({
-            key: new PluginKey('inlineAtomSelectionHighlight'),
-            props: {
-                decorations(state) {
-                    const { from, to, empty } = state.selection;
-                    if (empty) return null; // Don't do anything if it's just a cursor
-                    
-                    const decos = [];
-                    state.doc.nodesBetween(from, to, (node, pos) => {
-                        // Safely target inline nodes only
-                        if (node.type.name === 'emoji' || node.type.name === 'image') {
-                            decos.push(Decoration.node(pos, pos + node.nodeSize, {
-                                class: 'atom-in-selection'
-                            }));
+        // -------------------------------------------------------------------
+        // ForceImageSelection — Bypasses the browser's native text-selection
+        // engine to allow right-to-left dragging across images.
+        // -------------------------------------------------------------------
+        const ForceImageSelection = Extension.create({
+            name: 'forceImageSelection',
+            addProseMirrorPlugins() {
+                let isDragging = false;
+                let anchorPos = null;
+
+                return [new Plugin({
+                    key: new PluginKey('forceImageSelection'),
+                    props: {
+                        handleDOMEvents: {
+                            mousedown(view, event) {
+                                if (event.button === 0) {
+                                    const coords = view.posAtCoords({ left: event.clientX, top: event.clientY });
+                                    if (coords) {
+                                        isDragging = true;
+                                        anchorPos = coords.pos;
+                                    }
+                                }
+                                return false;
+                            },
+                            mousemove(view, event) {
+                                if (!isDragging || anchorPos === null) return false;
+                                if (event.buttons !== 1) {
+                                    isDragging = false;
+                                    anchorPos = null;
+                                    return false;
+                                }
+
+                                const coords = view.posAtCoords({ left: event.clientX, top: event.clientY });
+                                if (!coords) return false;
+
+                                const headPos = coords.pos;
+                                const start = Math.min(anchorPos, headPos);
+                                const end = Math.max(anchorPos, headPos);
+
+                                let hasImage = false;
+                                view.state.doc.nodesBetween(start, end, (node) => {
+                                    if (node.type.name === 'image' || node.type.name === 'emoji') {
+                                        hasImage = true;
+                                        return false;
+                                    }
+                                });
+
+                                if (hasImage) {
+                                    const { selection } = view.state;
+                                    if (selection.from !== start || selection.to !== end) {
+                                        const tr = view.state.tr.setSelection(
+                                            TextSelection.create(view.state.doc, start, end)
+                                        );
+                                        view.dispatch(tr);
+                                    }
+                                }
+                                return false;
+                            },
+                            mouseup(view) {
+                                isDragging = false;
+                                anchorPos = null;
+                                return false;
+                            }
                         }
-                    });
-                    return decos.length ? DecorationSet.create(state.doc, decos) : null;
-                }
+                    }
+                })];
             }
-        })];
-    }
-});
+        });
 
         var initialHtml = ensureTrailingParagraphInHtml(opts.initialHtml || '');
 
@@ -3669,8 +3696,10 @@ function transformLegacyEmbedLinks(html) {
                 Underline, CustomImage, ImageUploadPlaceholder, Emoji,
                 Link.configure({ openOnClick: false, autolink: true, linkOnPaste: true, HTMLAttributes: { target: '_blank', rel: 'noopener noreferrer' } }),
                 LiteYouTube, LiteVimeo, Spoiler, NSFW, LinkPreview, SemanticColor, CustomMention,
-                EmoticonRule,
-                TrailingEmbedParagraph, DeleteAdjacentAtom, BlockAtomSelection, InlineAtomSelectionHighlight,
+                EmoticonRule, UnicodeEmojiRule,
+                TrailingEmbedParagraph, DeleteAdjacentAtom, 
+                InlineAtomSelectionHighlight, 
+                ForceImageSelection,
                 CharacterCount.configure({ limit: MAX_MESSAGE_LENGTH > 0 ? MAX_MESSAGE_LENGTH : null }),
                 Typography
             ],
