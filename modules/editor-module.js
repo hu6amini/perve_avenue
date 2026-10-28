@@ -3963,14 +3963,16 @@ function transformLegacyEmbedLinks(html) {
             var hideTimer = null;
 
             function isEligible(img) {
-                if (!img) return false;
-                if (img.classList.contains('twemoji')) return false;
-                var alt = img.getAttribute('alt') || '';
-                if (alt.startsWith(':') && alt.endsWith(':')) return false;
-                if (img.closest('.link-preview-card, .simple-link, .modern-embedded-link')) return false;
-                if (img.closest('.ff-upload-placeholder')) return false;
-                return true;
-            }
+    if (!img) return false;
+    if (img.classList.contains('twemoji')) return false;
+    var src = img.getAttribute('src') || '';
+    if (src.indexOf('twemoji') !== -1) return false;
+    var alt = img.getAttribute('alt') || '';
+    if (alt.startsWith(':') && alt.endsWith(':')) return false;
+    if (img.closest('.link-preview-card, .simple-link, .modern-embedded-link')) return false;
+    if (img.closest('.ff-upload-placeholder')) return false;
+    return true;
+}
 
             function position(img) {
                 var r = img.getBoundingClientRect();
