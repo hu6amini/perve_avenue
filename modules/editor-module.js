@@ -3625,20 +3625,22 @@ function transformLegacyEmbedLinks(html) {
             }
         });
 
-       const EmojiSelectionHighlight = Extension.create({
-    name: 'emojiSelectionHighlight',
+       const InlineAtomSelectionHighlight = Extension.create({
+    name: 'inlineAtomSelectionHighlight',
     addProseMirrorPlugins() {
         return [new Plugin({
-            key: new PluginKey('emojiSelectionHighlight'),
+            key: new PluginKey('inlineAtomSelectionHighlight'),
             props: {
                 decorations(state) {
                     const { from, to, empty } = state.selection;
-                    if (empty) return null;
+                    if (empty) return null; // Don't do anything if it's just a cursor
+                    
                     const decos = [];
                     state.doc.nodesBetween(from, to, (node, pos) => {
-                        if (node.type.name === 'emoji') {
+                        // Safely target inline nodes only
+                        if (node.type.name === 'emoji' || node.type.name === 'image') {
                             decos.push(Decoration.node(pos, pos + node.nodeSize, {
-                                class: 'emoji-in-selection'
+                                class: 'atom-in-selection'
                             }));
                         }
                     });
@@ -3668,7 +3670,7 @@ function transformLegacyEmbedLinks(html) {
                 Link.configure({ openOnClick: false, autolink: true, linkOnPaste: true, HTMLAttributes: { target: '_blank', rel: 'noopener noreferrer' } }),
                 LiteYouTube, LiteVimeo, Spoiler, NSFW, LinkPreview, SemanticColor, CustomMention,
                 EmoticonRule,
-                TrailingEmbedParagraph, DeleteAdjacentAtom, BlockAtomSelection, EmojiSelectionHighlight,
+                TrailingEmbedParagraph, DeleteAdjacentAtom, BlockAtomSelection, InlineAtomSelectionHighlight,
                 CharacterCount.configure({ limit: MAX_MESSAGE_LENGTH > 0 ? MAX_MESSAGE_LENGTH : null }),
                 Typography
             ],
