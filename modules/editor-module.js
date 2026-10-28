@@ -2783,9 +2783,9 @@ function transformLegacyEmbedLinks(html) {
         });
 
         const Emoji = Node.create({
-            name: 'emoji', inline: true, group: 'inline', atom: true,
-            addAttributes() { return { src: { default: null }, alt: { default: '' }, loading: { default: 'lazy' }, decoding: { default: 'async' }, width: { default: 24 }, height: { default: 24 } }; },
-            parseHTML() { return [{ tag: 'img[src*="twemoji"]' }]; },
+    name: 'emoji', inline: true, group: 'inline', atom: true, selectable: false,
+    addAttributes() { return { src: { default: null }, alt: { default: '' }, loading: { default: 'lazy' }, decoding: { default: 'async' }, width: { default: 24 }, height: { default: 24 } }; },
+    parseHTML() { return [{ tag: 'img[src*="twemoji"]' }]; },
             renderHTML({ node, HTMLAttributes }) {
                 return ['img', Object.assign({}, HTMLAttributes, {
                     src: node.attrs.src, alt: node.attrs.alt,
@@ -3625,6 +3625,30 @@ function transformLegacyEmbedLinks(html) {
             }
         });
 
+       const EmojiSelectionHighlight = Extension.create({
+    name: 'emojiSelectionHighlight',
+    addProseMirrorPlugins() {
+        return [new Plugin({
+            key: new PluginKey('emojiSelectionHighlight'),
+            props: {
+                decorations(state) {
+                    const { from, to, empty } = state.selection;
+                    if (empty) return null;
+                    const decos = [];
+                    state.doc.nodesBetween(from, to, (node, pos) => {
+                        if (node.type.name === 'emoji') {
+                            decos.push(Decoration.node(pos, pos + node.nodeSize, {
+                                class: 'emoji-in-selection'
+                            }));
+                        }
+                    });
+                    return decos.length ? DecorationSet.create(state.doc, decos) : null;
+                }
+            }
+        })];
+    }
+});
+
         var initialHtml = ensureTrailingParagraphInHtml(opts.initialHtml || '');
 
         var editor = new Editor({
@@ -3644,7 +3668,7 @@ function transformLegacyEmbedLinks(html) {
                 Link.configure({ openOnClick: false, autolink: true, linkOnPaste: true, HTMLAttributes: { target: '_blank', rel: 'noopener noreferrer' } }),
                 LiteYouTube, LiteVimeo, Spoiler, NSFW, LinkPreview, SemanticColor, CustomMention,
                 EmoticonRule,
-                TrailingEmbedParagraph, DeleteAdjacentAtom, BlockAtomSelection,
+                TrailingEmbedParagraph, DeleteAdjacentAtom, BlockAtomSelection, EmojiSelectionHighlight,
                 CharacterCount.configure({ limit: MAX_MESSAGE_LENGTH > 0 ? MAX_MESSAGE_LENGTH : null }),
                 Typography
             ],
@@ -3883,10 +3907,10 @@ function transformLegacyEmbedLinks(html) {
                 editor.state.doc.forEach(function (node) {
                     if (node.textContent.trim()) { stateHasContent = true; return; }
                     var nm = node.type.name;
-                    if (nm === 'image' || nm === 'liteYouTube' || nm === 'liteVimeo' ||
-                        nm === 'linkPreview' || nm === 'horizontalRule' || nm === 'imageUploadPlaceholder') {
-                        stateHasContent = true;
-                    }
+                    if (nm === 'image' || nm === 'emoji' || nm === 'liteYouTube' || nm === 'liteVimeo' ||
+    nm === 'linkPreview' || nm === 'imageUploadPlaceholder' || nm === 'horizontalRule') {
+    hasContent = true;
+}
                 });
                 if (!stateHasContent) return;
 
