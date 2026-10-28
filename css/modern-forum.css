@@ -4395,7 +4395,7 @@ section.modern-stats { flex-direction: column; width: 100%; }
 )) {
     height: auto;
     display: inline-block;
-    user-select: all;
+    user-select: none;
     padding: 3px;
     caret-color: var(--text-primary);
     border-radius: var(--radius);
@@ -4540,10 +4540,14 @@ section.modern-stats { flex-direction: column; width: 100%; }
   caret-color: var(--text-primary);
 }
 
+/* ProseMirror Selection Highlight for Images and Emojis */
+.modern-wysiwyg .ProseMirror img.atom-in-selection,
 .modern-wysiwyg .ProseMirror img.emoji-in-selection {
-    background-color: rgba(5, 150, 105, 0.18);
-    box-shadow: 0 0 0 1.5px var(--primary-color);
-    border-radius: 3px;
+    background-color: rgba(5, 150, 105, 0.25); /* Blue/Emerald overlay */
+    box-shadow: 0 0 0 2px var(--primary-color);
+    border-radius: 4px;
+    /* This forces the browser to show the highlight cleanly */
+    transition: background-color 0.1s ease; 
 }
 
 /* ------------------------------------------------------------------
