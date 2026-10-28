@@ -5085,6 +5085,7 @@ var MessengerModule = (function(Utils, EventBus) {
                     inline: true,
                     group: 'inline',
                     atom: true,
+                    selectable: false,
                     addAttributes() {
                         return {
                             src: { default: null },
@@ -6073,6 +6074,7 @@ var MessengerModule = (function(Utils, EventBus) {
                         TrailingEmbedParagraph,
                         NormalizeEmptyDoc,
                         DeleteAdjacentAtom,
+                        EmojiSelectionHighlight,
 
                         CharacterCount.configure({
                             limit: MAX_MESSAGE_LENGTH > 0 ? MAX_MESSAGE_LENGTH : null,
