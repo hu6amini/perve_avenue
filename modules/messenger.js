@@ -6022,6 +6022,30 @@ var MessengerModule = (function(Utils, EventBus) {
                     },
                 });
 
+                const EmojiSelectionHighlight = Extension.create({
+    name: 'emojiSelectionHighlight',
+    addProseMirrorPlugins() {
+        return [new Plugin({
+            key: new PluginKey('emojiSelectionHighlight'),
+            props: {
+                decorations(state) {
+                    const { from, to, empty } = state.selection;
+                    if (empty) return null;
+                    const decos = [];
+                    state.doc.nodesBetween(from, to, (node, pos) => {
+                        if (node.type.name === 'emoji') {
+                            decos.push(Decoration.node(pos, pos + node.nodeSize, {
+                                class: 'emoji-in-selection'
+                            }));
+                        }
+                    });
+                    return decos.length ? DecorationSet.create(state.doc, decos) : null;
+                }
+            }
+        })];
+    }
+});
+
                 // Load initial content through the async pipeline so the
                 // iframe / bare-URL transforms run. Previously this used
                 // legacyToHtml (sync) which skipped the transforms — a quote
