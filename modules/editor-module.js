@@ -3634,12 +3634,12 @@ function transformLegacyEmbedLinks(html) {
                                 }
                                 return false;
                             },
-                            mousemove(view, event) {
+                                                        mousemove(view, event) {
                                 if (!isDragging || anchorPos === null) return false;
                                 if (event.buttons !== 1) {
                                     isDragging = false;
                                     anchorPos = null;
-                                    view.dom.classList.remove('is-dragging-text'); // <--- Remove class
+                                    view.dom.classList.remove('is-dragging-text');
                                     return false;
                                 }
 
@@ -3661,10 +3661,19 @@ function transformLegacyEmbedLinks(html) {
                                 if (hasImage) {
                                     const { selection } = view.state;
                                     if (selection.from !== start || selection.to !== end) {
-                                        const tr = view.state.tr.setSelection(
-                                            TextSelection.create(view.state.doc, start, end)
-                                        );
-                                        view.dispatch(tr);
+                                        try {
+                                            const $anchor = view.state.doc.resolve(start);
+                                            const $head = view.state.doc.resolve(end);
+                                            
+                                            // Use .between() to safely clamp to inline text nodes
+                                            const newSelection = TextSelection.between($anchor, $head);
+                                            
+                                            if (newSelection) {
+                                                view.dispatch(view.state.tr.setSelection(newSelection));
+                                            }
+                                        } catch (err) {
+                                            // Silently ignore if the positions are completely invalid
+                                        }
                                     }
                                 }
                                 return false;
