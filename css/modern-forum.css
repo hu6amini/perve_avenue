@@ -4556,6 +4556,11 @@ section.modern-stats { flex-direction: column; width: 100%; }
     box-shadow: none !important;
 }
 
+/* Extra safety for some browsers that still paint ::selection on images */
+.modern-wysiwyg .ProseMirror img.ProseMirror-separator::selection {
+    background: transparent !important;
+}
+
 /* Hide the blinking caret while dragging to select */
 .modern-wysiwyg .ProseMirror.is-dragging-text {
     caret-color: transparent !important;
