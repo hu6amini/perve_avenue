@@ -4540,28 +4540,35 @@ section.modern-stats { flex-direction: column; width: 100%; }
   caret-color: var(--text-primary);
 }
 
-/* ProseMirror Selection Highlight for Images and Emojis */
-.modern-wysiwyg .ProseMirror img.atom-in-selection:not(.ProseMirror-separator),
-.modern-wysiwyg .ProseMirror .emoji.atom-in-selection {
-    background-color: rgba(5, 150, 105, 0.25) !important;
+/* 1. Image Selection (The Woman Image) */
+.modern-wysiwyg .ProseMirror img.atom-in-selection:not(.ProseMirror-separator) {
+    /* Add a solid border so it's unmistakably selected */
+    border: 2px solid var(--primary-color) !important;
+    
+    /* Make the image slightly transparent. This allows the native 
+       browser selection color to bleed through, giving the image a 
+       tint when you drag over it. */
+    opacity: 0.75 !important; 
+    
+    /* Add a soft glow around it */
+    box-shadow: 0 0 10px rgba(5, 150, 105, 0.4) !important;
     outline: none !important;
+    background-color: transparent !important;
 }
 
+/* 2. Fix the emoji gaps (block the native selection color) */
 .modern-wysiwyg .ProseMirror img.ProseMirror-separator {
+    /* This solid background hides the native blue/green selection behind it */
+    background-color: var(--bg-color) !important; 
     user-select: none !important;
     -webkit-user-select: none !important;
     pointer-events: none !important;
-    outline: none !important;
-    background: transparent !important;
     box-shadow: none !important;
+    border: none !important;
+    padding: 0 !important;
 }
 
-/* Extra safety for some browsers that still paint ::selection on images */
-.modern-wysiwyg .ProseMirror img.ProseMirror-separator::selection {
-    background: transparent !important;
-}
-
-/* Hide the blinking caret while dragging to select */
+/* 3. Hide the blinking caret while dragging to select */
 .modern-wysiwyg .ProseMirror.is-dragging-text {
     caret-color: transparent !important;
 }
