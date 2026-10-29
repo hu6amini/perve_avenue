@@ -4549,6 +4549,15 @@ section.modern-stats { flex-direction: column; width: 100%; }
     outline: none !important;
 }
 
+.modern-wysiwyg .ProseMirror img.ProseMirror-separator {
+    user-select: none !important;
+    -webkit-user-select: none !important;
+    pointer-events: none !important;
+    outline: none !important;
+    background: transparent !important;
+    box-shadow: none !important;
+}
+
 /* Hide the blinking caret while dragging to select */
 .modern-wysiwyg .ProseMirror.is-dragging-text {
     caret-color: transparent !important;
