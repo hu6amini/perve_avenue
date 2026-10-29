@@ -1,7 +1,30 @@
-/* Optimised Boot Loader – v7 */
+/* Optimised Boot Loader – v8 */
 "use strict";
 (function () {
   let logBuffer = "[Bypass Active]:";
+
+  // =========================================================================
+  // DYNAMIC SCRIPT PRELOADS (Bypasses ForumCommunity attribute mangling)
+  // These run immediately in the <head> before the body is parsed.
+  // =========================================================================
+  (function injectUniversalPreloads() {
+    const scriptsToPreload = [
+      "https://cdn.jsdelivr.net/gh/hu6amini/perve_avenue@1977fabb5553b0f825fa92671a03b2ae26c67702/core/event-bus.min.js",
+      "https://cdn.jsdelivr.net/gh/hu6amini/perve_avenue@8f6a9f7f137c8f7a9e36bce00a1c5dc937269906/media-optimizer.min.js",
+      "https://cdn.jsdelivr.net/gh/hu6amini/perve_avenue@9681242beef6f3a2e2e4c8de461c2e6eeabec26a/core/dom-utils.min.js",
+      "https://cdn.jsdelivr.net/gh/hu6amini/perve_avenue@70efe7c7bca10a5093093841f67994aef3b76819/forum_core_observer.min.js"
+    ];
+
+    scriptsToPreload.forEach(url => {
+      const link = document.createElement('link');
+      link.rel = 'preload';
+      link.as = 'script'; // Safe from the platform's HTML parser
+      link.href = url;
+      link.crossOrigin = 'anonymous'; // Match the loaders to avoid double-fetch
+      document.head.appendChild(link);
+    });
+  })();
+  // =========================================================================
 
   const config = {
     safeList: [
