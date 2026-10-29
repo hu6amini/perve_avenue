@@ -4540,14 +4540,13 @@ section.modern-stats { flex-direction: column; width: 100%; }
   caret-color: var(--text-primary);
 }
 
-/* 1. Image Selection (The Woman Image) */
-.modern-wysiwyg .ProseMirror img.atom-in-selection:not(.ProseMirror-separator) {
+/* 1. Real Images (The Woman Image) */
+.modern-wysiwyg .ProseMirror img.atom-in-selection:not(.ProseMirror-separator):not(.twemoji) {
     /* Add a solid border so it's unmistakably selected */
     border: 2px solid var(--primary-color) !important;
     
     /* Make the image slightly transparent. This allows the native 
-       browser selection color to bleed through, giving the image a 
-       tint when you drag over it. */
+       browser selection color to bleed through. */
     opacity: 0.75 !important; 
     
     /* Add a soft glow around it */
@@ -4556,23 +4555,35 @@ section.modern-stats { flex-direction: column; width: 100%; }
     background-color: transparent !important;
 }
 
-/* 2. Fix the emoji gaps (block the native selection color) */
+/* 2. Emojis (Let the native selection highlight them smoothly, no border) */
+.modern-wysiwyg .ProseMirror img.twemoji.atom-in-selection {
+    border: none !important;
+    opacity: 1 !important;
+    box-shadow: none !important;
+}
+
+/* 3. Fix the emoji gaps (Block the native selection color) */
 .modern-wysiwyg .ProseMirror img.ProseMirror-separator {
     /* This solid background hides the native blue/green selection behind it */
     background-color: var(--bg-color) !important; 
+    
+    /* Force the separator to cover the full line height so no slivers peek through */
+    height: 1.5em !important; 
+    vertical-align: middle !important;
+    
     user-select: none !important;
     -webkit-user-select: none !important;
     pointer-events: none !important;
     box-shadow: none !important;
     border: none !important;
     padding: 0 !important;
+    margin: 0 !important;
 }
 
-/* 3. Hide the blinking caret while dragging to select */
+/* 4. Hide the blinking caret while dragging to select */
 .modern-wysiwyg .ProseMirror.is-dragging-text {
     caret-color: transparent !important;
 }
-
 /* ------------------------------------------------------------------
    Lite embeds (lite-youtube / lite-vimeo)
    The custom element internals live in the self-hosted lite-embed.js
