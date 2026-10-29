@@ -4542,17 +4542,7 @@ section.modern-stats { flex-direction: column; width: 100%; }
 
 /* 1. Real Images (The Woman Image) */
 .modern-wysiwyg .ProseMirror img.atom-in-selection:not(.ProseMirror-separator):not(.twemoji) {
-    /* Add a solid border so it's unmistakably selected */
-    border: 2px solid var(--primary-color) !important;
-    
-    /* Make the image slightly transparent. This allows the native 
-       browser selection color to bleed through. */
-    opacity: 0.75 !important; 
-    
-    /* Add a soft glow around it */
-    box-shadow: 0 0 10px rgba(5, 150, 105, 0.4) !important;
-    outline: none !important;
-    background-color: transparent !important;
+    background-color: transparent;
 }
 
 /* 2. Emojis (Let the native selection highlight them smoothly, no border) */
