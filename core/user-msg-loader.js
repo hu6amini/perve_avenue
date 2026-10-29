@@ -19,28 +19,35 @@ whenBodyReady(() => {
     const IS_MSG_PAGE = document.body.id === 'msg';
 
     // ============================================================================
-    // TIPTAP MODULEPRELOAD (compose section only)
+    // CONDITIONAL PRELOADS (Bypasses ForumCommunity attribute mangling)
     // ============================================================================
-    // Fire these at parse time so the browser begins fetching the TipTap
-    // import graph while Phases A–C below are still resolving. messenger.js
-    // does not reach its `await import(...)` calls until forum-enhancer has
-    // built #modern-forum-wrapper and called MessengerModule.initialize();
-    // by then these should be in the module map or in-flight. Without this
-    // the CDN waterfall begins only after the wrapper exists, which is one
-    // of the two dominant sources of the draft-appearance delay.
-    //
-    // Scoped to compose only. Messages and contacts share the msg body id
-    // but never construct the editor — messenger.js builds their UI from
-    // the existing forum DOM. Firing thirteen modulepreloads on those pages
-    // ties up connection slots with requests the page will never consume.
-    // Mirror messenger.js's own section detection exactly: CODE=01 is
-    // messages, CODE=02 is contacts, everything else defaults to compose.
     const url = window.location.href;
     const IS_COMPOSE_SECTION = IS_MSG_PAGE &&
         url.indexOf('CODE=01') === -1 &&
         url.indexOf('CODE=02') === -1;
 
     if (IS_COMPOSE_SECTION) {
+        // Preload messenger.min.js so it's ready when Phase C runs.
+        // Matches loadScript's crossOrigin to avoid a double fetch.
+        const messengerLink = document.createElement('link');
+        messengerLink.rel = 'preload';
+        messengerLink.as = 'script';
+        messengerLink.href = 'https://cdn.jsdelivr.net/gh/hu6amini/perve_avenue@881f66345403c55640095746a1c632c24930955f/modules/messenger.min.js';
+        messengerLink.crossOrigin = 'anonymous';
+        document.head.appendChild(messengerLink);
+
+        // TipTap modulepreload graph. Fire these at parse time so the
+        // browser begins fetching while Phases A–C below are still
+        // resolving. messenger.js does not reach its `await import(...)`
+        // calls until forum-enhancer has built #modern-forum-wrapper and
+        // called MessengerModule.initialize(); by then these should be
+        // in the module map or in-flight.
+        //
+        // Scoped to compose only. Messages and contacts share the msg
+        // body id but never construct the editor — messenger.js builds
+        // their UI from the existing forum DOM. Firing thirteen
+        // modulepreloads on those pages ties up connection slots with
+        // requests the page will never consume.
         [
             'https://esm.sh/@tiptap/core@2.5.2',
             'https://esm.sh/@tiptap/starter-kit@2.5.2',
