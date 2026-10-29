@@ -3634,7 +3634,7 @@ function transformLegacyEmbedLinks(html) {
                                 }
                                 return false;
                             },
-                                                        mousemove(view, event) {
+                                                                                    mousemove(view, event) {
                                 if (!isDragging || anchorPos === null) return false;
                                 if (event.buttons !== 1) {
                                     isDragging = false;
@@ -3651,8 +3651,22 @@ function transformLegacyEmbedLinks(html) {
                                 const end = Math.max(anchorPos, headPos);
 
                                 let hasImage = false;
-                                view.state.doc.nodesBetween(start, end, (node) => {
+                                view.state.doc.nodesBetween(start, end, (node, pos) => {
                                     if (node.type.name === 'image' || node.type.name === 'emoji') {
+                                        // Get the DOM node to check if it's the transparent separator or a twemoji
+                                        const domNode = view.nodeDOM(pos);
+                                        
+                                        if (domNode && domNode.classList) {
+                                            // Skip the transparent ProseMirror separator
+                                            if (domNode.classList.contains('ProseMirror-separator')) {
+                                                return true; // Continue to next node
+                                            }
+                                            // Skip twemoji (if you want them excluded from the image drag trigger too)
+                                            if (domNode.classList.contains('twemoji')) {
+                                                return true;
+                                            }
+                                        }
+
                                         hasImage = true;
                                         return false;
                                     }
@@ -3665,7 +3679,6 @@ function transformLegacyEmbedLinks(html) {
                                             const $anchor = view.state.doc.resolve(start);
                                             const $head = view.state.doc.resolve(end);
                                             
-                                            // Use .between() to safely clamp to inline text nodes
                                             const newSelection = TextSelection.between($anchor, $head);
                                             
                                             if (newSelection) {
