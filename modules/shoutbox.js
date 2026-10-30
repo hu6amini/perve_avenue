@@ -1,42 +1,24 @@
-/* =============================================
-   Shoutbox Modernizer – Starter Module
-   Converts hello-box web component into a modern
-   shoutbox UI. Reads existing messages from the
-   hello-box element; posting functionality comes
-   in a later iteration.
-   ============================================= */
 'use strict';
 
 const ShoutboxModule = (function () {
     console.log('🔥 ShoutboxModule loaded (hello-box → modern shoutbox)');
 
-    // =========================================================================
-    // CONFIGURATION
-    // =========================================================================
     const CONFIG = Object.freeze({
-        // The legacy element to read from.
         HELLO_BOX_SELECTOR: 'hello-box',
-
-        // Where the modern shoutbox goes.
         CONTAINER_ID: 'modern-shoutbox',
         WRAPPER_ID: 'modern-forum-wrapper',
         BOARD_LIST_ID: 'modern-board-list',
-
-        // Read at most this many messages from the legacy box. The
-        // legacy box renders newest-first, so we keep the first N.
         MAX_MESSAGES: 50,
-
-        // Avatar size for message authors.
         AVATAR_SIZE: 40,
-
-        // Weserv image proxy.
         WESERV_CDN: 'https://images.weserv.nl/',
         CACHE: '1y',
-        QUALITY: 85
+        QUALITY: 85,
+        // Poll interval for the fallback path, in ms.
+        POLL_INTERVAL: 250,
+        // Give up polling after this many ms.
+        POLL_TIMEOUT: 15000
     });
 
-    // Matches the palette used by every other module so a user gets the
-    // same colour everywhere their initial-avatar appears.
     const AVATAR_COLORS = [
         '059669', '10B981', '34D399', '6EE7B7', 'A7F3D0',
         '0D9488', '14B8A6', '2DD4BF', '5EEAD4', '99F6E4',
@@ -47,9 +29,9 @@ const ShoutboxModule = (function () {
         '64748B', '94A3B8', 'CBD5E1', '475569', '334155'
     ];
 
-    // =========================================================================
-    // UTILITIES
-    // =========================================================================
+    // ------------------------------------------------------------------
+    // Utilities (unchanged from the first version)
+    // ------------------------------------------------------------------
     const escapeHtml = (str) => {
         if (typeof str !== 'string') return '';
         const div = document.createElement('div');
@@ -83,9 +65,7 @@ const ShoutboxModule = (function () {
     function optimizeImageUrl(url, width, height) {
         if (!isValidAvatarUrl(url)) return null;
         const lowerUrl = url.toLowerCase();
-        if (lowerUrl.indexOf('weserv.nl') !== -1 || lowerUrl.indexOf('data:') === 0) {
-            return url;
-        }
+        if (lowerUrl.indexOf('weserv.nl') !== -1 || lowerUrl.indexOf('data:') === 0) return url;
         if (url.startsWith('//')) url = 'https:' + url;
         if (url.startsWith('http://') && window.location.protocol === 'https:') {
             url = url.replace('http://', 'https://');
@@ -96,24 +76,9 @@ const ShoutboxModule = (function () {
             '&w=' + width + '&h=' + height + '&fit=cover&a=attention&il';
     }
 
-    function sanitizeGroupName(name) {
-        if (!name) return 'member';
-        return name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '') || 'member';
-    }
-
-    // =========================================================================
-    // LEGACY EXTRACTION
-    // The hello-box web component renders its message list into a
-    // <div class="hb-messages"> with one <div class="hb-message"> per
-    // post. Each message carries the author's MID in a data-uid on the
-    // root, the avatar and link in an <a> wrapping the avatar, and the
-    // body in <p class="hb-text-content">.
-    //
-    // The timestamp is plain text (e.g. "30/10, 17:22"). We keep it as
-    // a string for now — a later pass can parse it into a Date for
-    // relative-time display, but the starter module's job is just to
-    // surface the content.
-    // =========================================================================
+    // ------------------------------------------------------------------
+    // Extraction
+    // ------------------------------------------------------------------
     function extractMessage(hbMessage) {
         if (!hbMessage) return null;
 
@@ -124,8 +89,6 @@ const ShoutboxModule = (function () {
         const midMatch = profileUrl.match(/MID=(\d+)/);
         const mid = midMatch ? midMatch[1] : null;
 
-        // Author name: prefer the nickname span's link text, fall back
-        // to the anchor text or the avatar alt.
         const nickLink = hbMessage.querySelector('.hb-nickname a');
         const avatarImg = hbMessage.querySelector('img.hb-avatar');
         let authorName = nickLink ? nickLink.textContent.trim() : '';
@@ -133,9 +96,6 @@ const ShoutboxModule = (function () {
         if (!authorName) authorName = authorAnchor.textContent.trim() || 'Unknown';
         authorName = authorName.replace(/^@/, '');
 
-        // Avatar: the legacy box already carries a weserv-optimized
-        // src; data-original holds the raw upload URL. Re-optimize at
-        // the shoutbox size so the avatar isn't a downsized 250×250.
         let avatarUrl = null;
         if (avatarImg) {
             const dataOriginal = avatarImg.getAttribute('data-original');
@@ -147,38 +107,24 @@ const ShoutboxModule = (function () {
             }
         }
 
-        // Timestamp.
         const timeEl = hbMessage.querySelector('.hb-time');
         const timestamp = timeEl ? timeEl.textContent.trim() : '';
 
-        // Body. The message content lives in <p class="hb-text-content">.
-        // Inner markup (bold, spoiler markers, quote refs) is preserved
-        // by cloning rather than reading textContent.
         const bodyEl = hbMessage.querySelector('.hb-text-content');
         let bodyHtml = '';
         if (bodyEl) {
             const clone = bodyEl.cloneNode(true);
-            // Strip the quote-ref span — it's a jump target, not content.
             clone.querySelectorAll('.hb-quote-ref').forEach(el => el.remove());
             bodyHtml = clone.innerHTML.trim();
         }
 
-        return {
-            mid,
-            authorName,
-            profileUrl,
-            avatarUrl,
-            timestamp,
-            bodyHtml
-        };
+        return { mid, authorName, profileUrl, avatarUrl, timestamp, bodyHtml };
     }
 
     function extractMessages(helloBox) {
         if (!helloBox) return [];
-
         const messageEls = helloBox.querySelectorAll('.hb-messages .hb-message');
         if (!messageEls.length) return [];
-
         const messages = [];
         const limit = Math.min(messageEls.length, CONFIG.MAX_MESSAGES);
         for (let i = 0; i < limit; i++) {
@@ -188,9 +134,9 @@ const ShoutboxModule = (function () {
         return messages;
     }
 
-    // =========================================================================
-    // RENDER
-    // =========================================================================
+    // ------------------------------------------------------------------
+    // Render
+    // ------------------------------------------------------------------
     function buildAvatarHtml(msg) {
         if (msg.avatarUrl) {
             return '<a href="' + escapeHtml(msg.profileUrl) + '" class="shoutbox-avatar-link" aria-label="Profile of ' + escapeHtml(msg.authorName) + '">' +
@@ -240,9 +186,6 @@ const ShoutboxModule = (function () {
                         ' ' + (messages.length === 1 ? 'message' : 'messages') + '</span>' +
                 '</header>' +
                 '<div class="shoutbox-list" role="log" aria-live="polite">' + messagesHtml + '</div>' +
-                // Input bar is a placeholder for now — posting lands in
-                // a later iteration, at which point this becomes a real
-                // textarea + send button wired to the hello-box API.
                 '<div class="shoutbox-input-bar">' +
                     '<input type="text" class="shoutbox-input" placeholder="Type a message…" disabled aria-disabled="true">' +
                     '<button type="button" class="modern-btn modern-btn-primary" disabled aria-disabled="true">' +
@@ -253,14 +196,21 @@ const ShoutboxModule = (function () {
         );
     }
 
-    // =========================================================================
-    // CONTAINER
-    // =========================================================================
+    // ------------------------------------------------------------------
+    // Container
+    //
+    // Two things can be true here:
+    //   1. The board list already exists → insert before it.
+    //   2. The board list doesn't exist yet → we insert at the
+    //      breadcrumb fallback now, and re-anchor later when the board
+    //      list appears. That's why ensureAnchored() exists — it's
+    //      idempotent and re-runs after every conversion.
+    // ------------------------------------------------------------------
     function getWrapper() {
         return document.getElementById(CONFIG.WRAPPER_ID);
     }
 
-    function getOrCreateContainer() {
+    function ensureContainerExists() {
         let container = document.getElementById(CONFIG.CONTAINER_ID);
         if (container) return container;
 
@@ -271,26 +221,33 @@ const ShoutboxModule = (function () {
         container.id = CONFIG.CONTAINER_ID;
         container.className = 'modern-shoutbox-container';
 
-        // Preferred insertion point: directly above the board list.
-        // Fallback: after the breadcrumbs; last resort: end of wrapper.
-        const boardList = document.getElementById(CONFIG.BOARD_LIST_ID);
-        if (boardList && boardList.parentNode) {
-            boardList.parentNode.insertBefore(container, boardList);
+        const breadcrumb = document.getElementById('modern-breadcrumbs');
+        if (breadcrumb && breadcrumb.parentNode) {
+            breadcrumb.insertAdjacentElement('afterend', container);
         } else {
-            const breadcrumb = document.getElementById('modern-breadcrumbs');
-            if (breadcrumb && breadcrumb.parentNode) {
-                breadcrumb.insertAdjacentElement('afterend', container);
-            } else {
-                wrapper.appendChild(container);
-            }
+            wrapper.appendChild(container);
         }
         return container;
     }
 
-    // =========================================================================
-    // CONVERSION
-    // =========================================================================
+    function ensureAnchored(container) {
+        if (!container) return;
+        const boardList = document.getElementById(CONFIG.BOARD_LIST_ID);
+        if (!boardList || !boardList.parentNode) return;
+
+        // Already immediately before the board list → nothing to do.
+        if (container.nextElementSibling === boardList) return;
+
+        // Otherwise move it into position. insertBefore on an existing
+        // node moves it, which is exactly what we want here.
+        boardList.parentNode.insertBefore(container, boardList);
+    }
+
+    // ------------------------------------------------------------------
+    // Conversion
+    // ------------------------------------------------------------------
     let conversionInProgress = false;
+    let lastMessageCount = -1;
 
     function convert() {
         if (conversionInProgress) return;
@@ -299,23 +256,40 @@ const ShoutboxModule = (function () {
         try {
             const helloBox = document.querySelector(CONFIG.HELLO_BOX_SELECTOR);
             if (!helloBox) {
-                console.debug('[ShoutboxModule] No hello-box found — skipping');
+                return; // nothing to do yet
+            }
+
+            const container = ensureContainerExists();
+            if (!container) {
+                console.warn('[ShoutboxModule] No wrapper — cannot create container');
                 return;
             }
 
-            const container = getOrCreateContainer();
-            if (!container) return;
-
-            // Don't rebuild if we've already populated this container
-            // and the source hasn't changed.
-            if (container.dataset.built === 'true') return;
-
             const messages = extractMessages(helloBox);
+
+            // If the hello-box rendered zero messages (its script hasn't
+            // populated the list yet), wait for the next callback.
+            if (messages.length === 0) {
+                return;
+            }
+
+            // Rebuild only when the message count changed. The hello-box
+            // re-renders its inner list on its own schedule, and the
+            // observer may fire multiple times; this keeps us from
+            // thrashing the DOM.
+            if (container.dataset.built === 'true' && messages.length === lastMessageCount) {
+                ensureAnchored(container);
+                return;
+            }
+
             container.innerHTML = buildShoutboxHtml(messages);
             container.dataset.built = 'true';
+            lastMessageCount = messages.length;
 
-            // Hide the legacy box — the modern UI replaces it.
             helloBox.style.display = 'none';
+
+            // Anchor now that the DOM has settled.
+            ensureAnchored(container);
 
             console.log('[ShoutboxModule] Shoutbox modernized (' + messages.length + ' messages)');
         } catch (err) {
@@ -325,23 +299,63 @@ const ShoutboxModule = (function () {
         }
     }
 
-    // =========================================================================
-    // OBSERVER REGISTRATION
-    // =========================================================================
+    // ------------------------------------------------------------------
+    // Observer + polling fallback
+    //
+    // The observer alone isn't enough here for two reasons:
+    //
+    //   1. hello-box is a web component. Its script can add the
+    //      element with attributes that trip #shouldProcessMutation
+    //      (or add it inside a shadow root the observer can't reach),
+    //      so the selector callback never fires.
+    //
+    //   2. #modern-board-list is rendered asynchronously by
+    //      ForumBoardsModule after an API fetch. The shoutbox needs to
+    //      re-anchor after it appears, not just at first render.
+    //
+    // The polling fallback covers (1); ensureAnchored() called on
+    // every convert() covers (2), and we also poll on the same tick
+    // so the re-anchor happens even when no further observer callback
+    // arrives.
+    // ------------------------------------------------------------------
+    let pollTimer = null;
+    let pollStart = 0;
+
+    function startPolling() {
+        if (pollTimer) return;
+        pollStart = Date.now();
+
+        pollTimer = setInterval(function () {
+            const container = document.getElementById(CONFIG.CONTAINER_ID);
+            if (container) ensureAnchored(container);
+
+            // Convert if we haven't yet, or if the hello-box has
+            // re-rendered with a different count.
+            convert();
+
+            // Stop once we have a built container AND the board list is
+            // anchored, or once the timeout elapses.
+            const built = container && container.dataset.built === 'true';
+            const anchored = container && container.nextElementSibling &&
+                container.nextElementSibling.id === CONFIG.BOARD_LIST_ID;
+            if (built && anchored) {
+                clearInterval(pollTimer);
+                pollTimer = null;
+            } else if (Date.now() - pollStart > CONFIG.POLL_TIMEOUT) {
+                clearInterval(pollTimer);
+                pollTimer = null;
+                console.debug('[ShoutboxModule] Polling stopped after timeout');
+            }
+        }, CONFIG.POLL_INTERVAL);
+    }
+
     function registerObservers() {
         if (!globalThis.forumObserver) {
-            console.warn('[ShoutboxModule] forumObserver unavailable — falling back to DOMContentLoaded');
-            if (document.readyState === 'loading') {
-                document.addEventListener('DOMContentLoaded', convert, { once: true });
-            } else {
-                convert();
-            }
+            console.warn('[ShoutboxModule] forumObserver unavailable — polling only');
+            startPolling();
             return;
         }
 
-        // The hello-box may be injected by its own script after page
-        // load, so we watch for it. The board list is what we anchor
-        // the container to, so we also wait for that to exist.
         try {
             globalThis.forumObserver.register({
                 id: 'shoutbox-module-hello-box',
@@ -349,29 +363,50 @@ const ShoutboxModule = (function () {
                 priority: 'high',
                 callback: function () { convert(); }
             });
-            console.log('[ShoutboxModule] Registered with ForumCoreObserver');
+            console.log('[ShoutboxModule] Registered hello-box observer');
         } catch (e) {
-            console.error('[ShoutboxModule] Observer registration failed:', e);
-            // Fallback: try once after a short delay.
-            setTimeout(convert, 1000);
+            console.error('[ShoutboxModule] hello-box observer failed:', e);
         }
+
+        try {
+            // Board list appearing is what lets us re-anchor.
+            globalThis.forumObserver.register({
+                id: 'shoutbox-module-board-list',
+                selector: '#' + CONFIG.BOARD_LIST_ID,
+                priority: 'high',
+                callback: function () {
+                    const container = document.getElementById(CONFIG.CONTAINER_ID);
+                    if (container) ensureAnchored(container);
+                }
+            });
+            console.log('[ShoutboxModule] Registered board-list observer');
+        } catch (e) {
+            console.error('[ShoutboxModule] board-list observer failed:', e);
+        }
+
+        // Polling covers the cases the observer misses.
+        startPolling();
     }
 
-    // =========================================================================
-    // PUBLIC API
-    // =========================================================================
+    // ------------------------------------------------------------------
+    // Public API
+    // ------------------------------------------------------------------
     function initialize() {
         registerObservers();
-        // Also try immediately — the hello-box may already be present.
+        // Immediate attempt in case both elements are already present.
         convert();
+        const container = document.getElementById(CONFIG.CONTAINER_ID);
+        if (container) ensureAnchored(container);
         return Promise.resolve();
     }
 
     function reset() {
+        if (pollTimer) { clearInterval(pollTimer); pollTimer = null; }
         const container = document.getElementById(CONFIG.CONTAINER_ID);
         if (container) container.remove();
         const helloBox = document.querySelector(CONFIG.HELLO_BOX_SELECTOR);
         if (helloBox) helloBox.style.display = '';
+        lastMessageCount = -1;
     }
 
     return {
