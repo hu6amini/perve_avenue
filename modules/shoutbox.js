@@ -632,13 +632,34 @@ var ChatModule = (function (Utils, EventBus) {
         };
     }
 
-    async function buildComposer(container) {
-        // Idempotence guard — if a previous build() call already produced
-        // a composer, don't append a second toolbar + editor + actions
-        // set. This is what produced the duplicated .chat-toolbar /
-        // .chat-editor / .chat-actions block in the rendered DOM.
+        async function buildComposer(container) {
         var composer = container.querySelector('.chat-composer');
-        if (!composer || composer.querySelector('.chat-editor')) return;
+        if (!composer) return;
+
+        // If a *live* editor already exists, do nothing. Checking only for
+        // the .chat-editor DOM node isn't enough: after destroy() (or a
+        // bfcache restore) the node is still there but the TipTap instance
+        // behind it is dead, so the send button renders and does nothing.
+        // editor.isDestroyed is false while the view is alive.
+        if (composer.querySelector('.chat-editor') &&
+            _editorInstance &&
+            !_editorInstance.isDestroyed) {
+            return;
+        }
+
+        // Tear down whatever dead shell is present before building a new
+        // one. Without this, a rebuild appends a second toolbar / editor /
+        // actions set alongside the orphaned nodes.
+        if (_editorInstance) {
+            try { _editorInstance.destroy(); } catch (e) { /* ignore */ }
+            _editorInstance = null;
+        }
+        var deadToolbar = composer.querySelector('.chat-toolbar');
+        if (deadToolbar) deadToolbar.remove();
+        var deadEditor = composer.querySelector('.chat-editor');
+        if (deadEditor) deadEditor.remove();
+        var deadActions = composer.querySelector('.chat-actions');
+        if (deadActions) deadActions.remove();
 
         var deps = await loadTipTapDeps();
         var {
@@ -791,7 +812,7 @@ var ChatModule = (function (Utils, EventBus) {
             editor.commands.clearContent(true);
             sendBtn.disabled = true;
 
-                        // Give hello-box a beat to render, then refresh our list so the
+            // Give hello-box a beat to render, then refresh our list so the
             // sent message appears immediately instead of after the poll.
             setTimeout(function () {
                 var fresh = readMessages();
@@ -1111,9 +1132,18 @@ var ChatModule = (function (Utils, EventBus) {
         init: initialize,
         destroy: destroy,
         build: build,
-        // Exposed for tests / other modules that need to read the same
-        // source without re-querying the DOM.
         readMessages: readMessages,
         getCurrentUserId: getCurrentUserId
     };
 })(window.Utils, window.EventBus);
+
+// Auto-init unless another module has claimed ownership.
+if (!window.__chatModuleAutoInitDisabled) {
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', function () {
+            ChatModule.init();
+        });
+    } else {
+        ChatModule.init();
+    }
+}
