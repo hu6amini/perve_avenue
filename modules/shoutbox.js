@@ -950,13 +950,16 @@ var ChatModule = (function (Utils, EventBus) {
                 buildMessagesList(container);
                 buildComposerShell(container);
 
-                // Composer build is guarded internally too; this skip
+                                // Composer build is guarded internally too; this skip
                 // avoids re-entering the dynamic import() at all when a
-                // previous build already produced an editor.
+                // *live* editor is already attached. Checking only for
+                // the DOM node isn't enough — after destroy() the node
+                // remains but the TipTap instance behind it is dead.
                 var composer = container.querySelector('.chat-composer');
-                var alreadyHasEditor = composer && composer.querySelector('.chat-editor');
+                var liveEditor = composer && composer.querySelector('.chat-editor') &&
+                                 _editorInstance && !_editorInstance.isDestroyed;
 
-                if (!alreadyHasEditor) {
+                if (!liveEditor) {
                     await buildComposer(container);
                 }
 
