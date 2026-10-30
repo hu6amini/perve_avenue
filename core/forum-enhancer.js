@@ -29,6 +29,7 @@
             messenger: true,
             'slick-carousel': true,
             boards: true, // ← new
+            shoutbox: true,
             'quote-queue': true,
             editor: true,
             navigation: false,
