@@ -16,6 +16,28 @@ var ChatModule = (function (Utils, EventBus) {
     var _seenMessageIds = new Set();
     var _currentUserCache = null;
 
+    // Build guards.
+    //   _buildInProgress  — first line of defence against two concurrent
+    //                        build() calls (the wrapper observer path and
+    //                        the "wrapper already exists" fast path both
+    //                        schedule a build ~50ms apart).
+    //   _buildPromise     — the in-flight build, returned to any second
+    //                        caller that races in while the first is
+    //                        still awaiting TipTap's dynamic imports.
+    //   _chatPlaced       — set once getOrCreateChatContainer() has
+    //                        inserted the section into the DOM. The
+    //                        anchor observer consults this to avoid
+    //                        re-inserting on every mutation.
+    var _buildInProgress = false;
+    var _buildPromise = null;
+    var _chatPlaced = false;
+
+    // Per-MID cache for author group classes. Populated in the
+    // background by resolveGroupClass(); buildMessageElement() paints
+    // a group-member default immediately and swaps in the real class
+    // when the fetch resolves.
+    var _groupCache = new Map();
+
     var CONFIG = {
         CONTAINER_ID: 'modern-chat',
         POLL_INTERVAL_MS: 4000,
@@ -39,6 +61,12 @@ var ChatModule = (function (Utils, EventBus) {
         '64748B', '94A3B8', 'CBD5E1', '475569', '334155'
     ];
 
+    var KNOWN_GROUP_CLASSES = [
+        'group-founder', 'group-administrator', 'group-global-moderator',
+        'group-moderator', 'group-developer', 'group-game-dev',
+        'group-fan', 'group-member'
+    ];
+
     // ------------------------------------------------------------------------
     // Helpers (mirrors editor-module.js / messenger.js conventions)
     // ------------------------------------------------------------------------
@@ -55,6 +83,24 @@ var ChatModule = (function (Utils, EventBus) {
         var txt = document.createElement('textarea');
         txt.innerHTML = str;
         return txt.value;
+    }
+
+    // Local copy — editor-module.js and messenger.js each have their own,
+    // and ChatModule doesn't import either. Without this, the editor's
+    // onUpdate handler throws ReferenceError on the first keystroke and
+    // the Send button never enables.
+    function editorContentIsEmpty(html) {
+        if (!html || typeof html !== 'string') return true;
+        var text = html
+            .replace(/<[^>]*>/g, '')
+            .replace(/&nbsp;/gi, ' ')
+            .replace(/&zeroWidthSpace;/gi, '')
+            .replace(/[\p{Cc}\p{Cf}]/gu, '')
+            .replace(/\s+/g, ' ')
+            .trim();
+        if (text.length > 0) return false;
+        if (/<img[^>]+src\s*=/i.test(html)) return false;
+        return true;
     }
 
     function getColorFromNickname(nickname, userId) {
@@ -123,6 +169,66 @@ var ChatModule = (function (Utils, EventBus) {
     }
 
     // ------------------------------------------------------------------------
+    // GROUP CLASS RESOLUTION (background)
+    //
+    // hello-box doesn't expose the author's group in its markup — every
+    // message ships with the same .hb-* structure regardless of role. To
+    // colour the avatar border the way every other surface does, we look
+    // the author up via /api.php?mid=X (the same endpoint boards.js and
+    // messenger.js use) and cache the result per MID. The initial paint
+    // uses group-member; the real class is swapped in when the fetch
+    // resolves. Failures are cached too, so a dead MID isn't refetched.
+    // ------------------------------------------------------------------------
+    function classifyGroup(user) {
+        if (!user || !user.group) return 'group-member';
+        var gn = (user.group.name || '').toLowerCase();
+        var gc = (user.group.class || '').toLowerCase();
+        var gb = (user.group.bodyclass || '').toLowerCase();
+        var gid = user.group.id;
+
+        if (gc.indexOf('founder') !== -1 || gb.indexOf('founder') !== -1 || gn === 'founder') {
+            return 'group-founder';
+        }
+        if (gn === 'administrator' || gc.indexOf('admin') !== -1 || gid === 1) {
+            return 'group-administrator';
+        }
+        if (gn === 'global moderator' || gc.indexOf('global_mod') !== -1) {
+            return 'group-global-moderator';
+        }
+        if (gn === 'moderator' || gc.indexOf('mod') !== -1) {
+            return 'group-moderator';
+        }
+        if (gn === 'developer' || gc.indexOf('developer') !== -1) {
+            return 'group-developer';
+        }
+        if (gn === 'game dev' || gc.indexOf('game_dev') !== -1) {
+            return 'group-game-dev';
+        }
+        if (gn === 'fan') {
+            return 'group-fan';
+        }
+        return 'group-member';
+    }
+
+    function resolveGroupClass(mid) {
+        if (!mid) return Promise.resolve('group-member');
+        if (_groupCache.has(mid)) return Promise.resolve(_groupCache.get(mid));
+
+        return fetch('/api.php?mid=' + encodeURIComponent(mid), { credentials: 'include' })
+            .then(function (r) { return r.ok ? r.json() : null; })
+            .then(function (data) {
+                var user = data && (data['m' + mid] || data.info);
+                var cls = classifyGroup(user);
+                _groupCache.set(mid, cls);
+                return cls;
+            })
+            .catch(function () {
+                _groupCache.set(mid, 'group-member');
+                return 'group-member';
+            });
+    }
+
+    // ------------------------------------------------------------------------
     // SOURCE READING — hello-box (primary) or .shoutbox (fallback)
     //
     // Both produce the same normalised shape so the rest of the module is
@@ -165,7 +271,9 @@ var ChatModule = (function (Utils, EventBus) {
                 timestamp: timeStr,
                 timestampDate: null, // hello-box formats as "DD/MM, HH:MM"
                 html: html,
-                groupClass: 'group-member'
+                // Painted as the fallback; buildMessageElement() swaps in
+                // the real class once resolveGroupClass() resolves.
+                groupClass: mid ? (_groupCache.get(mid) || 'group-member') : 'group-member'
             });
         });
         return out;
@@ -374,7 +482,30 @@ var ChatModule = (function (Utils, EventBus) {
                 '<div class="chat-text">' + msg.html + '</div>' +
             '</div>';
 
+        // Background upgrade — if the cache already knows the real class,
+        // apply it synchronously so the first paint is correct. Otherwise
+        // fetch and patch the avatar column in place.
+        if (msg.mid) {
+            if (_groupCache.has(msg.mid)) {
+                applyGroupClass(el, _groupCache.get(msg.mid));
+            } else if (msg.groupClass === 'group-member') {
+                var mid = msg.mid;
+                resolveGroupClass(mid).then(function (cls) {
+                    if (!el.isConnected) return;
+                    applyGroupClass(el, cls);
+                });
+            }
+        }
+
         return el;
+    }
+
+    function applyGroupClass(messageEl, cls) {
+        if (!messageEl || !cls) return;
+        var col = messageEl.querySelector('.chat-avatar-col');
+        if (!col) return;
+        KNOWN_GROUP_CLASSES.forEach(function (c) { col.classList.remove(c); });
+        col.classList.add(cls);
     }
 
     function renderMessages(container, messages, currentMid) {
@@ -384,11 +515,21 @@ var ChatModule = (function (Utils, EventBus) {
         // Preserve scroll if user was near the bottom (chat convention).
         var wasAtBottom = (list.scrollHeight - list.scrollTop - list.clientHeight) < 40;
 
-        // Remove "empty" placeholder if present.
-        var empty = list.querySelector('.chat-empty');
-        if (empty && messages.length > 0) empty.remove();
+        // Always drop the empty node up front — this makes the branch
+        // below idempotent regardless of what the previous paint left
+        // behind. The old code only removed it when the incoming list
+        // was non-empty, which left a stale "No messages yet" node
+        // sitting below real messages whenever the first render ran
+        // against an unhydrated hello-box.
+        var staleEmpty = list.querySelector('.chat-empty');
+        if (staleEmpty) staleEmpty.remove();
 
-        if (messages.length === 0 && !empty) {
+        if (messages.length === 0) {
+            // Drop any message rows left from a previous paint (can only
+            // happen if the source went from populated to empty, e.g. a
+            // folder switch or a hello-box reset).
+            list.querySelectorAll('.chat-message').forEach(function (n) { n.remove(); });
+
             var e = document.createElement('div');
             e.className = 'chat-empty';
             e.innerHTML = '<i class="fa-regular fa-comments" aria-hidden="true"></i>' +
@@ -416,8 +557,6 @@ var ChatModule = (function (Utils, EventBus) {
         // Rebuild the list in order (only appendChild moves, no re-innerHTML).
         var fragment = document.createDocumentFragment();
         orderedNodes.forEach(function (n) { fragment.appendChild(n); });
-        // Keep the "empty" node if it exists at the tail.
-        if (empty) fragment.appendChild(empty);
         list.innerHTML = '';
         list.appendChild(fragment);
 
@@ -426,16 +565,26 @@ var ChatModule = (function (Utils, EventBus) {
         }
     }
 
+    function updateStatus(container, count) {
+        var status = container.querySelector('.chat-status');
+        if (!status) return;
+        status.textContent = count === 0 ? 'No messages yet' :
+            count + ' ' + (count === 1 ? 'message' : 'messages');
+    }
+
     // ------------------------------------------------------------------------
     // POLLING
     // ------------------------------------------------------------------------
     function startPolling(container) {
         if (_pollTimer) return;
-        var currentMid = getCurrentUserId();
         function tick() {
             if (document.hidden) return; // don't poll hidden tabs
+            // Read the current MID fresh each tick — a login/logout
+            // between ticks would otherwise leave the self-classification
+            // stale. getCurrentUserId() is two DOM reads and a regex.
             var messages = readMessages();
-            renderMessages(container, messages, currentMid);
+            renderMessages(container, messages, getCurrentUserId());
+            updateStatus(container, messages.length);
         }
         _pollTimer = setInterval(tick, CONFIG.POLL_INTERVAL_MS);
         addGlobalListener(document, 'visibilitychange', function () {
@@ -484,6 +633,13 @@ var ChatModule = (function (Utils, EventBus) {
     }
 
     async function buildComposer(container) {
+        // Idempotence guard — if a previous build() call already produced
+        // a composer, don't append a second toolbar + editor + actions
+        // set. This is what produced the duplicated .chat-toolbar /
+        // .chat-editor / .chat-actions block in the rendered DOM.
+        var composer = container.querySelector('.chat-composer');
+        if (!composer || composer.querySelector('.chat-editor')) return;
+
         var deps = await loadTipTapDeps();
         var {
             Editor, Node, StarterKit, Placeholder, Underline, Link,
@@ -509,7 +665,6 @@ var ChatModule = (function (Utils, EventBus) {
 
         actions.appendChild(sendBtn);
 
-        var composer = container.querySelector('.chat-composer');
         composer.appendChild(toolbar);
         composer.appendChild(editorHost);
         composer.appendChild(actions);
@@ -623,6 +778,11 @@ var ChatModule = (function (Utils, EventBus) {
             var legacy = htmlToLegacy(html);
             if (!legacy) return;
 
+            // Snapshot the message count so we can verify the round-trip
+            // after sendToHelloBox() fires. If the count doesn't grow, the
+            // send didn't land — restore the draft instead of losing it.
+            var beforeCount = readMessages().length;
+
             if (!sendToHelloBox(legacy)) {
                 showToast('Could not reach the shoutbox — your message is still in the editor.', 'error');
                 return;
@@ -631,305 +791,329 @@ var ChatModule = (function (Utils, EventBus) {
             editor.commands.clearContent(true);
             sendBtn.disabled = true;
 
-            // Give hello-box a beat to render, then refresh our list so the
+                        // Give hello-box a beat to render, then refresh our list so the
             // sent message appears immediately instead of after the poll.
             setTimeout(function () {
-                var msgs = readMessages();
-                renderMessages(container, msgs, getCurrentUserId());
+                var fresh = readMessages();
+                renderMessages(container, fresh, getCurrentUserId());
+                updateStatus(container, fresh.length);
+
+                if (fresh.length <= beforeCount) {
+                    // Send didn't land — restore the draft rather than
+                    // silently losing the user's text.
+                    editor.commands.setContent(html, true);
+                    sendBtn.disabled = false;
+                    showToast('Message may not have sent — draft restored.', 'warning');
+                    return;
+                }
+
                 var list = container.querySelector('.chat-messages');
                 if (list) list.scrollTop = list.scrollHeight;
-            }, 300);
+            }, 400);
         };
-
-        // focus on mount
-        if (window.matchMedia('(hover: hover) and (pointer: fine)').matches) {
-            setTimeout(function () {
-                if (editor && !editor.isDestroyed) editor.commands.focus('end');
-            }, 50);
-        }
     }
 
     // ------------------------------------------------------------------------
-    // Container creation — placed between latest-posts and board-list
-    // without a selector dependency. Uses insertBefore against the board
-    // list; falls back to appending into the wrapper.
+    // SHELL — header, messages list, composer mount
+    // ------------------------------------------------------------------------
+    function buildHeader(container) {
+        var header = container.querySelector('.chat-header-bar');
+        if (header) return header;
+
+        header = document.createElement('div');
+        header.className = 'chat-header-bar';
+        header.innerHTML =
+            '<div class="chat-title">' +
+                '<i class="fa-regular fa-comments" aria-hidden="true"></i>' +
+                '<span>Shoutbox</span>' +
+            '</div>' +
+            '<div class="chat-status" aria-live="polite"></div>';
+        container.insertBefore(header, container.firstChild);
+        return header;
+    }
+
+    function buildMessagesList(container) {
+        var list = container.querySelector('.chat-messages');
+        if (list) return list;
+
+        list = document.createElement('div');
+        list.className = 'chat-messages';
+        list.setAttribute('role', 'log');
+        list.setAttribute('aria-live', 'polite');
+        list.setAttribute('aria-label', 'Chat messages');
+
+        var composer = container.querySelector('.chat-composer');
+        if (composer && composer.parentNode === container) {
+            container.insertBefore(list, composer);
+        } else {
+            container.appendChild(list);
+        }
+        return list;
+    }
+
+    function buildComposerShell(container) {
+        var composer = container.querySelector('.chat-composer');
+        if (composer) return composer;
+
+        composer = document.createElement('div');
+        composer.className = 'chat-composer';
+        composer.setAttribute('role', 'form');
+        composer.setAttribute('aria-label', 'Compose a message');
+        container.appendChild(composer);
+        return composer;
+    }
+
+    // ------------------------------------------------------------------------
+    // CONTAINER — creation, placement, idempotency
     // ------------------------------------------------------------------------
     function getOrCreateChatContainer() {
         var existing = document.getElementById(CONFIG.CONTAINER_ID);
-        if (existing) return existing;
+        if (existing) {
+            _chatPlaced = true;
+            return existing;
+        }
 
         var wrapper = document.getElementById('modern-forum-wrapper');
         if (!wrapper) return null;
 
         var container = document.createElement('section');
         container.id = CONFIG.CONTAINER_ID;
-        container.className = 'modern-chat';
+        container.className = 'chat-module';
+        container.setAttribute('aria-label', 'Forum shoutbox');
 
-        var header = document.createElement('header');
-        header.className = 'chat-header-bar';
-        header.innerHTML =
-            '<h2 class="chat-title">' +
-                '<i class="fa-regular fa-comments" aria-hidden="true"></i> Shoutbox' +
-            '</h2>' +
-            '<span class="chat-status" aria-live="polite"></span>';
-        container.appendChild(header);
-
-        var list = document.createElement('div');
-        list.className = 'chat-messages';
-        list.setAttribute('role', 'log');
-        list.setAttribute('aria-live', 'polite');
-        list.setAttribute('aria-relevant', 'additions');
-        container.appendChild(list);
-
-        var composer = document.createElement('div');
-        composer.className = 'chat-composer';
-        container.appendChild(composer);
-
-        // Placement: after latest-posts, before the board list. This is the
-        // "just before #modern-board-list and after latest posts" slot the
-        // brief asks for. Any missing anchor is skipped gracefully.
-        var boardList = document.getElementById('modern-board-list');
-        var latestPosts = document.getElementById('modern-latest-posts');
+        // Placement priority: before the board list, before the latest
+        // posts block, then append. reorderContainers() in boards.js will
+        // fix the order after every module initialises anyway, so this is
+        // a best-effort initial slot, not the final word.
+        var boardList = wrapper.querySelector('#modern-board-list');
+        var latestPosts = wrapper.querySelector('#modern-latest-posts');
 
         if (boardList && boardList.parentNode === wrapper) {
             wrapper.insertBefore(container, boardList);
         } else if (latestPosts && latestPosts.parentNode === wrapper) {
-            // board list absent (e.g. topic page): go right after latest posts.
-            if (latestPosts.nextSibling) {
-                wrapper.insertBefore(container, latestPosts.nextSibling);
-            } else {
-                wrapper.appendChild(container);
-            }
+            wrapper.insertBefore(container, latestPosts);
         } else {
-            // Neither anchor present: append to the wrapper. The page's
-            // own ordering will place it wherever the wrapper sits.
             wrapper.appendChild(container);
         }
 
+        _chatPlaced = true;
         return container;
     }
 
     // ------------------------------------------------------------------------
-    // Toast (self-contained — chat shouldn't depend on messenger's)
+    // BUILD — guarded, idempotent, concurrency-safe
     // ------------------------------------------------------------------------
-    function ensureToastContainer() {
-        var c = document.getElementById('chat-toasts');
-        if (!c) {
-            c = document.createElement('div');
-            c.id = 'chat-toasts';
-            c.setAttribute('aria-live', 'polite');
-            c.style.cssText = 'position:fixed;bottom:var(--space-lg);right:var(--space-lg);z-index:100000;display:flex;flex-direction:column;gap:var(--space-xs);pointer-events:none;';
-            document.body.appendChild(c);
-        }
-        return c;
+    function build() {
+        // Concurrent-call guard. Two call sites schedule build() ~50ms
+        // apart (the wrapper observer and the "wrapper already exists"
+        // fast path in initialize()). Both fire in the common case. If a
+        // build is already in flight, hand back its promise so the second
+        // caller doesn't start a parallel one.
+        if (_buildPromise) return _buildPromise;
+        if (_buildInProgress) return Promise.resolve();
+
+        _buildInProgress = true;
+        _buildPromise = (async function () {
+            try {
+                var container = getOrCreateChatContainer();
+                if (!container) {
+                    console.warn('[ChatModule] Could not find a mount point for the chat container.');
+                    return;
+                }
+
+                container.classList.add('chat-module');
+
+                // Shell elements are idempotent — each checks for an
+                // existing node first.
+                buildHeader(container);
+                buildMessagesList(container);
+                buildComposerShell(container);
+
+                // Composer build is guarded internally too; this skip
+                // avoids re-entering the dynamic import() at all when a
+                // previous build already produced an editor.
+                var composer = container.querySelector('.chat-composer');
+                var alreadyHasEditor = composer && composer.querySelector('.chat-editor');
+
+                if (!alreadyHasEditor) {
+                    await buildComposer(container);
+                }
+
+                // Initial paint.
+                var messages = readMessages();
+                renderMessages(container, messages, getCurrentUserId());
+                updateStatus(container, messages.length);
+
+                // A second repaint ~600ms later catches hello-box that
+                // hydrated after our first read (common on slow pages).
+                setTimeout(function () {
+                    if (!document.getElementById(CONFIG.CONTAINER_ID)) return;
+                    var fresh = readMessages();
+                    renderMessages(container, fresh, getCurrentUserId());
+                    updateStatus(container, fresh.length);
+                }, 600);
+
+                startPolling(container);
+            } catch (err) {
+                console.error('[ChatModule] build failed:', err);
+            } finally {
+                _buildInProgress = false;
+                _buildPromise = null;
+            }
+        })();
+
+        return _buildPromise;
     }
-    function showToast(message, type) {
-        var color = 'var(--success-color)';
-        var icon = 'fa-regular fa-circle-check';
-        if (type === 'error') { color = 'var(--danger-color)'; icon = 'fa-regular fa-circle-exclamation'; }
-        else if (type === 'warning') { color = 'var(--warning-color)'; icon = 'fa-regular fa-triangle-exclamation'; }
-        var t = document.createElement('div');
-        t.setAttribute('role', 'status');
-        t.style.cssText = 'display:flex;align-items:center;gap:var(--space-sm);padding:var(--pad-3) var(--pad-5);background:var(--surface-color);color:var(--text-primary);border:1px solid var(--border-color);border-left-width:3px;border-left-color:' + color + ';border-radius:var(--radius);box-shadow:var(--shadow-lg);font-family:var(--font-primary);font-size:var(--text-sm);max-width:360px;pointer-events:auto;opacity:0;transform:translateY(8px);transition:opacity .2s ease,transform .2s ease;';
-        t.innerHTML = '<i class="' + icon + '" aria-hidden="true" style="color:' + color + ';"></i><span style="flex:1;">' + escapeHtml(message) + '</span>';
-        ensureToastContainer().appendChild(t);
-        requestAnimationFrame(function () { t.style.opacity = '1'; t.style.transform = 'translateY(0)'; });
+
+    // ------------------------------------------------------------------------
+    // OBSERVERS
+    //
+    // Two registrations:
+    //   chat-module-wrapper — primary. Fires when #modern-forum-wrapper
+    //                         appears, then unregisters itself.
+    //   chat-module-anchors — fallback for late-arriving board/latest
+    //                         lists. No-ops once _chatPlaced is set, so
+    //                         it can't re-insert on every mutation.
+    // ------------------------------------------------------------------------
+    function registerObservers() {
+        if (typeof Utils === 'undefined' || !Utils || typeof Utils.registerObserver !== 'function') {
+            // No observer utility available — fall back to polling for the
+            // wrapper a few times, then give up.
+            var attempts = 0;
+            var iv = setInterval(function () {
+                attempts++;
+                if (document.getElementById('modern-forum-wrapper')) {
+                    clearInterval(iv);
+                    setTimeout(build, 100);
+                } else if (attempts > 40) {
+                    clearInterval(iv);
+                    console.warn('[ChatModule] wrapper never appeared.');
+                }
+            }, 100);
+            return;
+        }
+
+        Utils.registerObserver('chat-module-wrapper', '#modern-forum-wrapper', function () {
+            // Primary path. The observer fires once the wrapper exists;
+            // build() is itself guarded, so a second registration racing
+            // in is harmless.
+            setTimeout(build, 100);
+        });
+
+        Utils.registerObserver('chat-module-anchors',
+            '#modern-board-list, #modern-latest-posts',
+            function () {
+                // Once the chat has been placed, this observer has nothing
+                // to do. Without this guard, a whitespace text node
+                // between the chat and the board list makes
+                // container.nextSibling !== boardList true, and every
+                // mutation re-inserts the container — an infinite
+                // mutation loop.
+                if (_chatPlaced) return;
+
+                var wrapper = document.getElementById('modern-forum-wrapper');
+                if (!wrapper) return;
+
+                var container = document.getElementById(CONFIG.CONTAINER_ID);
+                if (!container) {
+                    // Chat hasn't been created yet — let the primary path
+                    // handle it. If it never fires, getOrCreateChatContainer
+                    // will place us on the next build() anyway.
+                    return;
+                }
+
+                var boardList = wrapper.querySelector('#modern-board-list');
+                if (boardList && boardList.parentNode === wrapper &&
+                    container.nextSibling !== boardList) {
+                    wrapper.insertBefore(container, boardList);
+                }
+            });
+    }
+
+    // ------------------------------------------------------------------------
+    // TOASTS — minimal, non-blocking. Prefers a shared Utils.showToast if
+    // one exists (messenger.js uses the same convention).
+    // ------------------------------------------------------------------------
+    function showToast(message, kind) {
+        if (Utils && typeof Utils.showToast === 'function') {
+            Utils.showToast(message, kind);
+            return;
+        }
+        // Local fallback.
+        var existing = document.querySelector('.chat-toast');
+        if (existing) existing.remove();
+
+        var toast = document.createElement('div');
+        toast.className = 'chat-toast chat-toast--' + (kind || 'info');
+        toast.setAttribute('role', 'status');
+        toast.textContent = message;
+        document.body.appendChild(toast);
+
+        requestAnimationFrame(function () { toast.classList.add('chat-toast--visible'); });
         setTimeout(function () {
-            t.style.opacity = '0'; t.style.transform = 'translateY(8px)';
-            setTimeout(function () { if (t.parentNode) t.parentNode.removeChild(t); }, 250);
+            toast.classList.remove('chat-toast--visible');
+            setTimeout(function () { toast.remove(); }, 300);
         }, 3500);
     }
 
     // ------------------------------------------------------------------------
-    // BOOTSTRAP
+    // LIFECYCLE
     // ------------------------------------------------------------------------
-    async function build() {
-        var container = getOrCreateChatContainer();
-        if (!container) {
-            console.warn('[ChatModule] #modern-forum-wrapper not present — chat not built');
-            return;
+    function initialize() {
+        if (isInitialized) return;
+        isInitialized = true;
+
+        registerObservers();
+
+        // Fast path — wrapper may already be present when this module
+        // runs (e.g. script loaded late, or boards.js rendered first).
+        if (document.getElementById('modern-forum-wrapper')) {
+            setTimeout(build, 150);
         }
 
-        // Initial paint
-        var msgs = readMessages();
-        renderMessages(container, msgs, getCurrentUserId());
-
-         var status = container.querySelector('.chat-status');
-        if (status) {
-            status.textContent = msgs.length === 0 ? 'No messages yet' :
-                msgs.length + ' ' + (msgs.length === 1 ? 'message' : 'messages');
-        }
-
-        await buildComposer(container);
-
-        // Repaint once the composer exists — the first read may have run
-        // before hello-box finished hydrating its message list.
-        setTimeout(function () {
-            var fresh = readMessages();
-            renderMessages(container, fresh, getCurrentUserId());
-            if (status) {
-                status.textContent = fresh.length === 0 ? 'No messages yet' :
-                    fresh.length + ' ' + (fresh.length === 1 ? 'message' : 'messages');
+        // Cleanup on unload so the interval doesn't survive a bfcache
+        // restore with a dead container reference.
+        addGlobalListener(window, 'pagehide', function () {
+            stopPolling();
+            observerCallbacks.forEach(function (cb) {
+                try { cb(); } catch (e) { /* ignore */ }
+            });
+            observerCallbacks = [];
+            if (_editorInstance) {
+                try { _editorInstance.destroy(); } catch (e) { /* ignore */ }
+                _editorInstance = null;
             }
-        }, 600);
-
-        startPolling(container);
-
-        console.log('[ChatModule] Chat surface built');
+        });
     }
 
-    // ------------------------------------------------------------------------
-    // TEARDOWN
-    // ------------------------------------------------------------------------
-    function reset() {
+    function destroy() {
         stopPolling();
-
         _boundHandlers.forEach(function (h) {
-            try { h.el.removeEventListener(h.type, h.handler, h.opts); } catch (e) {}
+            try { h.el.removeEventListener(h.type, h.handler, h.opts); } catch (e) { /* ignore */ }
         });
         _boundHandlers = [];
-
-        if (_editorInstance && !_editorInstance.isDestroyed) {
-            try { _editorInstance.destroy(); } catch (e) {}
+        if (_editorInstance) {
+            try { _editorInstance.destroy(); } catch (e) { /* ignore */ }
+            _editorInstance = null;
         }
-        _editorInstance = null;
-
         _seenMessageIds.clear();
-        _currentUserCache = null;
-
-        var container = document.getElementById(CONFIG.CONTAINER_ID);
-        if (container && container.parentNode) {
-            container.parentNode.removeChild(container);
-        }
-
-        var toasts = document.getElementById('chat-toasts');
-        if (toasts && toasts.parentNode) toasts.parentNode.removeChild(toasts);
-
+        _groupCache.clear();
         isInitialized = false;
-    }
-
-    // ------------------------------------------------------------------------
-    // OBSERVER REGISTRATION
-    //
-    // Two watch points, deliberately split:
-    //   - The wrapper must exist before we can insert anything.
-    //   - The latest-posts / board-list anchors tell us when the boards
-    //     module has finished building its lists, so our insertBefore
-    //     lands in the correct slot rather than at the wrapper's tail.
-    //
-    // We register against #modern-forum-wrapper (always present after
-    // forum-enhancer builds it) and re-check placement whenever either
-    // anchor appears. The observer callbacks self-unregister once the
-    // chat container exists.
-    // ------------------------------------------------------------------------
-    function registerObservers() {
-        if (!globalThis.forumObserver || typeof globalThis.forumObserver.register !== 'function') {
-            console.warn('[ChatModule] forumObserver unavailable — falling back to immediate build');
-            build();
-            return;
-        }
-
-        var wrapperId = globalThis.forumObserver.register({
-            id: 'chat-module-wrapper',
-            selector: '#modern-forum-wrapper',
-            priority: 'high',
-            callback: function () {
-                if (globalThis.forumObserver && wrapperId != null) {
-                    try { globalThis.forumObserver.unregister(wrapperId); } catch (e) {}
-                }
-                // Wait for the boards module to place its lists before
-                // we insert — the module registers at high priority too,
-                // and its conversion is async. A microtask defer plus a
-                // short timeout gives the two sibling conversions room
-                // to settle without hard-coupling to their timing.
-                Promise.resolve().then(function () {
-                    setTimeout(build, 100);
-                });
-            }
-        });
-
-        // A second observer for the anchors. If #modern-board-list or
-        // #modern-latest-posts appears after our initial build (e.g.
-        // boards.js converted asynchronously and finished later than
-        // our 100ms window), relocate the chat container into the
-        // correct slot. getOrCreateChatContainer() is idempotent and
-        // only moves the node when it isn't already in place.
-        var anchorId = globalThis.forumObserver.register({
-            id: 'chat-module-anchors',
-            selector: '#modern-board-list, #modern-latest-posts',
-            priority: 'medium',
-            callback: function () {
-                var container = document.getElementById(CONFIG.CONTAINER_ID);
-                if (!container) return;
-                var wrapper = document.getElementById('modern-forum-wrapper');
-                var boardList = document.getElementById('modern-board-list');
-                if (wrapper && boardList && boardList.parentNode === wrapper && container.nextSibling !== boardList) {
-                    wrapper.insertBefore(container, boardList);
-                }
-            }
-        });
-
-        observerCallbacks.push(wrapperId, anchorId);
+        _buildInProgress = false;
+        _buildPromise = null;
+        _chatPlaced = false;
     }
 
     // ------------------------------------------------------------------------
     // PUBLIC API
     // ------------------------------------------------------------------------
-    function initialize() {
-        if (isInitialized) return Promise.resolve();
-        isInitialized = true;
-
-        return new Promise(function (resolve) {
-            registerObservers();
-
-            // Fallback: if the wrapper already exists when we boot (the
-            // common case — forum-enhancer builds it synchronously before
-            // modules initialize), skip the observer round-trip.
-            if (document.getElementById('modern-forum-wrapper')) {
-                setTimeout(function () {
-                    build().then(resolve).catch(function (err) {
-                        console.error('[ChatModule] Build failed:', err);
-                        resolve();
-                    });
-                }, 150);
-            } else {
-                // Observer callback resolves the promise indirectly; we
-                // resolve here on a timeout so a missing wrapper can't
-                // hang the enhancer's module-init loop.
-                setTimeout(resolve, 2000);
-            }
-        });
-    }
-
     return {
-        initialize: initialize,
-        reset: reset,
-        refresh: function () {
-            var container = document.getElementById(CONFIG.CONTAINER_ID);
-            if (!container) { build(); return; }
-            renderMessages(container, readMessages(), getCurrentUserId());
-        }
+        init: initialize,
+        destroy: destroy,
+        build: build,
+        // Exposed for tests / other modules that need to read the same
+        // source without re-querying the DOM.
+        readMessages: readMessages,
+        getCurrentUserId: getCurrentUserId
     };
-})(
-    typeof ForumDOMUtils !== 'undefined' ? ForumDOMUtils : window.ForumDOMUtils,
-    typeof ForumEventBus !== 'undefined' ? ForumEventBus : window.ForumEventBus
-);
-
-// ---------------------------------------------------------------------------
-// AUTO-INITIALIZE
-//
-// Mirrors the pattern the other modules use: boot immediately if the DOM
-// is already parsed, otherwise wait for DOMContentLoaded. The enhancer's
-// module registry will also call initialize() — the isInitialized guard
-// makes the second call a no-op.
-// ---------------------------------------------------------------------------
-if (document.readyState === 'interactive' || document.readyState === 'complete') {
-    setTimeout(function () { ChatModule.initialize(); }, 0);
-} else {
-    document.addEventListener('DOMContentLoaded', function () { ChatModule.initialize(); });
-}
-
-if (typeof window !== 'undefined') {
-    window.ChatModule = ChatModule;
-    window.dispatchEvent(new CustomEvent('chat-module-ready'));
-}
+})(window.Utils, window.EventBus);
