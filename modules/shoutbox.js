@@ -1,418 +1,488 @@
+// modules/shoutbox.js
+// Modern Shoutbox Module — wraps the legacy <hello-box> element in a
+// themed container positioned above the modern board list.
+//
+// Design notes:
+//   - The legacy <hello-box> custom element is NOT reimplemented. It owns
+//     the WebSocket connection, message state, emoticon picker, BBCode
+//     toolbar, edit/delete/quote actions, and user avatars. Reimplementing
+//     that protocol would be a second source of truth and would drift.
+//   - Instead we relocate the element into a modern shell and restyle its
+//     internal .hb-* classes via CSS. All interactive behaviour continues
+//     to be handled by the legacy script.
+//   - The module is idempotent: re-running initialize() after the observer
+//     fires again does not create duplicate shells or move the element twice.
+//   - Placement: above #modern-board-list when present (forum home), else
+//     after #modern-breadcrumbs, else appended to #modern-forum-wrapper.
+//     This matches the ORDERED_CONTAINERS contract in boards.js by
+//     registering a container id that boards.js leaves alone — boards.js
+//     only reorders the ids it knows about, so a sibling container survives
+//     its reorder pass unchanged in the DOM but the visual position is
+//     controlled by insertBefore on the board list.
+//   - Collapse state is persisted to localStorage, mirroring the board
+//     category collapse pattern in boards.js (board-cat-* prefix).
 'use strict';
 
-const ShoutboxModule = (function () {
-    console.log('🔥 ShoutboxModule loaded (hello-box → modern shoutbox)');
+var ShoutboxModule = (function () {
+    'use strict';
 
-    const CONFIG = Object.freeze({
-        HELLO_BOX_SELECTOR: 'hello-box',
-        CONTAINER_ID: 'modern-shoutbox',
+    // =========================================================================
+    // CONFIGURATION
+    // =========================================================================
+    var CONFIG = Object.freeze({
+        LEGACY_SELECTOR: 'hello-box',
+        SHELL_ID: 'modern-shoutbox',
+        BODY_ID: 'modern-shoutbox-body',
+        COLLAPSE_KEY: 'shoutbox-collapsed',
         WRAPPER_ID: 'modern-forum-wrapper',
         BOARD_LIST_ID: 'modern-board-list',
-        MAX_MESSAGES: 50,
-        AVATAR_SIZE: 40,
-        WESERV_CDN: 'https://images.weserv.nl/',
-        CACHE: '1y',
-        QUALITY: 85,
-        // Poll interval for the fallback path, in ms.
-        POLL_INTERVAL: 250,
-        // Give up polling after this many ms.
-        POLL_TIMEOUT: 15000
+        BREADCRUMB_ID: 'modern-breadcrumbs',
+        // The legacy element sometimes starts hidden until its script
+        // hydrates. We don't gate on visibility — the shell renders
+        // immediately with a loading state and the legacy element
+        // fills in when it's ready.
+        MAX_WAIT_MS: 8000,
+        POLL_INTERVAL_MS: 150
     });
 
-    const AVATAR_COLORS = [
-        '059669', '10B981', '34D399', '6EE7B7', 'A7F3D0',
-        '0D9488', '14B8A6', '2DD4BF', '5EEAD4', '99F6E4',
-        '3B82F6', '60A5FA', '93C5FD', '2563EB', '1D4ED8',
-        '6366F1', '818CF8', 'A5B4FC', '4F46E5', '4338CA',
-        '8B5CF6', 'A78BFA', 'C4B5FD', '7C3AED', '6D28D9',
-        'D97706', 'F59E0B', 'FBBF24', 'FCD34D', 'B45309',
-        '64748B', '94A3B8', 'CBD5E1', '475569', '334155'
-    ];
+    // =========================================================================
+    // STATE
+    // =========================================================================
+    var isInitialized = false;
+    var shellEl = null;
+    var bodyEl = null;
+    var legacyEl = null;
+    var collapseBtn = null;
+    var waitTimer = null;
+    var waitStartedAt = 0;
+    var _observerIds = [];
 
-    // ------------------------------------------------------------------
-    // Utilities (unchanged from the first version)
-    // ------------------------------------------------------------------
-    const escapeHtml = (str) => {
+    // =========================================================================
+    // HELPERS
+    // =========================================================================
+    function escapeHtml(str) {
         if (typeof str !== 'string') return '';
-        const div = document.createElement('div');
+        var div = document.createElement('div');
         div.textContent = str;
         return div.innerHTML;
-    };
-
-    function getColorFromNickname(nickname, userId) {
-        let hash = 0;
-        const str = nickname || userId || 'user';
-        for (let i = 0; i < str.length; i++) {
-            hash = ((hash << 5) - hash) + str.charCodeAt(i);
-            hash = hash & hash;
-        }
-        return AVATAR_COLORS[Math.abs(hash) % AVATAR_COLORS.length];
     }
 
-    function getInitialFromName(name) {
-        if (!name || typeof name !== 'string') return '?';
-        const match = name.match(/[\p{L}\p{N}]/u);
-        if (!match) return '?';
-        return match[0].toUpperCase();
-    }
-
-    function isValidAvatarUrl(url) {
-        if (!url || typeof url !== 'string') return false;
-        const trimmed = url.trim();
-        return /^(https?:)?\/\//i.test(trimmed) && trimmed.length > 3;
-    }
-
-    function optimizeImageUrl(url, width, height) {
-        if (!isValidAvatarUrl(url)) return null;
-        const lowerUrl = url.toLowerCase();
-        if (lowerUrl.indexOf('weserv.nl') !== -1 || lowerUrl.indexOf('data:') === 0) return url;
-        if (url.startsWith('//')) url = 'https:' + url;
-        if (url.startsWith('http://') && window.location.protocol === 'https:') {
-            url = url.replace('http://', 'https://');
-        }
-        const encoded = encodeURIComponent(url);
-        return CONFIG.WESERV_CDN + '?url=' + encoded +
-            '&output=webp&maxage=' + CONFIG.CACHE + '&q=' + CONFIG.QUALITY +
-            '&w=' + width + '&h=' + height + '&fit=cover&a=attention&il';
-    }
-
-    // ------------------------------------------------------------------
-    // Extraction
-    // ------------------------------------------------------------------
-    function extractMessage(hbMessage) {
-        if (!hbMessage) return null;
-
-        const authorAnchor = hbMessage.querySelector('a[href*="MID="]');
-        if (!authorAnchor) return null;
-
-        const profileUrl = authorAnchor.getAttribute('href') || '#';
-        const midMatch = profileUrl.match(/MID=(\d+)/);
-        const mid = midMatch ? midMatch[1] : null;
-
-        const nickLink = hbMessage.querySelector('.hb-nickname a');
-        const avatarImg = hbMessage.querySelector('img.hb-avatar');
-        let authorName = nickLink ? nickLink.textContent.trim() : '';
-        if (!authorName && avatarImg) authorName = avatarImg.getAttribute('alt') || '';
-        if (!authorName) authorName = authorAnchor.textContent.trim() || 'Unknown';
-        authorName = authorName.replace(/^@/, '');
-
-        let avatarUrl = null;
-        if (avatarImg) {
-            const dataOriginal = avatarImg.getAttribute('data-original');
-            const src = avatarImg.getAttribute('src');
-            if (dataOriginal && isValidAvatarUrl(dataOriginal)) {
-                avatarUrl = optimizeImageUrl(dataOriginal, CONFIG.AVATAR_SIZE, CONFIG.AVATAR_SIZE);
-            } else if (src && isValidAvatarUrl(src)) {
-                avatarUrl = src;
-            }
-        }
-
-        const timeEl = hbMessage.querySelector('.hb-time');
-        const timestamp = timeEl ? timeEl.textContent.trim() : '';
-
-        const bodyEl = hbMessage.querySelector('.hb-text-content');
-        let bodyHtml = '';
-        if (bodyEl) {
-            const clone = bodyEl.cloneNode(true);
-            clone.querySelectorAll('.hb-quote-ref').forEach(el => el.remove());
-            bodyHtml = clone.innerHTML.trim();
-        }
-
-        return { mid, authorName, profileUrl, avatarUrl, timestamp, bodyHtml };
-    }
-
-    function extractMessages(helloBox) {
-        if (!helloBox) return [];
-        const messageEls = helloBox.querySelectorAll('.hb-messages .hb-message');
-        if (!messageEls.length) return [];
-        const messages = [];
-        const limit = Math.min(messageEls.length, CONFIG.MAX_MESSAGES);
-        for (let i = 0; i < limit; i++) {
-            const data = extractMessage(messageEls[i]);
-            if (data) messages.push(data);
-        }
-        return messages;
-    }
-
-    // ------------------------------------------------------------------
-    // Render
-    // ------------------------------------------------------------------
-    function buildAvatarHtml(msg) {
-        if (msg.avatarUrl) {
-            return '<a href="' + escapeHtml(msg.profileUrl) + '" class="shoutbox-avatar-link" aria-label="Profile of ' + escapeHtml(msg.authorName) + '">' +
-                '<img class="shoutbox-avatar" src="' + escapeHtml(msg.avatarUrl) +
-                    '" alt="" width="' + CONFIG.AVATAR_SIZE + '" height="' + CONFIG.AVATAR_SIZE +
-                    '" loading="lazy" decoding="async">' +
-                '</a>';
-        }
-        const initial = getInitialFromName(msg.authorName);
-        const bgColor = getColorFromNickname(msg.authorName, msg.mid);
-        return '<a href="' + escapeHtml(msg.profileUrl) + '" class="shoutbox-avatar-link" aria-label="Profile of ' + escapeHtml(msg.authorName) + '">' +
-            '<span class="shoutbox-avatar shoutbox-avatar--initial" style="background-color:#' + bgColor + ';">' +
-                escapeHtml(initial) +
-            '</span>' +
-        '</a>';
-    }
-
-    function buildMessageHtml(msg) {
-        return '<article class="shoutbox-message">' +
-            '<div class="shoutbox-message-avatar">' + buildAvatarHtml(msg) + '</div>' +
-            '<div class="shoutbox-message-body">' +
-                '<div class="shoutbox-message-header">' +
-                    '<a href="' + escapeHtml(msg.profileUrl) + '" class="shoutbox-message-author">' +
-                        escapeHtml(msg.authorName) +
-                    '</a>' +
-                    (msg.timestamp
-                        ? '<time class="shoutbox-message-time">' + escapeHtml(msg.timestamp) + '</time>'
-                        : '') +
-                '</div>' +
-                '<div class="shoutbox-message-content">' + msg.bodyHtml + '</div>' +
-            '</div>' +
-        '</article>';
-    }
-
-    function buildShoutboxHtml(messages) {
-        const messagesHtml = messages.length
-            ? messages.map(buildMessageHtml).join('')
-            : '<div class="shoutbox-empty"><i class="fa-regular fa-comments" aria-hidden="true"></i><p>No messages yet. Be the first to shout!</p></div>';
-
-        return (
-            '<section class="modern-shoutbox" aria-labelledby="shoutbox-title">' +
-                '<header class="shoutbox-header">' +
-                    '<h2 class="shoutbox-title" id="shoutbox-title">' +
-                        '<i class="fa-regular fa-comments" aria-hidden="true"></i> Shoutbox' +
-                    '</h2>' +
-                    '<span class="shoutbox-count">' + messages.length +
-                        ' ' + (messages.length === 1 ? 'message' : 'messages') + '</span>' +
-                '</header>' +
-                '<div class="shoutbox-list" role="log" aria-live="polite">' + messagesHtml + '</div>' +
-                '<div class="shoutbox-input-bar">' +
-                    '<input type="text" class="shoutbox-input" placeholder="Type a message…" disabled aria-disabled="true">' +
-                    '<button type="button" class="modern-btn modern-btn-primary" disabled aria-disabled="true">' +
-                        '<i class="fa-regular fa-paper-plane" aria-hidden="true"></i> Send' +
-                    '</button>' +
-                '</div>' +
-            '</section>'
-        );
-    }
-
-    // ------------------------------------------------------------------
-    // Container
-    //
-    // Two things can be true here:
-    //   1. The board list already exists → insert before it.
-    //   2. The board list doesn't exist yet → we insert at the
-    //      breadcrumb fallback now, and re-anchor later when the board
-    //      list appears. That's why ensureAnchored() exists — it's
-    //      idempotent and re-runs after every conversion.
-    // ------------------------------------------------------------------
     function getWrapper() {
         return document.getElementById(CONFIG.WRAPPER_ID);
     }
 
-    function ensureContainerExists() {
-        let container = document.getElementById(CONFIG.CONTAINER_ID);
-        if (container) return container;
-
-        const wrapper = getWrapper();
-        if (!wrapper) return null;
-
-        container = document.createElement('div');
-        container.id = CONFIG.CONTAINER_ID;
-        container.className = 'modern-shoutbox-container';
-
-        const breadcrumb = document.getElementById('modern-breadcrumbs');
-        if (breadcrumb && breadcrumb.parentNode) {
-            breadcrumb.insertAdjacentElement('afterend', container);
-        } else {
-            wrapper.appendChild(container);
-        }
-        return container;
-    }
-
-    function ensureAnchored(container) {
-        if (!container) return;
-        const boardList = document.getElementById(CONFIG.BOARD_LIST_ID);
-        if (!boardList || !boardList.parentNode) return;
-
-        // Already immediately before the board list → nothing to do.
-        if (container.nextElementSibling === boardList) return;
-
-        // Otherwise move it into position. insertBefore on an existing
-        // node moves it, which is exactly what we want here.
-        boardList.parentNode.insertBefore(container, boardList);
-    }
-
-    // ------------------------------------------------------------------
-    // Conversion
-    // ------------------------------------------------------------------
-    let conversionInProgress = false;
-    let lastMessageCount = -1;
-
-    function convert() {
-        if (conversionInProgress) return;
-        conversionInProgress = true;
-
+    function isCollapsed() {
         try {
-            const helloBox = document.querySelector(CONFIG.HELLO_BOX_SELECTOR);
-            if (!helloBox) {
-                return; // nothing to do yet
-            }
-
-            const container = ensureContainerExists();
-            if (!container) {
-                console.warn('[ShoutboxModule] No wrapper — cannot create container');
-                return;
-            }
-
-            const messages = extractMessages(helloBox);
-
-            // If the hello-box rendered zero messages (its script hasn't
-            // populated the list yet), wait for the next callback.
-            if (messages.length === 0) {
-                return;
-            }
-
-            // Rebuild only when the message count changed. The hello-box
-            // re-renders its inner list on its own schedule, and the
-            // observer may fire multiple times; this keeps us from
-            // thrashing the DOM.
-            if (container.dataset.built === 'true' && messages.length === lastMessageCount) {
-                ensureAnchored(container);
-                return;
-            }
-
-            container.innerHTML = buildShoutboxHtml(messages);
-            container.dataset.built = 'true';
-            lastMessageCount = messages.length;
-
-            helloBox.style.display = 'none';
-
-            // Anchor now that the DOM has settled.
-            ensureAnchored(container);
-
-            console.log('[ShoutboxModule] Shoutbox modernized (' + messages.length + ' messages)');
-        } catch (err) {
-            console.error('[ShoutboxModule] Conversion error:', err);
-        } finally {
-            conversionInProgress = false;
+            return localStorage.getItem(CONFIG.COLLAPSE_KEY) === '1';
+        } catch (e) {
+            return false;
         }
     }
 
-    // ------------------------------------------------------------------
-    // Observer + polling fallback
-    //
-    // The observer alone isn't enough here for two reasons:
-    //
-    //   1. hello-box is a web component. Its script can add the
-    //      element with attributes that trip #shouldProcessMutation
-    //      (or add it inside a shadow root the observer can't reach),
-    //      so the selector callback never fires.
-    //
-    //   2. #modern-board-list is rendered asynchronously by
-    //      ForumBoardsModule after an API fetch. The shoutbox needs to
-    //      re-anchor after it appears, not just at first render.
-    //
-    // The polling fallback covers (1); ensureAnchored() called on
-    // every convert() covers (2), and we also poll on the same tick
-    // so the re-anchor happens even when no further observer callback
-    // arrives.
-    // ------------------------------------------------------------------
-    let pollTimer = null;
-    let pollStart = 0;
-
-    function startPolling() {
-        if (pollTimer) return;
-        pollStart = Date.now();
-
-        pollTimer = setInterval(function () {
-            const container = document.getElementById(CONFIG.CONTAINER_ID);
-            if (container) ensureAnchored(container);
-
-            // Convert if we haven't yet, or if the hello-box has
-            // re-rendered with a different count.
-            convert();
-
-            // Stop once we have a built container AND the board list is
-            // anchored, or once the timeout elapses.
-            const built = container && container.dataset.built === 'true';
-            const anchored = container && container.nextElementSibling &&
-                container.nextElementSibling.id === CONFIG.BOARD_LIST_ID;
-            if (built && anchored) {
-                clearInterval(pollTimer);
-                pollTimer = null;
-            } else if (Date.now() - pollStart > CONFIG.POLL_TIMEOUT) {
-                clearInterval(pollTimer);
-                pollTimer = null;
-                console.debug('[ShoutboxModule] Polling stopped after timeout');
-            }
-        }, CONFIG.POLL_INTERVAL);
+    function setCollapsed(collapsed) {
+        try {
+            localStorage.setItem(CONFIG.COLLAPSE_KEY, collapsed ? '1' : '0');
+        } catch (e) { /* ignore */ }
     }
 
-    function registerObservers() {
-        if (!globalThis.forumObserver) {
-            console.warn('[ShoutboxModule] forumObserver unavailable — polling only');
-            startPolling();
+    // =========================================================================
+    // SHELL CONSTRUCTION
+    //
+    // The shell is deliberately thin. It owns only:
+    //   - a header with a title, a live message counter, and a collapse
+    //     toggle
+    //   - a body container into which the legacy <hello-box> is moved
+    //
+    // Everything else (message list, input, emoticon picker, BBCode
+    // toolbar) is the legacy element's own markup, restyled via CSS.
+    // =========================================================================
+    function buildShell() {
+        var shell = document.createElement('section');
+        shell.id = CONFIG.SHELL_ID;
+        shell.className = 'modern-shoutbox';
+        shell.setAttribute('aria-label', 'Shoutbox');
+
+        var header = document.createElement('header');
+        header.className = 'modern-shoutbox-header';
+
+        // Title row
+        var titleWrap = document.createElement('div');
+        titleWrap.className = 'modern-shoutbox-title-wrap';
+
+        var icon = document.createElement('span');
+        icon.className = 'modern-shoutbox-icon';
+        icon.innerHTML = '<i class="fa-regular fa-comments" aria-hidden="true"></i>';
+
+        var title = document.createElement('h2');
+        title.className = 'modern-shoutbox-title';
+        title.textContent = 'Shoutbox';
+
+        var counter = document.createElement('span');
+        counter.className = 'modern-shoutbox-counter';
+        counter.setAttribute('aria-live', 'polite');
+        counter.setAttribute('aria-atomic', 'true');
+        counter.textContent = '';
+
+        titleWrap.appendChild(icon);
+        titleWrap.appendChild(title);
+        titleWrap.appendChild(counter);
+
+        // Controls
+        var controls = document.createElement('div');
+        controls.className = 'modern-shoutbox-controls';
+
+        var collapseBtnEl = document.createElement('button');
+        collapseBtnEl.type = 'button';
+        collapseBtnEl.className = 'modern-shoutbox-toggle';
+        collapseBtnEl.setAttribute('aria-label', 'Collapse shoutbox');
+        collapseBtnEl.setAttribute('aria-expanded', 'true');
+        collapseBtnEl.setAttribute('aria-controls', CONFIG.BODY_ID);
+        collapseBtnEl.innerHTML = '<i class="fa-regular fa-angle-down" aria-hidden="true"></i>';
+
+        controls.appendChild(collapseBtnEl);
+
+        header.appendChild(titleWrap);
+        header.appendChild(controls);
+
+        var body = document.createElement('div');
+        body.id = CONFIG.BODY_ID;
+        body.className = 'modern-shoutbox-body';
+
+        // Loading placeholder shown until the legacy element is located
+        // and moved in. Replaced with the real content on success, or
+        // with an error state on timeout.
+        var loading = document.createElement('div');
+        loading.className = 'modern-shoutbox-loading';
+        loading.innerHTML =
+            '<i class="fa-regular fa-spinner fa-spin" aria-hidden="true"></i>' +
+            '<span>Connecting to shoutbox…</span>';
+        body.appendChild(loading);
+
+        shell.appendChild(header);
+        shell.appendChild(body);
+
+        collapseBtn = collapseBtnEl;
+        return shell;
+    }
+
+    // =========================================================================
+    // PLACEMENT
+    //
+    // Three-tier placement, matching the priority the rest of the suite
+    // uses:
+    //   1. before #modern-board-list     (forum home — the target)
+    //   2. after  #modern-breadcrumbs    (any other page with breadcrumbs)
+    //   3. appended to #modern-forum-wrapper (fallback)
+    // =========================================================================
+    function placeShell(shell) {
+        var wrapper = getWrapper();
+        if (!wrapper) return false;
+
+        var boardList = document.getElementById(CONFIG.BOARD_LIST_ID);
+        if (boardList && boardList.parentNode) {
+            boardList.parentNode.insertBefore(shell, boardList);
+            return true;
+        }
+
+        var breadcrumb = document.getElementById(CONFIG.BREADCRUMB_ID);
+        if (breadcrumb && breadcrumb.parentNode) {
+            breadcrumb.insertAdjacentElement('afterend', shell);
+            return true;
+        }
+
+        wrapper.appendChild(shell);
+        return true;
+    }
+
+    // =========================================================================
+    // LEGACY ELEMENT RELOCATION
+    //
+    // Moves the <hello-box> into the shell body. The element keeps its
+    // identity — moving a node in the DOM does not disconnect its custom
+    // element instance, does not reset its state, and does not interrupt
+    // its open WebSocket. The connectedCallback fires again on reinsertion
+    // but the legacy script is written to be idempotent (it checks for
+    // existing state before rebuilding), so reinsertion is safe.
+    //
+    // The only side effect: any `document.querySelector('hello-box')`
+    // calls made by the legacy script after the move will still find it,
+    // because we do not detach it — insertBefore/appendChild on a live
+    // node is a move, not a remove-then-insert from querySelector's
+    // perspective.
+    // =========================================================================
+    function relocateLegacyElement() {
+        if (legacyEl && legacyEl.parentNode === bodyEl) return true;
+
+        var el = document.querySelector(CONFIG.LEGACY_SELECTOR);
+        if (!el) return false;
+
+        legacyEl = el;
+
+        // Clear the loading placeholder.
+        bodyEl.innerHTML = '';
+
+        // Add a class to the legacy element so our CSS can target it
+        // without depending on the tag name, which keeps the styles
+        // scoped if other <hello-box> elements ever appear.
+        legacyEl.classList.add('modern-shoutbox-legacy');
+
+        // Preserve any inline styles the legacy script set on the element
+        // itself, but clear display:none if the script uses it as a
+        // "not yet hydrated" gate — the shell is already visible and the
+        // loading state has been cleared, so there's nothing left to gate.
+        if (legacyEl.style && legacyEl.style.display === 'none') {
+            legacyEl.style.display = '';
+        }
+
+        bodyEl.appendChild(legacyEl);
+        return true;
+    }
+
+    // =========================================================================
+    // MESSAGE COUNTER
+    //
+    // The legacy element renders messages as `.hb-message` children of
+    // `.hb-messages`. A MutationObserver on the messages container keeps
+    // the counter in sync without polling. If the container doesn't exist
+    // yet (legacy script still hydrating), we retry once on the next
+    // observer pass.
+    // =========================================================================
+    var counterObserver = null;
+
+    function updateCounter() {
+        if (!legacyEl) return;
+        var counterEl = shellEl && shellEl.querySelector('.modern-shoutbox-counter');
+        if (!counterEl) return;
+
+        var messages = legacyEl.querySelectorAll('.hb-message');
+        var count = messages.length;
+        counterEl.textContent = count === 1 ? '1 message' : count + ' messages';
+    }
+
+    function attachCounterObserver() {
+        if (!legacyEl) return;
+        var messagesContainer = legacyEl.querySelector('.hb-messages');
+        if (!messagesContainer) {
+            // Container not present yet — try again on the next idle tick.
+            // One retry is enough; if it still isn't there, the legacy
+            // element is in an error state and the counter is moot.
+            setTimeout(function () {
+                if (counterObserver) return;
+                var retry = legacyEl && legacyEl.querySelector('.hb-messages');
+                if (retry) attachCounterObserver();
+            }, 500);
+            return;
+        }
+        if (counterObserver) return;
+
+        counterObserver = new MutationObserver(function () {
+            updateCounter();
+        });
+        counterObserver.observe(messagesContainer, { childList: true, subtree: false });
+        updateCounter();
+    }
+
+    // =========================================================================
+    // COLLAPSE
+    // =========================================================================
+    function applyCollapseState(collapsed) {
+        if (!shellEl || !bodyEl || !collapseBtn) return;
+
+        shellEl.classList.toggle('is-collapsed', collapsed);
+        bodyEl.hidden = collapsed;
+        collapseBtn.setAttribute('aria-expanded', String(!collapsed));
+        collapseBtn.setAttribute(
+            'aria-label',
+            collapsed ? 'Expand shoutbox' : 'Collapse shoutbox'
+        );
+
+        var icon = collapseBtn.querySelector('i');
+        if (icon) {
+            icon.className = collapsed
+                ? 'fa-regular fa-angle-up'
+                : 'fa-regular fa-angle-down';
+        }
+    }
+
+    function handleCollapseClick(e) {
+        e.preventDefault();
+        var collapsed = !shellEl.classList.contains('is-collapsed');
+        setCollapsed(collapsed);
+        applyCollapseState(collapsed);
+    }
+
+    // =========================================================================
+    // WAIT LOOP
+    //
+    // The legacy <hello-box> element is injected by the forum's own script,
+    // which loads after ours on some pages. We poll for its appearance
+    // rather than depending on a specific event, since the forum script
+    // does not emit one. The timeout matches MAX_WAIT_MS; on failure the
+    // shell stays in place with an error state rather than vanishing,
+    // so the user sees that something is expected there.
+    // =========================================================================
+    function failWithError() {
+        if (!bodyEl) return;
+        bodyEl.innerHTML =
+            '<div class="modern-shoutbox-error">' +
+                '<i class="fa-regular fa-triangle-exclamation" aria-hidden="true"></i>' +
+                '<span>Shoutbox is unavailable right now.</span>' +
+            '</div>';
+    }
+
+    function tryRelocate() {
+        if (relocateLegacyElement()) {
+            attachCounterObserver();
+            // Reapply collapse state — the body was empty when the
+            // initial applyCollapseState ran, so the hidden attribute
+            // was set but the visual is now meaningful.
+            applyCollapseState(isCollapsed());
+            if (waitTimer) {
+                clearTimeout(waitTimer);
+                waitTimer = null;
+            }
+            return true;
+        }
+        return false;
+    }
+
+    function startWaitLoop() {
+        if (tryRelocate()) return;
+
+        waitStartedAt = Date.now();
+
+        function poll() {
+            if (tryRelocate()) return;
+
+            if (Date.now() - waitStartedAt > CONFIG.MAX_WAIT_MS) {
+                failWithError();
+                return;
+            }
+            waitTimer = setTimeout(poll, CONFIG.POLL_INTERVAL_MS);
+        }
+
+        waitTimer = setTimeout(poll, CONFIG.POLL_INTERVAL_MS);
+    }
+
+    // =========================================================================
+    // INITIALIZATION
+    // =========================================================================
+    function initialize() {
+        if (isInitialized) {
+            // Idempotent re-entry: if the legacy element was moved and
+            // then the page re-rendered the wrapper (rare, but the
+            // observer can fire after a DOM replacement), rebuild the
+            // shell. The old shell is removed by the replacement, so
+            // the isInitialized guard alone would leave us with no UI.
+            if (!document.getElementById(CONFIG.SHELL_ID)) {
+                isInitialized = false;
+            } else {
+                // Shell exists — ensure the legacy element is still
+                // inside it. If not, re-relocate.
+                if (legacyEl && legacyEl.parentNode !== bodyEl) {
+                    bodyEl.appendChild(legacyEl);
+                }
+                return;
+            }
+        }
+
+        if (!getWrapper()) {
+            // Wrapper not built yet — forum-enhancer creates it. Retry
+            // once the observer reports the wrapper. Registering here
+            // (rather than depending on enhancer order) keeps the module
+            // self-contained.
+            if (globalThis.forumObserver && typeof globalThis.forumObserver.register === 'function') {
+                try {
+                    var id = globalThis.forumObserver.register({
+                        id: 'shoutbox-wrapper-wait',
+                        selector: '#' + CONFIG.WRAPPER_ID,
+                        priority: 'high',
+                        callback: function () {
+                            try { globalThis.forumObserver.unregister(id); } catch (e) {}
+                            initialize();
+                        }
+                    });
+                    if (id) _observerIds.push(id);
+                } catch (e) { /* ignore */ }
+            }
             return;
         }
 
-        try {
-            globalThis.forumObserver.register({
-                id: 'shoutbox-module-hello-box',
-                selector: CONFIG.HELLO_BOX_SELECTOR,
-                priority: 'high',
-                callback: function () { convert(); }
-            });
-            console.log('[ShoutboxModule] Registered hello-box observer');
-        } catch (e) {
-            console.error('[ShoutboxModule] hello-box observer failed:', e);
+        isInitialized = true;
+
+        // Build and place the shell.
+        shellEl = buildShell();
+        bodyEl = shellEl.querySelector('#' + CONFIG.BODY_ID);
+        collapseBtn = shellEl.querySelector('.modern-shoutbox-toggle');
+
+        if (!placeShell(shellEl)) {
+            console.warn('[ShoutboxModule] Could not place shell — no wrapper available');
+            return;
         }
 
-        try {
-            // Board list appearing is what lets us re-anchor.
-            globalThis.forumObserver.register({
-                id: 'shoutbox-module-board-list',
-                selector: '#' + CONFIG.BOARD_LIST_ID,
-                priority: 'high',
-                callback: function () {
-                    const container = document.getElementById(CONFIG.CONTAINER_ID);
-                    if (container) ensureAnchored(container);
-                }
-            });
-            console.log('[ShoutboxModule] Registered board-list observer');
-        } catch (e) {
-            console.error('[ShoutboxModule] board-list observer failed:', e);
-        }
+        // Wire the collapse toggle.
+        collapseBtn.addEventListener('click', handleCollapseClick);
 
-        // Polling covers the cases the observer misses.
-        startPolling();
+        // Apply the persisted collapse state immediately. The body is
+        // hidden before the legacy element arrives, so the user never
+        // sees a flash of unstyled content.
+        applyCollapseState(isCollapsed());
+
+        // Locate and move the legacy element.
+        startWaitLoop();
+
+        console.log('[ShoutboxModule] Initialized');
     }
 
-    // ------------------------------------------------------------------
-    // Public API
-    // ------------------------------------------------------------------
-    function initialize() {
-        registerObservers();
-        // Immediate attempt in case both elements are already present.
-        convert();
-        const container = document.getElementById(CONFIG.CONTAINER_ID);
-        if (container) ensureAnchored(container);
-        return Promise.resolve();
-    }
-
+    // =========================================================================
+    // RESET
+    // =========================================================================
     function reset() {
-        if (pollTimer) { clearInterval(pollTimer); pollTimer = null; }
-        const container = document.getElementById(CONFIG.CONTAINER_ID);
-        if (container) container.remove();
-        const helloBox = document.querySelector(CONFIG.HELLO_BOX_SELECTOR);
-        if (helloBox) helloBox.style.display = '';
-        lastMessageCount = -1;
+        if (waitTimer) {
+            clearTimeout(waitTimer);
+            waitTimer = null;
+        }
+        if (counterObserver) {
+            counterObserver.disconnect();
+            counterObserver = null;
+        }
+        _observerIds.forEach(function (id) {
+            if (globalThis.forumObserver && typeof globalThis.forumObserver.unregister === 'function') {
+                try { globalThis.forumObserver.unregister(id); } catch (e) {}
+            }
+        });
+        _observerIds = [];
+
+        // Move the legacy element back out of the shell so a subsequent
+        // page render (e.g. an AJAX partial swap) finds it in its
+        // expected position. Best-effort: if the shell is gone, there's
+        // nothing to move back to.
+        if (legacyEl && bodyEl && bodyEl.parentNode) {
+            var wrapper = getWrapper();
+            if (wrapper) {
+                wrapper.insertBefore(legacyEl, wrapper.firstChild);
+            }
+        }
+
+        if (shellEl && shellEl.parentNode) {
+            shellEl.parentNode.removeChild(shellEl);
+        }
+
+        shellEl = null;
+        bodyEl = null;
+        legacyEl = null;
+        collapseBtn = null;
+        isInitialized = false;
     }
 
+    // =========================================================================
+    // PUBLIC API
+    // =========================================================================
     return {
         initialize: initialize,
         reset: reset,
-        name: 'shoutbox'
+        name: 'shoutbox',
+        dependencies: ['forumObserver']
     };
 })();
 
