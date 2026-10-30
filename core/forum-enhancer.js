@@ -29,7 +29,6 @@
             messenger: true,
             'slick-carousel': true,
             boards: true, // ← new
-            shoutbox: true,
             'quote-queue': true,
             editor: true,
             navigation: false,
@@ -310,14 +309,7 @@ if (typeof ThemeModule !== 'undefined') {
             log('ForumBoardsModule not found, boards enhancement disabled', 'warn');
             ENHANCER_CONFIG.modules.boards = false;
         }
-        // In registerAllModules(), after the boards registration:
 
-if (typeof ShoutboxModule !== 'undefined') {
-    registerModule('shoutbox', ShoutboxModule, ['forumObserver']);
-} else {
-    log('ShoutboxModule not found, shoutbox enhancement disabled', 'warn');
-    ENHANCER_CONFIG.modules.shoutbox = false;
-}
         // After the boards registration:
 if (typeof QuoteQueueModule !== 'undefined') {
     registerModule('quote-queue', QuoteQueueModule, ['forumObserver']);
