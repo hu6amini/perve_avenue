@@ -230,7 +230,7 @@ async function bootSystem() {
             console.debug(`[Boot] Enhancements loaded in ${(performance.now() - enhStart).toFixed(2)}ms`);
 
             // Finally, load the Forum Enhancer which registers everything
-            loadScript("https://cdn.jsdelivr.net/gh/hu6amini/perve_avenue@2a0eba2ca11271d222a78772ca1b51b6a17dc85e/core/forum-enhancer.min.js")
+            loadScript("https://cdn.jsdelivr.net/gh/hu6amini/perve_avenue@28be1762d50dfcec1560b2b19e75ab19a267fa06/core/forum-enhancer.min.js")
                 .then(() => console.log('[Boot] System Fully Enhanced'))
                 .catch(err => console.warn('[Boot] Forum enhancer failed to load:', err));
         };
