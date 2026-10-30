@@ -310,14 +310,6 @@ if (typeof ThemeModule !== 'undefined') {
             ENHANCER_CONFIG.modules.boards = false;
         }
 
-        // --- CHAT MODULE (NEW) ---
-if (typeof ChatModule !== 'undefined') {
-    registerModule('chat', ChatModule, ['forumObserver']);
-} else {
-    log('ChatModule not found, modern chat disabled', 'warn');
-    ENHANCER_CONFIG.modules.chat = false;
-}
-
         // After the boards registration:
 if (typeof QuoteQueueModule !== 'undefined') {
     registerModule('quote-queue', QuoteQueueModule, ['forumObserver']);
