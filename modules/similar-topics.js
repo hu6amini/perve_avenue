@@ -40,7 +40,7 @@ var SimilarTopicsModule = (function () {
 
         // Fast preview
         fastPreview:    true,
-        previewMaxChars: 450
+        previewMaxChars: 450,
         // Debug (set true to log context resolution)
     debug: false
     };
