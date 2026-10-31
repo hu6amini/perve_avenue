@@ -108,7 +108,7 @@ const ForumPostsModule = (function () {
     const CONFIG = Object.freeze({
         POST_SELECTOR: '.post',
         POST_ID_PREFIX: 'ee',
-        CONTAINER_ID: 'posts-container',
+        CONTAINER_ID: 'modern-posts-container',
         REACTION_DELAY: 500,
         AVATAR_SIZE: 60,
         WESERV_CDN: 'https://images.weserv.nl/',
@@ -565,37 +565,34 @@ function parseDateFromTitle(title) {
     // HELPERS
     // ============================================================================
     function getPostsContainer() {
-        let wrapper = document.getElementById('modern-forum-wrapper');
-        const carouselWrapper = document.querySelector('.carousel-wrapper');
+    let wrapper = document.getElementById('modern-forum-wrapper');
+    const carouselWrapper = document.querySelector('.carousel-wrapper');
 
-        if (wrapper && carouselWrapper && !wrapper.contains(carouselWrapper)) {
-            if (wrapper.compareDocumentPosition(carouselWrapper) & Node.DOCUMENT_POSITION_FOLLOWING) {
-                carouselWrapper.parentNode.insertBefore(wrapper, carouselWrapper.nextSibling);
-            }
-        } else if (!wrapper && carouselWrapper) {
-            wrapper = document.createElement('div');
-            wrapper.id = 'modern-forum-wrapper';
-            wrapper.className = 'modern-forum-wrapper';
+    if (wrapper && carouselWrapper && !wrapper.contains(carouselWrapper)) {
+        if (wrapper.compareDocumentPosition(carouselWrapper) & Node.DOCUMENT_POSITION_FOLLOWING) {
             carouselWrapper.parentNode.insertBefore(wrapper, carouselWrapper.nextSibling);
-        } else if (!wrapper) {
-            wrapper = document.createElement('div');
-            wrapper.id = 'modern-forum-wrapper';
-            wrapper.className = 'modern-forum-wrapper';
-            document.body.appendChild(wrapper);
         }
-
-        let container = document.getElementById('modern-posts-container');
-        if (container) return container;
-
-        const originalContainer = document.getElementById(CONFIG.CONTAINER_ID);
-        if (originalContainer) return originalContainer;
-
-        container = document.createElement('div');
-        container.id = CONFIG.CONTAINER_ID;
-        container.className = 'modern-posts-container';
-        wrapper.appendChild(container);
-        return container;
+    } else if (!wrapper && carouselWrapper) {
+        wrapper = document.createElement('div');
+        wrapper.id = 'modern-forum-wrapper';
+        wrapper.className = 'modern-forum-wrapper';
+        carouselWrapper.parentNode.insertBefore(wrapper, carouselWrapper.nextSibling);
+    } else if (!wrapper) {
+        wrapper = document.createElement('div');
+        wrapper.id = 'modern-forum-wrapper';
+        wrapper.className = 'modern-forum-wrapper';
+        document.body.appendChild(wrapper);
     }
+
+    let container = document.getElementById(CONFIG.CONTAINER_ID);
+    if (container) return container;
+
+    container = document.createElement('div');
+    container.id = CONFIG.CONTAINER_ID;
+    container.className = 'modern-posts-container';
+    wrapper.appendChild(container);
+    return container;
+}
 
     function isValidPost(postEl) {
         if (!postEl) return false;
