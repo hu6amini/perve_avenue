@@ -125,26 +125,6 @@ var SimilarTopicsModule = (function () {
         } catch (e) { /* quota — ignore */ }
     }
 
-    /* ---- Gates ----------------------------------------------------- */
-    function passesGates() {
-        if (!window.Commons || !window.Commons.location) return false;
-        if (!window.Commons.location.isTopic) return false;
-
-        if (CONFIG.firstPageOnly) {
-            var params = new URLSearchParams(window.location.search);
-            if (parseInt(params.get('st') || '0', 10) > 0) return false;
-        }
-
-        if (CONFIG.blacklist.length &&
-            (CONFIG.blacklist.indexOf(sectionId) !== -1 ||
-             CONFIG.blacklist.indexOf(String(sectionId)) !== -1)) return false;
-        if (CONFIG.whitelist.length &&
-            CONFIG.whitelist.indexOf(sectionId) === -1 &&
-            CONFIG.whitelist.indexOf(String(sectionId)) === -1) return false;
-
-        return true;
-    }
-
     /* ---- Styles ---------------------------------------------------- */
     function injectStyles() {
         if (document.getElementById(CONFIG.styleId)) return;
