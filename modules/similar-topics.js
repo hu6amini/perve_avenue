@@ -623,29 +623,50 @@ var SimilarTopicsModule = (function () {
     if (!previewEl) return;
 
     var isExpanded = btn.getAttribute('aria-expanded') === 'true';
+
+    /* ---------------- COLLAPSE ---------------- */
     if (isExpanded) {
-        previewEl.hidden = true;
+        // Pin current visible height so the transition has a concrete
+        // starting value (open state uses max-height: none).
+        previewEl.style.maxHeight = previewEl.scrollHeight + 'px';
+        void previewEl.offsetHeight;                // force reflow
+        previewEl.style.maxHeight = '0px';
+        previewEl.setAttribute('aria-hidden', 'true');
+
         btn.setAttribute('aria-expanded', 'false');
         btn.setAttribute('title', 'Show preview');
         btn.setAttribute('aria-label', 'Show preview of this topic');
         btn.setAttribute('data-tippy-content', '<div class="tip-plain">Show preview</div>');
         btn.innerHTML = '<i class="fa-regular fa-eye" aria-hidden="true"></i>';
+
+        previewEl.addEventListener('transitionend', function onEnd(e) {
+            if (e.propertyName !== 'max-height') return;
+            previewEl.removeEventListener('transitionend', onEnd);
+            previewEl.style.maxHeight = '';
+        });
         return;
     }
 
+    /* ---------------- EXPAND ---------------- */
     btn.setAttribute('aria-expanded', 'true');
     btn.setAttribute('title', 'Hide preview');
     btn.setAttribute('aria-label', 'Hide preview of this topic');
     btn.setAttribute('data-tippy-content', '<div class="tip-plain">Hide preview</div>');
     btn.innerHTML = '<i class="fa-regular fa-eye-slash" aria-hidden="true"></i>';
-    previewEl.hidden = false;
+    previewEl.setAttribute('aria-hidden', 'false');
 
-    if (previewEl.dataset.loaded === 'true') return;
+    // Already loaded → single animate-to-content pass.
+    if (previewEl.dataset.loaded === 'true') {
+        animateOpen(previewEl);
+        return;
+    }
 
+    /* -------- First open: loading → content -------- */
     previewEl.innerHTML =
         '<div class="similar-topic-preview-loading">' +
             '<i class="fa-regular fa-spinner fa-spin" aria-hidden="true"></i> Loading preview…' +
         '</div>';
+    animateOpen(previewEl);   // grows to the loading-spinner height
 
     try {
         var url = '/api.php?t=' + encodeURIComponent(topicId) + '&cookie=1';
@@ -659,6 +680,7 @@ var SimilarTopicsModule = (function () {
                 '<div class="similar-topic-preview-empty">' +
                     '<i class="fa-regular fa-circle-info" aria-hidden="true"></i> Preview not available.' +
                 '</div>';
+            animateOpen(previewEl);
             previewEl.dataset.loaded = 'true';
             return;
         }
@@ -668,8 +690,6 @@ var SimilarTopicsModule = (function () {
             typeof window.ForumPostsModule.transformContentHtml === 'function') {
             contentHtml = window.ForumPostsModule.transformContentHtml(first.content);
         } else {
-            // Fallback for old builds / non-topic pages: text-only,
-            // same as before. Keeps similar-topics usable standalone.
             var text = stripHtml(first.content).replace(/\s+/g, ' ').trim();
             contentHtml = '<p>' + escapeHtml(truncate(text, CONFIG.previewMaxChars)) + '</p>';
         }
@@ -679,6 +699,7 @@ var SimilarTopicsModule = (function () {
                 '<div class="similar-topic-preview-empty">' +
                     '<i class="fa-regular fa-circle-info" aria-hidden="true"></i> Preview not available.' +
                 '</div>';
+            animateOpen(previewEl);
             previewEl.dataset.loaded = 'true';
             return;
         }
@@ -689,7 +710,7 @@ var SimilarTopicsModule = (function () {
             '<div class="modern-quote long-quote similar-topic-preview-quote">' +
                 '<div class="quote-header">' +
                     '<div class="quote-meta">' +
-                        '<div class="quote-icon"><i class="fa-regular fa-eye" aria-hidden="true"></i></div>' +
+                        '<div class="quote-icon"><i class="fa-regular fa-quote-left" aria-hidden="true"></i></div>' +
                         '<div class="quote-info"><span class="quote-author">Preview</span></div>' +
                     '</div>' +
                 '</div>' +
@@ -702,10 +723,14 @@ var SimilarTopicsModule = (function () {
                 'Continue reading <i class="fa-regular fa-arrow-right" aria-hidden="true"></i>' +
             '</a>';
 
+        // Wait for images to settle + initQuotesAndSpoilers to decide
+        // whether the inner expand button stays, THEN grow from the
+        // loading-spinner height to the real content height.
         if (window.ForumPostsModule &&
             typeof window.ForumPostsModule.postProcessPreviewContent === 'function') {
-            window.ForumPostsModule.postProcessPreviewContent(previewEl);
+            await window.ForumPostsModule.postProcessPreviewContent(previewEl);
         }
+        animateOpen(previewEl);
 
         previewEl.dataset.loaded = 'true';
     } catch (e) {
@@ -713,7 +738,38 @@ var SimilarTopicsModule = (function () {
             '<div class="similar-topic-preview-empty">' +
                 '<i class="fa-regular fa-circle-exclamation" aria-hidden="true"></i> Could not load preview.' +
             '</div>';
+        animateOpen(previewEl);
     }
+}
+
+/**
+ * Grow previewEl to its natural content height. Assumes the element is
+ * already in the open state (aria-hidden="false", visibility: visible).
+ * Leaves max-height: none at the end so later inner-quote expand/
+ * collapse keeps pushing the outer container height naturally.
+ */
+function animateOpen(previewEl) {
+    var target = previewEl.scrollHeight;
+
+    // If we're already mid-transition (loading → content), the browser
+    // has an in-flight max-height value on the element. Capture it so
+    // the second animation starts from where the first one is now,
+    // not from a stale inline value.
+    var current = parseFloat(previewEl.style.maxHeight) || 0;
+
+    if (Math.abs(current - target) < 1) {
+        previewEl.style.maxHeight = 'none';
+        return;
+    }
+
+    previewEl.style.maxHeight = target + 'px';
+
+    var onEnd = function (e) {
+        if (e.propertyName !== 'max-height') return;
+        previewEl.removeEventListener('transitionend', onEnd);
+        previewEl.style.maxHeight = 'none';
+    };
+    previewEl.addEventListener('transitionend', onEnd);
 }
     /* ================================================================
        LIFECYCLE
