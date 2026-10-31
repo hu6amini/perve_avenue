@@ -171,25 +171,53 @@ var SimilarTopicsModule = (function () {
 
     /* ---- Container ------------------------------------------------- */
     function findLastFooter() {
-        var all = document.querySelectorAll('.footer');
-        return all.length ? all[all.length - 1] : null;
+    var all = document.querySelectorAll('.footer');
+    return all.length ? all[all.length - 1] : null;
+}
+
+/**
+ * Resolve where the widget should go. Returns { el, position } or null.
+ *
+ * Preferred chain:
+ *   1. Immediately after the modern fast-reply editor (the user's request).
+ *   2. Immediately after #modern-pagination (editor disabled / failed).
+ *   3. Before the last .footer (breadcrumbs also failed).
+ *   4. null → caller falls back to end of <body>.
+ */
+function findInsertionPoint() {
+    var editorEl = document.getElementById('modern-editor-fastreply');
+    if (editorEl && editorEl.parentNode) {
+        return { el: editorEl, position: 'afterend' };
     }
 
-    function injectContainer() {
-        if (document.getElementById(CONFIG.rootId)) return;
-        var h = '';
-        h += '<ul id="' + CONFIG.rootId + '" class="info">';
-        h +=   '<li class="ds_rt_toptitle">Similar Topics</li>';
-        h +=   '<li class="ds_rt_loadimg"><img src="//img.forumfree.net/index_file/load.gif" alt="Loading"></li>';
-        h += '</ul>';
-
-        var footer = findLastFooter();
-        if (footer && footer.parentNode) {
-            footer.insertAdjacentHTML('beforebegin', h);
-        } else {
-            document.body.insertAdjacentHTML('beforeend', h);
-        }
+    var paginationEl = document.getElementById('modern-pagination');
+    if (paginationEl && paginationEl.parentNode) {
+        return { el: paginationEl, position: 'afterend' };
     }
+
+    var footer = findLastFooter();
+    if (footer && footer.parentNode) {
+        return { el: footer, position: 'beforebegin' };
+    }
+
+    return null;
+}
+
+function injectContainer() {
+    if (document.getElementById(CONFIG.rootId)) return;
+    var h = '';
+    h += '<ul id="' + CONFIG.rootId + '" class="info">';
+    h +=   '<li class="ds_rt_toptitle">Similar Topics</li>';
+    h +=   '<li class="ds_rt_loadimg"><img src="//img.forumfree.net/index_file/load.gif" alt="Loading"></li>';
+    h += '</ul>';
+
+    var point = findInsertionPoint();
+    if (point) {
+        point.el.insertAdjacentHTML(point.position, h);
+    } else {
+        document.body.insertAdjacentHTML('beforeend', h);
+    }
+}
 
     /* ---- Scoring --------------------------------------------------- */
     function scoreCandidate(thread) {
