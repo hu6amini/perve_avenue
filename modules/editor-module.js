@@ -4741,13 +4741,27 @@ function transformLegacyEmbedLinks(html) {
                     var newBbcode = htmlToLegacy(editorInst.getHTML());
 
                     var body = new URLSearchParams();
-                    Object.keys(hidden).forEach(function (k) {
-                        body.set(k, hidden[k]);
-                    });
-                    body.set('act', 'Post');
-                    body.set('CODE', '09');
-                    body.set('Post', newBbcode);
-                    body.set('enablesig', '1');
+Object.keys(hidden).forEach(function (k) {
+    body.set(k, hidden[k]);
+});
+
+// Include the form's submit button — the browser does this natively,
+// and the server distinguishes reply-save from OP-save by its name.
+// Reply forms use sub-mit, OP edit forms use submit_post. Without it,
+// the OP save is silently rejected and re-renders the edit form.
+var formSubmit = form.querySelector('input[type="submit"][name], button[type="submit"][name]');
+if (formSubmit && formSubmit.name) {
+    body.set(formSubmit.name, formSubmit.value || '1');
+}
+
+// Add only what the form doesn't already provide. Don't clobber
+// hidden fields — the OP form's hidden CODE differs from the reply
+// form's, and forcing 09 breaks OP saves.
+if (!body.has('act'))       body.set('act', 'Post');
+if (!body.has('CODE'))      body.set('CODE', '09');
+if (!body.has('enablesig')) body.set('enablesig', '1');
+
+body.set('Post', newBbcode);
 
                     var saveText;
                     try {
