@@ -563,7 +563,7 @@ var SimilarTopicsModule = (function () {
                         '</button>' +
                     '</div>' +
                 '</div>' +
-                '<div id="similar-topic-preview-' + topicId + '" class="similar-topic-preview" hidden></div>' +
+                '<div id="similar-topic-preview-' + topicId + '" class="similar-topic-preview" aria-hidden="true"></div>' +
             '</article>'
         );
     }
