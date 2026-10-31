@@ -4395,6 +4395,17 @@ function attachPollHandlers(modernPoll, legacyPoll, pollData) {
             convertedPostIds.clear();
             postReactions.clear();
 
+            // Continue post numbering across paginated pages. `st` is the
+// forum's "start at" offset (count of posts on previous pages);
+// absent or 0 on page 1.
+const postStartOffset = (() => {
+    const n = parseInt(
+        new URLSearchParams(window.location.search).get('st') || '0',
+        10
+    );
+    return Number.isFinite(n) && n > 0 ? n : 0;
+})();
+
             convertPoll();
 
             const blogArticles = document.querySelectorAll('.blog .article');
@@ -4485,7 +4496,7 @@ function attachPollHandlers(modernPoll, legacyPoll, pollData) {
             for (let i = 0; i < postsData.length; i++) {
                 const data = postsData[i];
                 const apiUser = data.mid ? userDataCache.get(data.mid) : null;
-                const completeData = { ...data, apiUser, postNumber: i + 1 + blogCount };
+                const completeData = { ...data, apiUser, postNumber: postStartOffset + i + 1 + blogCount };
                 const cardHtml = generateModernPost(completeData);
                 const card = createElementFromHTML(cardHtml);
                 container.appendChild(card);
