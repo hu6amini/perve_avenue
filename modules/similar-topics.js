@@ -689,7 +689,7 @@ var SimilarTopicsModule = (function () {
             '<div class="modern-quote long-quote similar-topic-preview-quote">' +
                 '<div class="quote-header">' +
                     '<div class="quote-meta">' +
-                        '<div class="quote-icon"><i class="fa-regular fa-quote-left" aria-hidden="true"></i></div>' +
+                        '<div class="quote-icon"><i class="fa-regular fa-eye" aria-hidden="true"></i></div>' +
                         '<div class="quote-info"><span class="quote-author">Preview</span></div>' +
                     '</div>' +
                 '</div>' +
