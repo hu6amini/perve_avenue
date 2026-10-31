@@ -41,6 +41,8 @@ var SimilarTopicsModule = (function () {
         // Fast preview
         fastPreview:    true,
         previewMaxChars: 450
+        // Debug (set true to log context resolution)
+    debug: false
     };
 
     /* ---- Stop words (English + Italian, ASCII-folded) ------------- */
@@ -124,6 +126,55 @@ var SimilarTopicsModule = (function () {
             sessionStorage.setItem(cacheKey, JSON.stringify({ ts: Date.now(), items: items }));
         } catch (e) { /* quota — ignore */ }
     }
+
+    /* ---- Context resolution (Commons optional) ---------------------- */
+function getTopicContext() {
+    // Fast path: Commons, when available and populated.
+    if (window.Commons && window.Commons.location && window.Commons.location.topic) {
+        var c = window.Commons.location;
+        if (c.isTopic && c.topic.id) {
+            return {
+                topicId:   c.topic.id,
+                sectionId: c.section.id,
+                title:     c.topic.title || ''
+            };
+        }
+    }
+
+    // Slow path: read the DOM directly. Same logic the standalone used.
+    var isTopic = document.body.id === 'topic' ||
+                  /(?:^|\s)t\d+(?:\s|$)/.test(document.body.className);
+    if (!isTopic) return null;
+
+    var params = new URLSearchParams(window.location.search);
+
+    var topicId = parseInt(params.get('t') || '0', 10);
+    if (!topicId) {
+        var tMatch = document.body.className.match(/(?:^|\s)t(\d+)(?:\s|$)/);
+        if (tMatch) topicId = parseInt(tMatch[1], 10);
+    }
+
+    var sectionId = parseInt(params.get('f') || '0', 10);
+    if (!sectionId) {
+        var fMatch = document.body.className.match(/(?:^|\s)f(\d+)(?:\s|$)/);
+        if (fMatch) sectionId = parseInt(fMatch[1], 10);
+    }
+    if (!sectionId) {
+        var navLink = document.querySelector('.nav a[href*="?f="]');
+        if (navLink) {
+            var fMatch2 = navLink.href.match(/[?&]f=(\d+)/);
+            if (fMatch2) sectionId = parseInt(fMatch2[1], 10);
+        }
+    }
+
+    var title = '';
+    var titleEl = document.querySelector(
+        'div.mtitle h1, h1.mtitle, h2.mtitle, .topic .mback .mtitle'
+    );
+    if (titleEl) title = titleEl.textContent.trim();
+
+    return { topicId: topicId, sectionId: sectionId, title: title };
+}
 
     /* ---- Styles ---------------------------------------------------- */
     function injectStyles() {
@@ -393,48 +444,57 @@ function injectContainer() {
 
     /* ---- Lifecycle ------------------------------------------------- */
     function initialize() {
-        if (initialized) return Promise.resolve();
-        initialized = true;
+    if (initialized) return Promise.resolve();
+    initialized = true;
 
-        if (!passesGates()) return Promise.resolve();
+    if (CONFIG.firstPageOnly) {
+        var params = new URLSearchParams(window.location.search);
+        if (parseInt(params.get('st') || '0', 10) > 0) return Promise.resolve();
+    }
 
-        topicId     = window.Commons.location.topic.id;
-        sectionId   = window.Commons.location.section.id;
-        domain      = document.domain;
-        var rawTitle = window.Commons.location.topic.title || '';
+    var ctx = getTopicContext();
+    if (CONFIG.debug) console.log('[SimilarTopics] context:', ctx);
+    if (!ctx || !ctx.topicId || !ctx.sectionId || !ctx.title) return Promise.resolve();
 
-        if (!topicId || !sectionId || !rawTitle) return Promise.resolve();
+    if (CONFIG.blacklist.length &&
+        (CONFIG.blacklist.indexOf(ctx.sectionId) !== -1 ||
+         CONFIG.blacklist.indexOf(String(ctx.sectionId)) !== -1)) return Promise.resolve();
+    if (CONFIG.whitelist.length &&
+        CONFIG.whitelist.indexOf(ctx.sectionId) === -1 &&
+        CONFIG.whitelist.indexOf(String(ctx.sectionId)) === -1) return Promise.resolve();
 
-        queryTokens = tokenize(rawTitle);
-        if (!queryTokens.length) return Promise.resolve();
+    topicId   = ctx.topicId;
+    sectionId = ctx.sectionId;
+    domain    = document.domain;
 
-        effectiveMinHits = (queryTokens.length > CONFIG.minHits)
-            ? CONFIG.minHits
-            : Math.max(1, queryTokens.length - 1);
+    queryTokens = tokenize(ctx.title);
+    if (!queryTokens.length) return Promise.resolve();
 
-        cacheKey = CONFIG.cachePrefix + topicId;
-        seen[topicId] = true;
+    effectiveMinHits = (queryTokens.length > CONFIG.minHits)
+        ? CONFIG.minHits
+        : Math.max(1, queryTokens.length - 1);
 
-        injectStyles();
-        injectContainer();
+    cacheKey = CONFIG.cachePrefix + topicId;
+    seen[topicId] = true;
 
-        var cached = readCache();
-        if (cached) {
-            renderList(cached);
-            return Promise.resolve();
-        }
+    injectStyles();
+    injectContainer();
 
-        // Kick off the scan; return immediately so the enhancer's
-        // "ready" event isn't delayed by the 20-page API scan.
-        candidates.length = 0;
-        seen             = {};
-        seen[topicId]    = true;
-        hadError         = false;
-
-        collect();
-
+    var cached = readCache();
+    if (cached) {
+        renderList(cached);
         return Promise.resolve();
     }
+
+    candidates.length = 0;
+    seen             = {};
+    seen[topicId]    = true;
+    hadError         = false;
+
+    collect();
+
+    return Promise.resolve();
+}
 
     function reset() {
         initialized = false;
