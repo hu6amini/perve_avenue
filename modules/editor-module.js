@@ -4673,10 +4673,46 @@ function transformLegacyEmbedLinks(html) {
         }
 
         var bbcode = postArea.value || '';
-        var hidden = {};
-        form.querySelectorAll('input[type="hidden"]').forEach(function (i) {
-            if (i.name) hidden[i.name] = i.value;
-        });
+
+// Collect EVERY named form field, not just hidden inputs.
+//
+// Reply-edit forms only carry hidden fields, so the previous
+// input[type="hidden"] selector was sufficient for them.
+//
+// OP-edit forms are topic-edit forms in disguise: they carry
+// TopicTitle, TopicDesc, PollTitle, POLL_0..2, allow_multi,
+// allow_view, allow_del, pollonly, submit_post — all of which
+// the server requires for a topic-edit save. Dropping them
+// makes CODE=09 fail validation and re-render the edit page,
+// which is what "Save failed" was really reporting.
+var fields = {};
+form.querySelectorAll('input[name], textarea[name], select[name]').forEach(function (el) {
+    var name = el.name;
+    if (!name) return;
+    if (el.tagName === 'INPUT') {
+        if (el.type === 'submit' || el.type === 'image' ||
+            el.type === 'file' || el.type === 'button' ||
+            el.type === 'reset') return;
+        if (el.type === 'checkbox' || el.type === 'radio') {
+            if (el.checked) fields[name] = el.value;
+            return;
+        }
+    }
+    if (el.tagName === 'SELECT' && el.multiple) {
+        fields[name] = Array.from(el.selectedOptions)
+            .map(function (o) { return o.value; })
+            .join(',');
+        return;
+    }
+    fields[name] = el.value;
+});
+
+// Include the submit button. The browser sends it natively on a
+// real form submission and the server dispatches on it:
+//   reply-edit → sub-mit
+//   OP-edit    → submit_post
+var submitBtn = form.querySelector('input[type="submit"][name], button[type="submit"][name]');
+if (submitBtn) fields[submitBtn.name] = submitBtn.value || '1';
 
         var initialHtml = '';
         if (bbcode.trim()) {
@@ -4741,8 +4777,8 @@ function transformLegacyEmbedLinks(html) {
                     var newBbcode = htmlToLegacy(editorInst.getHTML());
 
                     var body = new URLSearchParams();
-Object.keys(hidden).forEach(function (k) {
-    body.set(k, hidden[k]);
+Object.keys(fields).forEach(function (k) {
+    body.set(k, fields[k]);
 });
 
 // Include the form's submit button — the browser does this natively,
