@@ -618,77 +618,103 @@ var SimilarTopicsModule = (function () {
     }
 
     async function togglePreview(btn) {
-        var topicId   = btn.getAttribute('data-topic-id');
-        var previewEl = document.getElementById('similar-topic-preview-' + topicId);
-        if (!previewEl) return;
+    var topicId   = btn.getAttribute('data-topic-id');
+    var previewEl = document.getElementById('similar-topic-preview-' + topicId);
+    if (!previewEl) return;
 
-        var isExpanded = btn.getAttribute('aria-expanded') === 'true';
+    var isExpanded = btn.getAttribute('aria-expanded') === 'true';
+    if (isExpanded) {
+        previewEl.hidden = true;
+        btn.setAttribute('aria-expanded', 'false');
+        btn.setAttribute('title', 'Show preview');
+        btn.setAttribute('aria-label', 'Show preview of this topic');
+        btn.setAttribute('data-tippy-content', '<div class="tip-plain">Show preview</div>');
+        btn.innerHTML = '<i class="fa-regular fa-eye" aria-hidden="true"></i>';
+        return;
+    }
 
-        if (isExpanded) {
-            previewEl.hidden = true;
-            btn.setAttribute('aria-expanded', 'false');
-            btn.setAttribute('title', 'Show preview');
-            btn.setAttribute('aria-label', 'Show preview of this topic');
-            btn.innerHTML = '<i class="fa-regular fa-eye" aria-hidden="true"></i>';
+    btn.setAttribute('aria-expanded', 'true');
+    btn.setAttribute('title', 'Hide preview');
+    btn.setAttribute('aria-label', 'Hide preview of this topic');
+    btn.setAttribute('data-tippy-content', '<div class="tip-plain">Hide preview</div>');
+    btn.innerHTML = '<i class="fa-regular fa-eye-slash" aria-hidden="true"></i>';
+    previewEl.hidden = false;
+
+    if (previewEl.dataset.loaded === 'true') return;
+
+    previewEl.innerHTML =
+        '<div class="similar-topic-preview-loading">' +
+            '<i class="fa-regular fa-spinner fa-spin" aria-hidden="true"></i> Loading preview…' +
+        '</div>';
+
+    try {
+        var url = '/api.php?t=' + encodeURIComponent(topicId) + '&cookie=1';
+        var response = await fetch(url, { credentials: 'include' });
+        if (!response.ok) throw new Error('HTTP ' + response.status);
+        var data = await response.json();
+        var first = data && data.messages && data.messages[0];
+
+        if (!first || !first.content) {
+            previewEl.innerHTML =
+                '<div class="similar-topic-preview-empty">' +
+                    '<i class="fa-regular fa-circle-info" aria-hidden="true"></i> Preview not available.' +
+                '</div>';
+            previewEl.dataset.loaded = 'true';
             return;
         }
 
-        btn.setAttribute('aria-expanded', 'true');
-        btn.setAttribute('title', 'Hide preview');
-        btn.setAttribute('aria-label', 'Hide preview of this topic');
-        btn.innerHTML = '<i class="fa-regular fa-eye-slash" aria-hidden="true"></i>';
-        previewEl.hidden = false;
+        var contentHtml = '';
+        if (window.ForumPostsModule &&
+            typeof window.ForumPostsModule.transformContentHtml === 'function') {
+            contentHtml = window.ForumPostsModule.transformContentHtml(first.content);
+        } else {
+            // Fallback for old builds / non-topic pages: text-only,
+            // same as before. Keeps similar-topics usable standalone.
+            var text = stripHtml(first.content).replace(/\s+/g, ' ').trim();
+            contentHtml = '<p>' + escapeHtml(truncate(text, CONFIG.previewMaxChars)) + '</p>';
+        }
 
-        if (previewEl.dataset.loaded === 'true') return;
-
-        previewEl.innerHTML =
-            '<div class="similar-topic-preview-loading">' +
-                '<i class="fa-regular fa-spinner fa-spin" aria-hidden="true"></i> Loading preview…' +
-            '</div>';
-
-        try {
-            var url = '/api.php?t=' + encodeURIComponent(topicId) + '&cookie=1';
-            var response = await fetch(url, { credentials: 'include' });
-            if (!response.ok) throw new Error('HTTP ' + response.status);
-            var data = await response.json();
-            var first = data && data.messages && data.messages[0];
-
-            if (!first) {
-                previewEl.innerHTML =
-                    '<div class="similar-topic-preview-empty">' +
-                        '<i class="fa-regular fa-circle-info" aria-hidden="true"></i> Preview not available.' +
-                    '</div>';
-                previewEl.dataset.loaded = 'true';
-                return;
-            }
-
-            var text = stripHtml(first.content || '').replace(/\s+/g, ' ').trim();
-            var excerpt = truncate(text, CONFIG.previewMaxChars);
-            var continueUrl = '?t=' + topicId + '#entry' + first.id;
-
-            previewEl.innerHTML =
-                '<div class="modern-quote long-quote similar-topic-preview-quote">' +
-                    '<div class="quote-header">' +
-                        '<div class="quote-meta">' +
-                            '<div class="quote-icon"><i class="fa-regular fa-quote-left" aria-hidden="true"></i></div>' +
-                            '<div class="quote-info"><span class="quote-author">Preview</span></div>' +
-                        '</div>' +
-                    '</div>' +
-                    '<div class="quote-content"><p>' + escapeHtml(excerpt) + '</p></div>' +
-                '</div>' +
-                '<a href="' + escapeHtml(continueUrl) + '" class="similar-topic-continue">' +
-                    'Continue reading <i class="fa-regular fa-arrow-right" aria-hidden="true"></i>' +
-                '</a>';
-
-            previewEl.dataset.loaded = 'true';
-        } catch (e) {
+        if (!contentHtml.trim()) {
             previewEl.innerHTML =
                 '<div class="similar-topic-preview-empty">' +
-                    '<i class="fa-regular fa-circle-exclamation" aria-hidden="true"></i> Could not load preview.' +
+                    '<i class="fa-regular fa-circle-info" aria-hidden="true"></i> Preview not available.' +
                 '</div>';
+            previewEl.dataset.loaded = 'true';
+            return;
         }
-    }
 
+        var continueUrl = '?t=' + topicId + '#entry' + first.id;
+
+        previewEl.innerHTML =
+            '<div class="modern-quote long-quote similar-topic-preview-quote">' +
+                '<div class="quote-header">' +
+                    '<div class="quote-meta">' +
+                        '<div class="quote-icon"><i class="fa-regular fa-quote-left" aria-hidden="true"></i></div>' +
+                        '<div class="quote-info"><span class="quote-author">Preview</span></div>' +
+                    '</div>' +
+                '</div>' +
+                '<div class="quote-content">' + contentHtml + '</div>' +
+                '<button class="quote-expand-btn" type="button" aria-expanded="false" aria-label="Show full preview">' +
+                    '<i class="fa-regular fa-angle-down" aria-hidden="true"></i> <span class="expand-text">Show more</span>' +
+                '</button>' +
+            '</div>' +
+            '<a href="' + escapeHtml(continueUrl) + '" class="similar-topic-continue">' +
+                'Continue reading <i class="fa-regular fa-arrow-right" aria-hidden="true"></i>' +
+            '</a>';
+
+        if (window.ForumPostsModule &&
+            typeof window.ForumPostsModule.postProcessPreviewContent === 'function') {
+            window.ForumPostsModule.postProcessPreviewContent(previewEl);
+        }
+
+        previewEl.dataset.loaded = 'true';
+    } catch (e) {
+        previewEl.innerHTML =
+            '<div class="similar-topic-preview-empty">' +
+                '<i class="fa-regular fa-circle-exclamation" aria-hidden="true"></i> Could not load preview.' +
+            '</div>';
+    }
+}
     /* ================================================================
        LIFECYCLE
        ================================================================ */
