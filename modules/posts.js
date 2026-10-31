@@ -757,6 +757,81 @@ function parseDateFromTitle(title) {
         return html;
     }
 
+    // posts.js — inside the IIFE, near getCleanContent
+function transformContentHtmlString(html) {
+    if (!html || typeof html !== 'string') return '';
+    const tempDiv = document.createElement('div');
+    tempDiv.innerHTML = html;
+
+    // Strip the same metadata markers getCleanContent strips on the
+    // legacy DOM — this is why the "Edited by …" line leaks through
+    // today: nothing on the API-response side removes it.
+    tempDiv.querySelectorAll('.signature, .edit').forEach(el => el.remove());
+
+    tempDiv.querySelectorAll('br').forEach(br => {
+        const prev = br.previousElementSibling;
+        const next = br.nextElementSibling;
+        if (next?.classList?.contains('bottomborder') ||
+            prev?.classList?.contains('bottomborder')) {
+            br.remove();
+        }
+    });
+    tempDiv.querySelectorAll('.bottomborder').forEach(el => el.remove());
+
+    let last = tempDiv.lastChild;
+    while (last) {
+        if (last.nodeType === Node.TEXT_NODE && !last.nodeValue.trim()) {
+            tempDiv.removeChild(last);
+        } else if (last.nodeType === Node.ELEMENT_NODE && last.tagName === 'BR') {
+            tempDiv.removeChild(last);
+        } else {
+            break;
+        }
+        last = tempDiv.lastChild;
+    }
+
+    let out = tempDiv.innerHTML.trim();
+    out = transformEmbeddedLinks(out);
+    out = transformLegacyQuotesAndSpoilers(out);
+    out = transformLegacyAttachments(out);
+    out = transformLegacyCodeBlocks(out);
+    out = transformLegacyIframes(out);
+    out = transformLiteEmbeds(out);
+    out = transformLegacySocialEmbeds(out);
+    out = transformUserTags(out);
+    out = transformNSFWTags(out);
+    out = paragraphizeHtml(out);
+    return out;
+}
+
+function postProcessPreviewContent(el) {
+    if (!el) return;
+    fixMissingImageDimensions(el);
+    applyFaviconsToMessageLinks(el);
+    wrapImagesWithDimensions(el);
+
+    // Wait for images to settle before deciding whether the content
+    // overflows — otherwise initQuotesAndSpoilers measures a 0-height
+    // body, removes the expand button, and the preview is then
+    // permanently clipped once the image loads.
+    const imgs = el.querySelectorAll('img');
+    let pending = 0;
+    const settle = () => { if (pending === 0) initQuotesAndSpoilers(); };
+    imgs.forEach(img => {
+        img.setAttribute('loading', 'lazy');
+        if (img.classList.contains('twemoji')) return;
+        if (img.complete && img.naturalWidth > 0) return;
+        pending++;
+        img.addEventListener('load',  () => { pending--; settle(); }, { once: true });
+        img.addEventListener('error', () => { pending--; settle(); }, { once: true });
+    });
+    if (pending === 0) initQuotesAndSpoilers();
+
+    try { hydrateSocialEmbeds(el); } catch (e) {}
+    try { hydrateLiteEmbeds(el); }   catch (e) {}
+    whenTippyReady(() => autoTippyFromTitle(el));
+}
+
     function getSignatureHtml($post) {
         const signature = $post.querySelector('.signature');
         if (!signature) return '';
@@ -4621,13 +4696,13 @@ function attachPollHandlers(modernPoll, legacyPoll, pollData) {
     // ============================================================================
         return {
         initialize,
-        refreshReactionDisplay,
-        refreshLikeDisplay,
-        getPostsContainer,
-        isValidPost,
-        fixBrokenWeservImages,
-        // Expose the profile hovercard builder for sibling modules
-        // (EditorModule's replying-as header) that need the same tooltip.
+    refreshReactionDisplay,
+    refreshLikeDisplay,
+    getPostsContainer,
+    isValidPost,
+    fixBrokenWeservImages,
+    transformContentHtml: transformContentHtmlString,
+    postProcessPreviewContent,
         attachProfileTip: function (element, data) {
             if (!element || !data) return;
             var hovercardHtml = buildProfileHovercardHtml(data);
