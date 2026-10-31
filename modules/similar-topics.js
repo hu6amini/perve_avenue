@@ -507,7 +507,7 @@ var SimilarTopicsModule = (function () {
             '<section id="' + CONFIG.containerId + '" class="similar-topics-section" aria-labelledby="similar-topics-title">' +
                 '<header class="similar-topics-header">' +
                     '<h2 id="similar-topics-title" class="similar-topics-title">' +
-                        '<i class="fa-regular fa-sparkles" aria-hidden="true"></i> Similar Topics' +
+                        '<i class="fa-regular fa-sparkles" aria-hidden="true"></i> Similar topics' +
                     '</h2>' +
                 '</header>' +
                 '<div class="similar-topics-list" role="list">' +
