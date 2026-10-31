@@ -5986,3 +5986,176 @@ body#topic .post .fastedit > :not(.modern-editor-container--fastedit) {
   .modern-editor-container--fastedit .modern-wysiwyg { max-height: 40vh; }
   .modern-editor-container--fastedit .modern-preview { margin: var(--space-sm) var(--pad-3); }
 }
+
+/* ------------------------------------------------------------
+   28. SIMILAR TOPICS
+   Reuses .latest-post-card as the row primitive so this list
+   inherits the same avatars, typography, and group borders as
+   "Latest posts" in section 18. The only new pieces are the
+   section wrapper, the section header (mirrors .latest-posts-*),
+   the per-row preview toggle, and the preview expansion area.
+   ------------------------------------------------------------ */
+.similar-topics-section {
+    margin-top: var(--space-xl);
+}
+
+.similar-topics-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding-bottom: var(--space-sm);
+    border-bottom: 2px solid var(--primary-color);
+    margin-bottom: var(--space-md);
+}
+
+.similar-topics-title {
+    font-family: var(--font-heading);
+    font-size: var(--text-xl);
+    color: var(--text-primary);
+    text-align: left;
+    margin: 0;
+    display: flex;
+    align-items: center;
+    gap: var(--space-xs);
+}
+.similar-topics-title i { color: var(--primary-light); }
+
+.similar-topics-list {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-sm);
+}
+
+/* The base .latest-post-card is a single flex row. Add wrap so the
+   preview expansion can occupy a full-width second row inside the
+   same card. */
+.similar-topic-card {
+    flex-wrap: wrap;
+    align-items: flex-start;
+    max-width: none;
+}
+
+.similar-topic-card .latest-post-avatar a {
+    display: block;
+    text-decoration: none;
+}
+
+/* Preview toggle sits at the right edge of the meta row. */
+.similar-topic-preview-toggle {
+    background: transparent;
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-full);
+    width: 1.618rem;
+    height: 1.618rem;
+    padding: 0;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    color: var(--text-tertiary);
+    font-size: 0.75rem;
+    line-height: 1;
+    transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+    flex-shrink: 0;
+    margin-left: auto;
+    touch-action: manipulation;
+}
+.similar-topic-preview-toggle:hover {
+    background: var(--hover-color);
+    border-color: var(--primary-color);
+    color: var(--primary-color);
+    transform: translateY(-1px);
+}
+.similar-topic-preview-toggle:focus-visible {
+    outline: 2px solid var(--primary-color);
+    outline-offset: 2px;
+}
+.similar-topic-preview-toggle[aria-expanded="true"] {
+    background: rgba(5, 150, 105, 0.12);
+    border-color: var(--primary-color);
+    color: var(--primary-color);
+}
+
+/* The expansion area occupies its own row inside the card. */
+.similar-topic-preview {
+    flex-basis: 100%;
+    margin-top: var(--space-sm);
+    padding-top: var(--space-sm);
+    border-top: 1px solid var(--border-color);
+    min-width: 0;
+}
+.similar-topic-preview[hidden] {
+    display: none;
+}
+
+/* The preview reuses .modern-quote — match the reader-side gap. */
+.similar-topic-preview-quote {
+    margin-bottom: var(--space-sm);
+}
+
+/* Continue-reading anchor styled like .quote-expand-btn. */
+.similar-topic-continue {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-family: var(--font-primary);
+    font-size: var(--text-sm);
+    font-weight: 500;
+    color: var(--primary-color);
+    text-decoration: none;
+    transition: color 0.2s ease;
+}
+.similar-topic-continue:hover {
+    color: var(--primary-light);
+    text-decoration: none;
+}
+.similar-topic-continue i {
+    font-size: 0.85em;
+    transition: transform 0.2s ease;
+}
+.similar-topic-continue:hover i {
+    transform: translateX(2px);
+}
+
+/* Loading + empty states. */
+.similar-topics-loading,
+.similar-topics-empty,
+.similar-topic-preview-loading,
+.similar-topic-preview-empty {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: var(--space-sm);
+    padding: var(--space-lg);
+    text-align: center;
+    color: var(--text-tertiary);
+    font-size: var(--text-sm);
+    font-family: var(--font-primary);
+}
+.similar-topics-loading i,
+.similar-topics-empty i,
+.similar-topic-preview-loading i,
+.similar-topic-preview-empty i {
+    color: var(--primary-light);
+    font-size: 1rem;
+}
+.similar-topics-empty i,
+.similar-topic-preview-empty i {
+    color: var(--text-tertiary);
+}
+
+/* ------------------------------------------------------------
+   Mobile — the row already collapses naturally, but the preview
+   toggle needs a slightly larger touch target at ≤680px.
+   ------------------------------------------------------------ */
+@media (max-width: 680px) {
+    .similar-topic-preview-toggle {
+        width: 2rem;
+        height: 2rem;
+        font-size: 0.85rem;
+    }
+    .similar-topic-preview {
+        margin-top: var(--space-xs);
+        padding-top: var(--space-xs);
+    }
+}
