@@ -448,12 +448,6 @@ function extractPaginationData(legacyBar) {
     };
 })();
 
-if (document.readyState === 'interactive' || document.readyState === 'complete') {
-    setTimeout(function () { BreadcrumbsModule.initialize(); }, 0);
-} else {
-    document.addEventListener('DOMContentLoaded', function () { BreadcrumbsModule.initialize(); });
-}
-
 if (typeof window !== 'undefined') {
     window.BreadcrumbsModule = BreadcrumbsModule;
     window.dispatchEvent(new CustomEvent('breadcrumbs-module-ready'));
