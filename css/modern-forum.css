@@ -6079,14 +6079,37 @@ body#topic .post .fastedit > :not(.modern-editor-container--fastedit) {
 
 /* The expansion area occupies its own row inside the card. */
 .similar-topic-preview {
+    /* layout — keep */
     flex-basis: 100%;
+    min-width: 0;
+
+    /* collapsed state */
+    overflow: hidden;
+    max-height: 0;
+    margin-top: 0;
+    padding-top: 0;
+    border-top: 1px solid transparent;   /* colour toggle, not width */
+    visibility: hidden;
+    transition:
+        max-height    0.35s cubic-bezier(0.2, 0, 0, 1),
+        margin-top    0.35s cubic-bezier(0.2, 0, 0, 1),
+        padding-top   0.35s cubic-bezier(0.2, 0, 0, 1),
+        border-color  0.35s cubic-bezier(0.2, 0, 0, 1),
+        visibility    0s   linear 0.35s;   /* hides at the end of collapse */
+}
+
+.similar-topic-preview[aria-hidden="false"] {
+    /* open state */
     margin-top: var(--space-sm);
     padding-top: var(--space-sm);
-    border-top: 1px solid var(--border-color);
-    min-width: 0;
-}
-.similar-topic-preview[hidden] {
-    display: none;
+    border-top-color: var(--border-color);
+    visibility: visible;
+    transition:
+        max-height    0.35s cubic-bezier(0.2, 0, 0, 1),
+        margin-top    0.35s cubic-bezier(0.2, 0, 0, 1),
+        padding-top   0.35s cubic-bezier(0.2, 0, 0, 1),
+        border-color  0.35s cubic-bezier(0.2, 0, 0, 1),
+        visibility    0s   linear 0s;      /* visible immediately on open */
 }
 
 /* The preview reuses .modern-quote — match the reader-side gap. */
