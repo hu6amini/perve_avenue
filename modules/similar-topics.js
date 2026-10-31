@@ -29,7 +29,7 @@ var SimilarTopicsModule = (function () {
         minHits:   2,
 
         // Gates
-        firstPageOnly: true,     // set false to run on every topic page
+        firstPageOnly: false,     // set false to run on every topic page
         whitelist:     [],       // section IDs to run in (empty = all)
         blacklist:     [],       // section IDs to skip
 
