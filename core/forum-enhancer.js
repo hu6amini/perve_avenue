@@ -21,6 +21,7 @@
         wrapperId: 'modern-forum-wrapper',
         hideOriginal: false,
         modules: {
+            'breadcrumbs': true,
             'theme': true,
             'media-dimensions': true,
             twemoji: true,
@@ -251,6 +252,14 @@
     // REGISTER MODULES (with boards added)
     // ============================================================================
     function registerAllModules() {
+        // --- BREADCRUMBS MODULE (must run before boards / messenger / editor
+    //     so #modern-breadcrumbs is the wrapper's first child) ---
+    if (typeof BreadcrumbsModule !== 'undefined') {
+        registerModule('breadcrumbs', BreadcrumbsModule, ['domUtils', 'eventBus']);
+    } else {
+        log('BreadcrumbsModule not found, breadcrumbs disabled', 'warn');
+        ENHANCER_CONFIG.modules.breadcrumbs = false;
+    }
         // --- THEME MODULE ---
 if (typeof ThemeModule !== 'undefined') {
     registerModule('theme', ThemeModule, ['eventBus']);
