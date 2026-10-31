@@ -31,6 +31,7 @@
             'slick-carousel': true,
             boards: true, // ← new
             'quote-queue': true,
+            'similar-topics': true,
             editor: true,
             navigation: false,
             sidebar: false,
@@ -333,6 +334,13 @@ if (typeof QuoteQueueModule !== 'undefined') {
             log('EditorModule not found, modern editors disabled', 'warn');
             ENHANCER_CONFIG.modules.editor = false;
         }
+        // --- SIMILAR TOPICS MODULE (no dependencies — scan-once producer) ---
+if (typeof SimilarTopicsModule !== 'undefined') {
+    registerModule('similar-topics', SimilarTopicsModule, []);
+} else {
+    log('SimilarTopicsModule not found, similar topics disabled', 'warn');
+    ENHANCER_CONFIG.modules['similar-topics'] = false;
+}
     }
     
     // ============================================================================
