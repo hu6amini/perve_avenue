@@ -805,31 +805,40 @@ function transformContentHtmlString(html) {
 }
 
 function postProcessPreviewContent(el) {
-    if (!el) return;
+    if (!el) return Promise.resolve();
+
     fixMissingImageDimensions(el);
     applyFaviconsToMessageLinks(el);
     wrapImagesWithDimensions(el);
 
-    // Wait for images to settle before deciding whether the content
-    // overflows — otherwise initQuotesAndSpoilers measures a 0-height
-    // body, removes the expand button, and the preview is then
-    // permanently clipped once the image loads.
-    const imgs = el.querySelectorAll('img');
-    let pending = 0;
-    const settle = () => { if (pending === 0) initQuotesAndSpoilers(); };
-    imgs.forEach(img => {
-        img.setAttribute('loading', 'lazy');
-        if (img.classList.contains('twemoji')) return;
-        if (img.complete && img.naturalWidth > 0) return;
-        pending++;
-        img.addEventListener('load',  () => { pending--; settle(); }, { once: true });
-        img.addEventListener('error', () => { pending--; settle(); }, { once: true });
+    // Collapsed previews clip content to height 0, which prevents
+    // loading="lazy" images from ever entering the viewport — and
+    // therefore from ever firing `load`. Force eager loading so the
+    // settle promise below actually settles.
+    el.querySelectorAll('img[loading="lazy"]').forEach(img => {
+        img.loading = 'eager';
     });
-    if (pending === 0) initQuotesAndSpoilers();
 
-    try { hydrateSocialEmbeds(el); } catch (e) {}
-    try { hydrateLiteEmbeds(el); }   catch (e) {}
-    whenTippyReady(() => autoTippyFromTitle(el));
+    return new Promise(resolve => {
+        const imgs = el.querySelectorAll('img');
+        let pending = 0;
+        const settle = () => {
+            if (pending > 0) return;
+            initQuotesAndSpoilers();
+            try { hydrateSocialEmbeds(el); } catch (e) {}
+            try { hydrateLiteEmbeds(el);   } catch (e) {}
+            whenTippyReady(() => autoTippyFromTitle(el));
+            resolve();
+        };
+        imgs.forEach(img => {
+            if (img.classList.contains('twemoji')) return;
+            if (img.complete && img.naturalWidth > 0) return;
+            pending++;
+            img.addEventListener('load',  () => { pending--; settle(); }, { once: true });
+            img.addEventListener('error', () => { pending--; settle(); }, { once: true });
+        });
+        if (pending === 0) settle();
+    });
 }
 
     function getSignatureHtml($post) {
