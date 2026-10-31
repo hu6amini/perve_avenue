@@ -5997,7 +5997,7 @@ body#topic .post .fastedit > :not(.modern-editor-container--fastedit) {
    the per-row preview toggle, and the preview expansion area.
    ------------------------------------------------------------ */
 .similar-topics-section {
-    margin-top: var(--space-xl);
+    margin: var(--space-xl) 0;
 }
 
 .similar-topics-header {
