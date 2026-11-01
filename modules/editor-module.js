@@ -3901,6 +3901,31 @@ function transformLegacyEmbedLinks(html) {
 
         editorRef.current = editor;
 
+// ── Initial sync to legacy textarea ───────────────────────────────
+// Without this, the textarea keeps whatever the forum stored —
+// `<p>[IMG]url[/IMG]</p>` — until the user types. The rich `<img>`
+// with width/height/loading/decoding lives only inside TipTap's
+// state until onUpdate fires. A user who opens the edit form and
+// submits immediately (no keystroke) posts the thin BBCode form
+// and loses every attribute. Sync once, on the first frame, so the
+// textarea always reflects what legacyToHtmlAsync + htmlToLegacy
+// produce.
+//
+// Skipped for mode:'reply' — the fast-reply textarea is the compose
+// target, populated by onUpdate as the user types, and re-syncing
+// the initial state risks churning a localStorage draft. Fast edit
+// (mode:'fastedit') doesn't pass onSync at all, so no-ops there.
+if (opts.onSync && opts.mode !== 'reply') {
+    var _initHtml = editor.getHTML();
+    if (!editorContentIsEmpty(_initHtml)) {
+        try {
+            opts.onSync(htmlToLegacy(_initHtml));
+        } catch (e) {
+            console.warn('[EditorModule] Initial sync to legacy textarea failed:', e);
+        }
+    }
+}
+
         var _origViewUpdateState = editor.view.updateState.bind(editor.view);
         editor.view.updateState = function (state) {
             try {
