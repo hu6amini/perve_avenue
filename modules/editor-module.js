@@ -2442,6 +2442,10 @@ function buildTopicMetaSection(opts) {
             });
         }
 
+        if (opts.metaSection) {
+            host.appendChild(opts.metaSection);
+        }
+
         var toolbar = document.createElement('div');
         toolbar.className = 'modern-editor-toolbar';
         toolbar.setAttribute('role', 'toolbar');
@@ -4781,12 +4785,7 @@ if (opts.onSync && opts.mode !== 'reply') {
                 else previewBtn.setAttribute('title', 'Write something to preview it');
             }
 
-            if (empty && previewArea && previewArea.style.display !== 'none') {
-                previewArea.style.display = 'none';
-            }
-        }
-
-    // Auto-hide the preview when the editor becomes empty — matches
+            // Auto-hide the preview when the editor becomes empty — matches
     // the messenger. Without this, a preview rendered from content
     // that was subsequently deleted stays visible, showing text that
     // no longer exists in the editor.
