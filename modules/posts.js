@@ -2872,23 +2872,56 @@ if (data.availableActions?.delete) actionsHtml += '<button class="action-icon de
     // fall back to the full-page editor (CODE=08) so the button is
     // never a dead end.
     function handleEdit(pid) {
-        const originalPost = document.getElementById(CONFIG.POST_ID_PREFIX + pid);
-        if (!originalPost) return;
+    const originalPost = document.getElementById(CONFIG.POST_ID_PREFIX + pid);
+    if (!originalPost) return;
 
-        const EM = window.EditorModule;
-        if (!EM || typeof EM.startFastEdit !== 'function') {
-            const editLink = originalPost.querySelector('a[href*="CODE=08"]');
-            if (editLink) window.location.href = editLink.getAttribute('href');
-            return;
+    // ── OP routing ────────────────────────────────────────────────
+    // The very first post of a topic — the OP — uses a different
+    // legacy editor (CODE=08) that carries topic metadata: TopicTitle,
+    // TopicDesc, thumbnail, poll fields. The fast-edit pipeline is a
+    // reply-edit pipeline; opening the OP in it would submit those
+    // topic fields through the reply-save path and silently drop them.
+    //
+    // Route the OP to the full-page editor instead. A future
+    // EditorModule extension will absorb topic-edit fields natively;
+    // until then, punting to the full page is the correct behaviour.
+    //
+    // Detection: the OP lives on page 1 of the topic (URL has no
+    // `st` param, or `st=0`), and within that page it's the first
+    // .post in document order. On any `st>0` page the first post is
+    // a normal reply and must keep the fast-edit path.
+    if (document.body.id === 'topic') {
+        const stParam = new URLSearchParams(window.location.search).get('st');
+        const st = stParam == null ? 0 : parseInt(stParam, 10);
+        const isFirstPage = !Number.isFinite(st) || st <= 0;
+        if (isFirstPage) {
+            const firstPostEl = Array.from(document.querySelectorAll(CONFIG.POST_SELECTOR))
+                .find(p => isValidPost(p));
+            if (firstPostEl && firstPostEl.id === CONFIG.POST_ID_PREFIX + pid) {
+                const editLink = originalPost.querySelector('a[href*="CODE=08"]');
+                if (editLink) {
+                    window.location.href = editLink.getAttribute('href');
+                    return;
+                }
+            }
         }
-
-        if (typeof EM.isFastEditActive === 'function' && EM.isFastEditActive(originalPost)) {
-            if (typeof EM.focusFastEdit === 'function') EM.focusFastEdit(originalPost);
-            return;
-        }
-
-        EM.startFastEdit(originalPost);
     }
+
+    // ── existing fast-edit routing, unchanged ─────────────────────
+    const EM = window.EditorModule;
+    if (!EM || typeof EM.startFastEdit !== 'function') {
+        const editLink = originalPost.querySelector('a[href*="CODE=08"]');
+        if (editLink) window.location.href = editLink.getAttribute('href');
+        return;
+    }
+
+    if (typeof EM.isFastEditActive === 'function' && EM.isFastEditActive(originalPost)) {
+        if (typeof EM.focusFastEdit === 'function') EM.focusFastEdit(originalPost);
+        return;
+    }
+
+    EM.startFastEdit(originalPost);
+}
 
     function showConfirmDialog(opts) {
     var overlay = document.createElement('div');
