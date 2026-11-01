@@ -418,13 +418,15 @@ const ForumBoardsModule = (function () {
         if (thumbImg) {
             const style = thumbImg.getAttribute('style') || '';
             const bgMatch = style.match(/background-image:\s*url\(['"]?([^'")\s]+)['"]?\)/i);
+            const dataOrig = thumbImg.getAttribute('data-original');
+            var src = thumbImg.getAttribute('src');
+
             if (bgMatch && bgMatch[1]) {
                 thumbnailUrl = bgMatch[1];
-            } else {
-                var src = thumbImg.getAttribute('src');
-                if (src && src.indexOf('spacer.gif') === -1) {
-                    thumbnailUrl = src;
-                }
+            } else if (dataOrig && isValidAvatarUrl(dataOrig) && dataOrig.indexOf('spacer.gif') === -1) {
+                thumbnailUrl = dataOrig;
+            } else if (src && src.indexOf('spacer.gif') === -1) {
+                thumbnailUrl = src;
             }
         }
 
@@ -573,7 +575,12 @@ const ForumBoardsModule = (function () {
         const topicTitleHTML = titleEl ? titleEl.innerHTML : escapeHtml(topicTitle);
 
         const thumbImg = row.querySelector('h4.desc img');
-        const thumbnailUrl = thumbImg ? thumbImg.getAttribute('src') : null;
+        let thumbnailUrl = null;
+        if (thumbImg) {
+            const dataOrig = thumbImg.getAttribute('data-original');
+            const src = thumbImg.getAttribute('src');
+            thumbnailUrl = (dataOrig && isValidAvatarUrl(dataOrig)) ? dataOrig : src;
+        }
 
         const starterEl = row.querySelector('.xx a');
         const starterName = starterEl ? starterEl.textContent.trim() : '';
