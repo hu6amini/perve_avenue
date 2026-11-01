@@ -3174,7 +3174,174 @@ body.modal-open {
   border-color: var(--primary-color);
   color: var(--text-primary);
 }
+/* ── Topic meta section (title + thumbnail picker) ────────────────────── */
+.modern-topic-meta {
+    padding: var(--space-md);
+    margin-bottom: var(--space-md);
+    border-bottom: 1px solid var(--border-color);
+}
 
+.modern-topic-title-row {
+    margin-bottom: var(--space-md);
+}
+
+.modern-topic-label {
+    display: block;
+    font-size: var(--text-xs);
+    font-weight: 600;
+    color: var(--text-secondary);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    margin-bottom: var(--space-xs);
+}
+
+.required-star {
+    color: var(--danger-color);
+    margin-left: 2px;
+}
+
+.modern-topic-title-input-wrap {
+    position: relative;
+}
+
+.modern-topic-title-input-wrap .modern-input {
+    width: 100%;
+    padding-right: 80px;
+    font-size: var(--text-lg);
+    font-family: var(--font-heading);
+    font-weight: 400;
+    height: var(--btn-height);
+}
+
+.modern-topic-title-input-wrap .modern-input.has-error {
+    border-color: var(--danger-color);
+    box-shadow: 0 0 0 2px color-mix(in srgb, var(--danger-color) 25%, transparent);
+}
+
+.modern-char-counter {
+    position: absolute;
+    right: var(--space-sm);
+    top: 50%;
+    transform: translateY(-50%);
+    font-size: var(--text-xs);
+    color: var(--text-tertiary);
+    pointer-events: none;
+    font-variant-numeric: tabular-nums;
+}
+
+.modern-char-counter.is-warning { color: var(--warning-color); }
+.modern-char-counter.is-full    { color: var(--danger-color); }
+
+/* Thumbnail picker */
+.modern-thumbnail-picker {
+    margin-top: var(--space-sm);
+}
+
+.modern-thumb-header {
+    margin-bottom: var(--space-xs);
+}
+
+.modern-thumb-hint {
+    display: block;
+    font-size: var(--text-xs);
+    color: var(--text-tertiary);
+    margin-top: 2px;
+}
+
+.modern-thumb-row {
+    display: flex;
+    gap: var(--space-md);
+    align-items: flex-start;
+    margin-top: var(--space-sm);
+}
+
+.modern-thumb-preview {
+    width: 88px;
+    height: 88px;
+    border-radius: var(--radius);
+    overflow: hidden;
+    background: var(--surface-light);
+    border: 1px solid var(--border-color);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+}
+
+.modern-thumb-preview img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: block;
+}
+
+.modern-thumb-placeholder {
+    color: var(--text-tertiary);
+    font-size: 1.5rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 100%;
+    height: 100%;
+}
+
+.modern-thumb-placeholder.is-error {
+    color: var(--danger-color);
+}
+
+.modern-thumb-controls {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-xs);
+}
+
+.modern-thumb-buttons {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-xs);
+}
+
+.modern-thumb-status {
+    font-size: var(--text-xs);
+    color: var(--text-tertiary);
+    display: flex;
+    align-items: center;
+    gap: var(--space-xs);
+    line-height: 1.4;
+}
+
+.modern-thumb-status.is-auto      { color: var(--text-tertiary); }
+.modern-thumb-status.is-explicit  { color: var(--primary-color); }
+.modern-thumb-status.is-none      { color: var(--text-tertiary); }
+.modern-thumb-status.is-uploading { color: var(--accent-color); }
+
+.modern-thumb-text-note {
+    margin-top: var(--space-sm);
+    padding: var(--space-xs) var(--space-sm);
+    background: var(--surface-light);
+    border-radius: var(--radius-sm);
+    border-left: 3px solid var(--accent-color);
+    font-size: var(--text-xs);
+    color: var(--text-secondary);
+    display: flex;
+    align-items: center;
+    gap: var(--space-xs);
+}
+
+/* Editor container: meta section shouldn't be clipped by the toolbar's
+   relative-position context that the emoji picker uses. */
+.modern-editor-container--full .modern-topic-meta {
+    position: relative;
+    z-index: 1;
+}
+
+@media (max-width: 680px) {
+    .modern-thumb-preview { width: 72px; height: 72px; }
+    .modern-thumb-buttons { flex-direction: column; align-items: stretch; }
+    .modern-thumb-buttons .modern-btn { width: 100%; }
+}
 /* ------------------------------------------------------------
    15. MEMBERS & GROUP CARDS
    ------------------------------------------------------------ */
