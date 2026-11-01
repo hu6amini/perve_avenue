@@ -1871,6 +1871,424 @@ function transformLegacyEmbedLinks(html) {
         };
     }
 
+   // ─────────────────────────────────────────────────────────────────────────
+// Topic meta section — Title + Thumbnail picker
+//
+// Rendered above the toolbar in the full editor when the legacy form
+// carries #TopicTitle (i.e. the user is creating or editing a topic
+// opening post). Syncs the two visible controls back into the legacy
+// hidden fields (#TopicTitle, #TopicDesc) on submit.
+//
+// #TopicDesc carries either an <img class="tmb" …> thumbnail override
+// or nothing at all. When nothing is written, the forum server falls
+// back to the first image in the post — boards.js reads that image from
+// h4.desc, so no boards-side change is needed.
+//
+// Reddit-style state machine:
+//   auto     — #TopicDesc left untouched (server picks first image)
+//   explicit — #TopicDesc holds the <img class="tmb"> payload
+// The picker starts in auto mode. Upload / Use URL transition to
+// explicit. "Use first image from post" transitions back to auto. A
+// text-only legacy #TopicDesc is preserved unless the user picks a
+// thumbnail, in which case the text is replaced.
+// ─────────────────────────────────────────────────────────────────────────
+function buildTopicMetaSection(opts) {
+    opts = opts || {};
+    var legacyForm = opts.legacyForm;
+    var mode = opts.mode || 'create'; // 'create' | 'edit'
+
+    var legacyTitle = legacyForm ? legacyForm.querySelector('#TopicTitle') : null;
+    var legacyDesc  = legacyForm ? legacyForm.querySelector('#TopicDesc')  : null;
+
+    var MAX_TITLE_LEN = 200;
+    var DESC_MAX_BYTES = 400; // legacy input maxlength
+
+    // ── State ────────────────────────────────────────────────────────────
+    var originalDescValue = legacyDesc ? (legacyDesc.value || '') : '';
+    var hasExplicitImage  = false;
+    var explicitImageData = null;
+    var descTouched       = false;
+    var autoImageSrc      = null;
+    var isUploading       = false;
+    var editorRef         = null;
+    var sendStateUpdater  = null;
+
+    // Parse whatever the legacy form already carried.
+    if (originalDescValue) {
+        var m = originalDescValue.match(/<img\b[^>]*\bsrc\s*=\s*["']([^"']+)["'][^>]*>/i);
+        if (m) {
+            var full = m[0];
+            var wM = full.match(/\bwidth\s*=\s*["']?(\d+)/i);
+            var hM = full.match(/\bheight\s*=\s*["']?(\d+)/i);
+            var aM = full.match(/\balt\s*=\s*["']([^"']*)["']/i);
+            hasExplicitImage = true;
+            explicitImageData = {
+                src: m[1],
+                width:  wM ? parseInt(wM[1], 10) : null,
+                height: hM ? parseInt(hM[1], 10) : null,
+                alt:    aM ? aM[1] : 'Topic thumbnail'
+            };
+        }
+    }
+
+    // ── DOM ──────────────────────────────────────────────────────────────
+    var section = document.createElement('div');
+    section.className = 'modern-topic-meta';
+
+    var titleRow = document.createElement('div');
+    titleRow.className = 'modern-topic-title-row';
+    titleRow.innerHTML =
+        '<label class="modern-topic-label" for="modern-topic-title">' +
+            'Topic Title <span class="required-star" aria-hidden="true">*</span>' +
+        '</label>' +
+        '<div class="modern-topic-title-input-wrap">' +
+            '<input type="text" id="modern-topic-title" class="modern-input" ' +
+                'maxlength="' + MAX_TITLE_LEN + '" autocomplete="off" spellcheck="true" ' +
+                'placeholder="Give your topic a clear, descriptive title">' +
+            '<span class="modern-char-counter" aria-hidden="true">0 / ' + MAX_TITLE_LEN + '</span>' +
+        '</div>';
+    section.appendChild(titleRow);
+
+    var titleInput = titleRow.querySelector('#modern-topic-title');
+    var charCounter = titleRow.querySelector('.modern-char-counter');
+
+    // Thumbnail picker
+    var thumbBlock = document.createElement('div');
+    thumbBlock.className = 'modern-thumbnail-picker';
+    thumbBlock.innerHTML =
+        '<div class="modern-thumb-header">' +
+            '<label class="modern-topic-label">Topic thumbnail</label>' +
+            '<span class="modern-thumb-hint">Optional. Shown next to your topic in the board listing.</span>' +
+        '</div>' +
+        '<div class="modern-thumb-row">' +
+            '<div class="modern-thumb-preview" aria-hidden="true">' +
+                '<div class="modern-thumb-placeholder"><i class="fa-regular fa-image"></i></div>' +
+            '</div>' +
+            '<div class="modern-thumb-controls">' +
+                '<div class="modern-thumb-buttons">' +
+                    '<button type="button" class="modern-btn modern-btn-secondary modern-thumb-upload"><i class="fa-regular fa-cloud-arrow-up" aria-hidden="true"></i> Upload</button>' +
+                    '<button type="button" class="modern-btn modern-btn-secondary modern-thumb-url"><i class="fa-regular fa-link" aria-hidden="true"></i> Use URL</button>' +
+                    '<button type="button" class="modern-btn modern-btn-secondary modern-thumb-auto" hidden><i class="fa-regular fa-rotate-left" aria-hidden="true"></i> Use first image from post</button>' +
+                '</div>' +
+                '<div class="modern-thumb-status" aria-live="polite"></div>' +
+            '</div>' +
+        '</div>';
+    section.appendChild(thumbBlock);
+
+    var thumbPreview = thumbBlock.querySelector('.modern-thumb-preview');
+    var thumbStatus  = thumbBlock.querySelector('.modern-thumb-status');
+    var uploadBtn    = thumbBlock.querySelector('.modern-thumb-upload');
+    var urlBtn       = thumbBlock.querySelector('.modern-thumb-url');
+    var autoBtn      = thumbBlock.querySelector('.modern-thumb-auto');
+
+    // Edit-mode text note
+    if (mode === 'edit' && originalDescValue && !hasExplicitImage) {
+        var textNote = document.createElement('div');
+        textNote.className = 'modern-thumb-text-note';
+        textNote.innerHTML =
+            '<i class="fa-regular fa-circle-info" aria-hidden="true"></i> ' +
+            'This topic currently has a text description. It will be kept unless you pick a thumbnail.';
+        section.appendChild(textNote);
+    }
+
+    // Prefill title
+    if (legacyTitle && legacyTitle.value) {
+        titleInput.value = legacyTitle.value;
+    }
+    updateTitleCounter();
+
+    // ── Helpers ──────────────────────────────────────────────────────────
+    function updateTitleCounter() {
+        var len = titleInput.value.length;
+        charCounter.textContent = len + ' / ' + MAX_TITLE_LEN;
+        charCounter.classList.toggle('is-warning', len > MAX_TITLE_LEN * 0.9);
+        charCounter.classList.toggle('is-full', len >= MAX_TITLE_LEN);
+    }
+
+    function buildTmbImgHtml(data) {
+        // Full form first, then progressively shorter fallbacks so we
+        // stay within the legacy input's 400-char soft cap even for
+        // long URLs. The attributes that matter for CLS and a11y are
+        // tried first; a bare src-only img is the last resort.
+        var variants = [
+            '<img src="' + escapeHtml(data.src) + '" class="tmb"'
+                + (data.width  ? ' width="'  + data.width  + '"' : '')
+                + (data.height ? ' height="' + data.height + '"' : '')
+                + ' loading="lazy" decoding="async" alt="' + escapeHtml(data.alt || 'Topic thumbnail') + '">',
+            '<img src="' + escapeHtml(data.src) + '" class="tmb" loading="lazy" decoding="async">',
+            '<img src="' + escapeHtml(data.src) + '" class="tmb">',
+            '<img src="' + escapeHtml(data.src) + '">'
+        ];
+        for (var i = 0; i < variants.length; i++) {
+            if (variants[i].length <= DESC_MAX_BYTES) return variants[i];
+        }
+        return variants[variants.length - 1];
+    }
+
+    function renderPreview() {
+        var data = hasExplicitImage
+            ? explicitImageData
+            : (autoImageSrc ? { src: autoImageSrc, alt: 'Topic thumbnail (auto)' } : null);
+
+        if (data && data.src) {
+            thumbPreview.innerHTML = '';
+            var img = document.createElement('img');
+            img.src = data.src;
+            img.alt = data.alt || 'Topic thumbnail';
+            img.loading = 'lazy';
+            img.decoding = 'async';
+            img.onerror = function () { renderPreviewFallback('Image failed to load'); };
+            thumbPreview.appendChild(img);
+            thumbPreview.classList.add('has-image');
+            thumbPreview.classList.remove('is-placeholder');
+        } else {
+            thumbPreview.innerHTML =
+                '<div class="modern-thumb-placeholder"><i class="fa-regular fa-image" aria-hidden="true"></i></div>';
+            thumbPreview.classList.remove('has-image');
+            thumbPreview.classList.add('is-placeholder');
+        }
+
+        autoBtn.hidden = !hasExplicitImage;
+
+        if (isUploading) {
+            thumbStatus.innerHTML = '<i class="fa-regular fa-spinner fa-spin" aria-hidden="true"></i> Uploading…';
+            thumbStatus.className = 'modern-thumb-status is-uploading';
+            return;
+        }
+
+        if (hasExplicitImage) {
+            thumbStatus.innerHTML = '<i class="fa-regular fa-check" aria-hidden="true"></i> Custom thumbnail set';
+            thumbStatus.className = 'modern-thumb-status is-explicit';
+        } else if (autoImageSrc) {
+            thumbStatus.innerHTML = '<i class="fa-regular fa-wand-magic-sparkles" aria-hidden="true"></i> Using the first image from your post';
+            thumbStatus.className = 'modern-thumb-status is-auto';
+        } else {
+            thumbStatus.innerHTML = '<i class="fa-regular fa-circle-info" aria-hidden="true"></i> Add an image to your post to show a thumbnail automatically';
+            thumbStatus.className = 'modern-thumb-status is-none';
+        }
+    }
+
+    function renderPreviewFallback(msg) {
+        thumbPreview.innerHTML =
+            '<div class="modern-thumb-placeholder is-error" title="' + escapeHtml(msg) + '">' +
+                '<i class="fa-regular fa-triangle-exclamation" aria-hidden="true"></i>' +
+            '</div>';
+        thumbPreview.classList.remove('has-image');
+        thumbPreview.classList.add('is-placeholder');
+    }
+
+    function setExplicitImage(data) {
+        explicitImageData = data;
+        hasExplicitImage = true;
+        descTouched = true;
+        renderPreview();
+        if (sendStateUpdater) sendStateUpdater();
+    }
+
+    function clearExplicitImage() {
+        hasExplicitImage = false;
+        explicitImageData = null;
+        descTouched = true;
+        renderPreview();
+        if (sendStateUpdater) sendStateUpdater();
+    }
+
+    function refreshAutoImage() {
+        if (!editorRef) { autoImageSrc = null; renderPreview(); return; }
+        try {
+            var found = null;
+            editorRef.state.doc.descendants(function (node) {
+                if (found) return;
+                if (node.type.name === 'image' && node.attrs.src) found = node.attrs.src;
+            });
+            autoImageSrc = found;
+            renderPreview();
+        } catch (e) {
+            autoImageSrc = null;
+            renderPreview();
+        }
+    }
+
+    // ── Upload ───────────────────────────────────────────────────────────
+    function uploadThumbnail(file) {
+        if (!file) return;
+        if (file.size > MAX_UPLOAD_BYTES) {
+            showToast('Image exceeds 32 MB limit', 'error');
+            return;
+        }
+
+        isUploading = true;
+        renderPreview();
+
+        var fd = new FormData();
+        fd.append('image', file);
+
+        var xhr = new XMLHttpRequest();
+        xhr.open('POST', UPLOAD_WORKER_URL);
+
+        xhr.upload.addEventListener('progress', function (e) {
+            if (!e.lengthComputable) return;
+            var pct = Math.round(e.loaded / e.total * 100);
+            thumbStatus.innerHTML =
+                '<i class="fa-regular fa-spinner fa-spin" aria-hidden="true"></i> Uploading… ' + pct + '%';
+        });
+
+        xhr.addEventListener('load', function () {
+            isUploading = false;
+            if (xhr.status < 200 || xhr.status >= 300) {
+                showToast('Upload failed (HTTP ' + xhr.status + ')', 'error');
+                renderPreview();
+                return;
+            }
+            var data;
+            try { data = JSON.parse(xhr.responseText); }
+            catch (e) {
+                showToast('Upload failed (invalid response)', 'error');
+                renderPreview();
+                return;
+            }
+            if (!data.url) {
+                showToast('Upload failed (no URL returned)', 'error');
+                renderPreview();
+                return;
+            }
+            setExplicitImage({
+                src:    data.url,
+                width:  data.width  ? parseInt(data.width, 10)  : null,
+                height: data.height ? parseInt(data.height, 10) : null,
+                alt:    'Topic thumbnail'
+            });
+            showToast('Thumbnail uploaded', 'success');
+        });
+
+        xhr.addEventListener('error', function () {
+            isUploading = false;
+            showToast('Upload failed (network error)', 'error');
+            renderPreview();
+        });
+
+        xhr.send(fd);
+    }
+
+    function openFilePicker() {
+        var input = document.createElement('input');
+        input.type = 'file';
+        input.accept = 'image/*';
+        input.onchange = function () {
+            if (input.files && input.files[0]) uploadThumbnail(input.files[0]);
+        };
+        input.click();
+    }
+
+    function promptForUrl() {
+        var m = makeModalShell(360);
+        m.box.innerHTML =
+            '<h3 style="margin:0 0 var(--space-md) 0;"><i class="fa-regular fa-image" aria-hidden="true"></i> Topic thumbnail URL</h3>' +
+            '<input type="url" id="meta-thumb-url" class="modern-input" ' +
+                'placeholder="https://example.com/image.jpg" style="width:100%;" autocomplete="off">' +
+            '<div style="display:flex;gap:var(--space-sm);margin-top:var(--space-md);justify-content:flex-end;">' +
+                '<button type="button" id="meta-thumb-cancel" class="modern-btn modern-btn-secondary">Cancel</button>' +
+                '<button type="button" id="meta-thumb-submit" class="modern-btn modern-btn-primary">Use image</button>' +
+            '</div>';
+
+        var input = m.box.querySelector('#meta-thumb-url');
+        input.focus();
+
+        function close() { m.overlay.remove(); document.removeEventListener('keydown', onEsc); }
+        function onEsc(e) { if (e.key === 'Escape') { e.preventDefault(); close(); } }
+        document.addEventListener('keydown', onEsc);
+        m.box.querySelector('#meta-thumb-cancel').onclick = close;
+        m.box.querySelector('#meta-thumb-submit').onclick = function () {
+            var url = input.value.trim();
+            if (!url) { showToast('Please enter a URL', 'warning'); return; }
+            close();
+            var probe = new Image();
+            probe.onload = function () {
+                setExplicitImage({
+                    src: url,
+                    width:  this.naturalWidth  || null,
+                    height: this.naturalHeight || null,
+                    alt: 'Topic thumbnail'
+                });
+            };
+            probe.onerror = function () {
+                setExplicitImage({ src: url, width: null, height: null, alt: 'Topic thumbnail' });
+            };
+            probe.src = url;
+        };
+        input.addEventListener('keypress', function (e) {
+            if (e.key === 'Enter') m.box.querySelector('#meta-thumb-submit').click();
+        });
+    }
+
+    // ── Event wiring ─────────────────────────────────────────────────────
+    titleInput.addEventListener('input', function () {
+        updateTitleCounter();
+        titleInput.classList.remove('has-error');
+        if (legacyTitle) legacyTitle.value = titleInput.value;
+        if (sendStateUpdater) sendStateUpdater();
+    });
+
+    uploadBtn.addEventListener('click', openFilePicker);
+    urlBtn.addEventListener('click', promptForUrl);
+    autoBtn.addEventListener('click', clearExplicitImage);
+
+    // Paste an image directly onto the picker
+    section.addEventListener('paste', function (e) {
+        if (!e.target.closest('.modern-thumb-preview, .modern-thumb-controls')) return;
+        var items = e.clipboardData && e.clipboardData.items;
+        if (!items) return;
+        for (var i = 0; i < items.length; i++) {
+            if (items[i].type && items[i].type.indexOf('image/') === 0) {
+                e.preventDefault();
+                uploadThumbnail(items[i].getAsFile());
+                return;
+            }
+        }
+    });
+
+    // ── Public API on the element ────────────────────────────────────────
+    section.attachEditor = function (ed) {
+        editorRef = ed;
+        refreshAutoImage();
+    };
+
+    section.onEditorUpdate = function () {
+        if (hasExplicitImage) return; // explicit overrides auto
+        refreshAutoImage();
+    };
+
+    section.setSendStateUpdater = function (fn) { sendStateUpdater = fn; };
+
+    section.isReady = function () {
+        return titleInput.value.trim().length > 0;
+    };
+
+    section.validate = function () {
+        if (!titleInput.value.trim()) {
+            titleInput.classList.add('has-error');
+            titleInput.focus();
+            showToast('Please enter a topic title', 'error');
+            return false;
+        }
+        return true;
+    };
+
+    section.flush = function () {
+        if (legacyTitle) legacyTitle.value = titleInput.value.trim();
+        if (!legacyDesc) return;
+        if (hasExplicitImage && explicitImageData) {
+            legacyDesc.value = buildTmbImgHtml(explicitImageData);
+        } else if (descTouched) {
+            legacyDesc.value = '';
+        }
+        // else: untouched — leave the original text description in place
+    };
+
+    renderPreview();
+    return section;
+}
+
     async function buildEditorInto(host, opts) {
         var editorRef = { current: null };
         var deps = await loadTipTapDeps();
@@ -3890,16 +4308,32 @@ function transformLegacyEmbedLinks(html) {
                 if (a && a !== document.body && a !== document.documentElement) return;
                 editor.commands.focus('end');
             },
-            onUpdate: function ({ editor }) {
+                        onUpdate: function ({ editor }) {
                 var html = editor.getHTML();
                 var legacy = editorContentIsEmpty(html) ? '' : htmlToLegacy(html);
                 if (opts.onSync) opts.onSync(legacy);
                 updateSendState();
                 scheduleLivePreviewRefresh();
+                // ── NEW ─────────────────────────────────────────────
+                if (opts.metaSection && typeof opts.metaSection.onEditorUpdate === 'function') {
+                    opts.metaSection.onEditorUpdate();
+                }
+                // ────────────────────────────────────────────────────
             }
         });
 
         editorRef.current = editor;
+
+        // ── NEW ─────────────────────────────────────────────────────
+        if (opts.metaSection) {
+            if (typeof opts.metaSection.attachEditor === 'function') {
+                opts.metaSection.attachEditor(editor);
+            }
+            if (typeof opts.metaSection.setSendStateUpdater === 'function') {
+                opts.metaSection.setSendStateUpdater(updateSendState);
+            }
+        }
+        // ────────────────────────────────────────────────────────────
 
 // ── Initial sync to legacy textarea ───────────────────────────────
 // Without this, the textarea keeps whatever the forum stored —
@@ -4308,49 +4742,49 @@ if (opts.onSync && opts.mode !== 'reply') {
             });
         }
 
-        function updateSendState() {
-    if (!submitBtn) return;
-    if (submitBtn.hasAttribute('data-saving')) {
-        submitBtn.disabled = true;
-        return;
-    }
+                function updateSendState() {
+            if (!submitBtn) return;
+            if (submitBtn.hasAttribute('data-saving')) { submitBtn.disabled = true; return; }
 
-    var empty = editorContentIsEmpty(editor.getHTML());
-    var hasPlaceholder = false;
-    editor.state.doc.descendants(function (n) {
-        if (n.type.name === 'imageUploadPlaceholder') { hasPlaceholder = true; return false; }
-        return true;
-    });
+            var empty = editorContentIsEmpty(editor.getHTML());
+            var hasPlaceholder = false;
+            editor.state.doc.descendants(function (n) {
+                if (n.type.name === 'imageUploadPlaceholder') { hasPlaceholder = true; return false; }
+                return true;
+            });
 
-    // Send: needs content AND no pending image placeholders.
-    // A placeholder marks an image that was intended but hasn't arrived;
-    // sending would drop it silently.
-    var sendReady = !empty && !hasPlaceholder;
-    submitBtn.disabled = !sendReady;
-    submitBtn.setAttribute('aria-disabled', String(!sendReady));
-    if (sendReady) {
-        submitBtn.removeAttribute('title');
-    } else {
-        submitBtn.setAttribute('title', hasPlaceholder
-            ? 'Finish or remove the image placeholder'
-            : 'Write something before submitting');
-    }
+            // ── NEW: respect the meta section's readiness ──────────────
+            var metaReady = true;
+            if (opts.metaSection && typeof opts.metaSection.isReady === 'function') {
+                metaReady = opts.metaSection.isReady();
+            }
+            // ────────────────────────────────────────────────────────────
 
-    // Preview: needs content only. Placeholders don't block — the
-    // preview renderer already skips re-rendering while a placeholder
-    // is present (see updateLivePreview's hasPlaceholder check), so
-    // letting the user open the pane is safe; it just shows whatever
-    // was last rendered.
-    if (previewBtn) {
-        var previewReady = !empty;
-        previewBtn.disabled = !previewReady;
-        previewBtn.setAttribute('aria-disabled', String(!previewReady));
-        if (previewReady) {
-            previewBtn.removeAttribute('title');
-        } else {
-            previewBtn.setAttribute('title', 'Write something to preview it');
+            var sendReady = !empty && !hasPlaceholder && metaReady;
+            submitBtn.disabled = !sendReady;
+            submitBtn.setAttribute('aria-disabled', String(!sendReady));
+            if (sendReady) {
+                submitBtn.removeAttribute('title');
+            } else {
+                var why = hasPlaceholder ? 'Finish or remove the image placeholder'
+                    : empty            ? 'Write something before submitting'
+                    : !metaReady       ? 'Add a topic title'
+                    :                    'Cannot submit yet';
+                submitBtn.setAttribute('title', why);
+            }
+
+            if (previewBtn) {
+                var previewReady = !empty;
+                previewBtn.disabled = !previewReady;
+                previewBtn.setAttribute('aria-disabled', String(!previewReady));
+                if (previewReady) previewBtn.removeAttribute('title');
+                else previewBtn.setAttribute('title', 'Write something to preview it');
+            }
+
+            if (empty && previewArea && previewArea.style.display !== 'none') {
+                previewArea.style.display = 'none';
+            }
         }
-    }
 
     // Auto-hide the preview when the editor becomes empty — matches
     // the messenger. Without this, a preview rendered from content
@@ -4528,16 +4962,27 @@ if (opts.onSync && opts.mode !== 'reply') {
         }
     }
 
-    async function buildFullEditor() {
+        async function buildFullEditor() {
         var legacySend = document.querySelector('.send');
         if (!legacySend) return;
         if (document.getElementById('modern-editor-full')) return;
 
-        var legacyPost = document.getElementById('Post');
-        var legacyForm = window.REPLIER || (legacyPost ? legacyPost.form : null);
+        var legacyPost   = document.getElementById('Post');
+        var legacyForm   = window.REPLIER || (legacyPost ? legacyPost.form : null);
         var legacySubmit = document.querySelector('input[name="submit_post"]');
+        var legacyHtml   = legacyPost ? legacyPost.value : '';
 
-        var legacyHtml = legacyPost ? legacyPost.value : '';
+        // Detect whether this is a topic composer (create / edit OP)
+        // versus a plain send form. #TopicTitle is unique to the topic
+        // composer; reply forms and the reply-edit form don't carry it.
+        var metaSection  = null;
+        var composerMode = null;
+        if (legacyForm && legacyForm.querySelector('#TopicTitle')) {
+            var codeInput = legacyForm.querySelector('input[name="CODE"]');
+            var codeValue = codeInput ? codeInput.value : '01';
+            composerMode = (codeValue === '09') ? 'edit' : 'create';
+            metaSection = buildTopicMetaSection({ legacyForm: legacyForm, mode: composerMode });
+        }
 
         var container = document.createElement('div');
         container.id = 'modern-editor-full';
@@ -4545,7 +4990,6 @@ if (opts.onSync && opts.mode !== 'reply') {
 
         var summary = document.getElementById('modern-summary-container');
         var wrapper = document.getElementById('modern-forum-wrapper');
-
         if (summary && summary.parentNode) {
             summary.parentNode.insertBefore(container, summary);
         } else if (wrapper) {
@@ -4563,11 +5007,29 @@ if (opts.onSync && opts.mode !== 'reply') {
             await buildEditorInto(container, {
                 mode: 'full',
                 initialHtml: await legacyToHtmlAsync(legacyHtml),
-                placeholder: 'Write your post…',
-                headerLabel: 'Writing as:',
-                submitLabel: 'Submit post',
+                placeholder:
+                    composerMode === 'edit' ? 'Edit your post…' :
+                    composerMode === 'create' ? 'Write your opening post…' :
+                    'Write your post…',
+                headerLabel:
+                    composerMode === 'edit' ? 'Editing as:' :
+                    composerMode === 'create' ? 'Writing as:' :
+                    'Writing as:',
+                submitLabel:
+                    composerMode === 'edit' ? 'Save changes' :
+                    composerMode === 'create' ? 'Post new topic' :
+                    'Submit post',
+                metaSection: metaSection,
+                onCancel: composerMode ? function () { history.back(); } : null,
                 onSync: function (legacy) { if (legacyPost) legacyPost.value = legacy; },
                 onSubmit: function () {
+                    // Validate meta fields before submitting
+                    if (metaSection && typeof metaSection.validate === 'function') {
+                        if (!metaSection.validate()) return;
+                    }
+                    if (metaSection && typeof metaSection.flush === 'function') {
+                        metaSection.flush();
+                    }
                     var s2 = document.getElementById('enablesig');
                     var t2 = document.getElementById('track_topic');
                     if (s2) s2.checked = true;
@@ -4581,10 +5043,13 @@ if (opts.onSync && opts.mode !== 'reply') {
                     }
                 }
             });
-            console.log('[EditorModule] Full editor built');
+            console.log('[EditorModule] Full editor built' +
+                (composerMode ? ' (topic ' + composerMode + ')' : ''));
         } catch (err) {
             console.error('[EditorModule] Full editor build failed:', err);
-            container.innerHTML = '<div style="color:red;padding:1rem;">Editor failed to load. <button onclick="location.reload()">Reload</button></div>';
+            container.innerHTML =
+                '<div style="color:red;padding:1rem;">Editor failed to load. ' +
+                '<button onclick="location.reload()">Reload</button></div>';
         }
     }
 
