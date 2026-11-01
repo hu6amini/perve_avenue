@@ -1980,6 +1980,19 @@ function buildTopicMetaSection(opts) {
     var uploadBtn    = thumbBlock.querySelector('.modern-thumb-upload');
     var urlBtn       = thumbBlock.querySelector('.modern-thumb-url');
     var autoBtn      = thumbBlock.querySelector('.modern-thumb-auto');
+        var thumbPreview = thumbBlock.querySelector('.modern-thumb-preview');
+    var thumbStatus  = thumbBlock.querySelector('.modern-thumb-status');
+    var uploadBtn    = thumbBlock.querySelector('.modern-thumb-upload');
+    var urlBtn       = thumbBlock.querySelector('.modern-thumb-url');
+    var autoBtn      = thumbBlock.querySelector('.modern-thumb-auto');
+
+    // ── NEW: poll builder (create mode only) ────────────────────────
+    var pollBuilder = null;
+    if (mode === 'create') {
+        pollBuilder = buildPollBuilder(legacyForm);
+        if (pollBuilder) section.appendChild(pollBuilder.element);
+    }
+    // ────────────────────────────────────────────────────────────────
 
     // Edit-mode text note
     if (mode === 'edit' && originalDescValue && !hasExplicitImage) {
@@ -2264,29 +2277,352 @@ function buildTopicMetaSection(opts) {
         return titleInput.value.trim().length > 0;
     };
 
-    section.validate = function () {
+        section.validate = function () {
         if (!titleInput.value.trim()) {
             titleInput.classList.add('has-error');
             titleInput.focus();
             showToast('Please enter a topic title', 'error');
             return false;
         }
+        // ── NEW ─────────────────────────────────────────────────────
+        if (pollBuilder && !pollBuilder.validate()) return false;
+        // ────────────────────────────────────────────────────────────
         return true;
     };
 
     section.flush = function () {
         if (legacyTitle) legacyTitle.value = titleInput.value.trim();
-        if (!legacyDesc) return;
-        if (hasExplicitImage && explicitImageData) {
-            legacyDesc.value = buildTmbImgHtml(explicitImageData);
-        } else if (descTouched) {
-            legacyDesc.value = '';
+        if (legacyDesc) {
+            if (hasExplicitImage && explicitImageData) {
+                legacyDesc.value = buildTmbImgHtml(explicitImageData);
+            } else if (descTouched) {
+                legacyDesc.value = '';
+            }
         }
-        // else: untouched — leave the original text description in place
+        // ── NEW ─────────────────────────────────────────────────────
+        if (pollBuilder) pollBuilder.flush();
+        // ────────────────────────────────────────────────────────────
     };
 
     renderPreview();
     return section;
+}
+
+   // ─────────────────────────────────────────────────────────────────────────
+// Poll builder — create-topic only (CODE=01)
+//
+// Reddit/Strawpoll-style inline builder. Mounted below the thumbnail
+// picker when `mode === 'create'`. Fully replaces the legacy poll
+// table (which stays hidden in the DOM and receives synced values on
+// submit). Edit mode never shows this — polls are edited from the
+// site menu, not the OP editor.
+//
+// Legacy fields synced on flush():
+//   #ablePoll        1 = has poll, 0 = no poll
+//   #PollTitle       poll question
+//   #POLL_0..N       option text (textareas — created/removed as needed)
+//   input[name=pos]  comma-separated "Option0,Option1,…" order
+//   #allow_multi     0 = One, 1 = All, 2 = Customize
+//   #allow_multi2    custom count when allow_multi = 2
+//   allow_view       0 = secret, 1 = visible
+//   allow_del        1 = cancel vote allowed, 0 = not
+//   pollonly         0 = replies allowed (not exposed)
+// ─────────────────────────────────────────────────────────────────────────
+function buildPollBuilder(legacyForm) {
+    var ablePoll        = legacyForm.querySelector('#ablePoll');
+    var pollTitleLegacy = legacyForm.querySelector('#PollTitle');
+    var allowMultiLeg   = legacyForm.querySelector('#allow_multi');
+    var allowMulti2Leg  = legacyForm.querySelector('#allow_multi2');
+    var allowViewLeg    = legacyForm.querySelector('select[name="allow_view"]');
+    var allowDelLeg     = legacyForm.querySelector('select[name="allow_del"]');
+    var pollonlyLeg     = legacyForm.querySelector('select[name="pollonly"]');
+    var posLeg          = legacyForm.querySelector('input[name="pos"]');
+
+    var enabled = false;
+    var options = ['', '', ''];          // 3 empty slots, matching legacy default
+    var multiMode = 'one';                // 'one' | 'all' | 'up-to'
+    var multiN = 2;
+    var secretBallot = true;
+    var cancelVote   = false;
+
+    var wrapper = document.createElement('div');
+    wrapper.className = 'modern-poll-builder';
+
+    // ── Toggle row ──────────────────────────────────────────────────────
+    var toggleRow = document.createElement('div');
+    toggleRow.className = 'modern-poll-toggle-row';
+    toggleRow.innerHTML =
+        '<button type="button" class="modern-btn modern-btn-secondary modern-poll-toggle" aria-expanded="false">' +
+            '<i class="fa-regular fa-square-plus modern-poll-toggle-icon" aria-hidden="true"></i> ' +
+            '<span class="modern-poll-toggle-label">Add poll</span>' +
+        '</button>';
+    wrapper.appendChild(toggleRow);
+
+    var toggleBtn   = toggleRow.querySelector('.modern-poll-toggle');
+    var toggleIcon  = toggleRow.querySelector('.modern-poll-toggle-icon');
+    var toggleLabel = toggleRow.querySelector('.modern-poll-toggle-label');
+
+    // ── Body (collapsed by default) ─────────────────────────────────────
+    var body = document.createElement('div');
+    body.className = 'modern-poll-body';
+    body.hidden = true;
+    wrapper.appendChild(body);
+
+    // Question
+    var titleRow = document.createElement('div');
+    titleRow.className = 'modern-poll-field';
+    titleRow.innerHTML =
+        '<label class="modern-topic-label" for="modern-poll-title">Poll question</label>' +
+        '<input type="text" id="modern-poll-title" class="modern-input" ' +
+            'maxlength="200" autocomplete="off" spellcheck="true" ' +
+            'placeholder="What do you want to ask?">';
+    body.appendChild(titleRow);
+    var pollTitleInput = titleRow.querySelector('#modern-poll-title');
+
+    // Options
+    var optionsSection = document.createElement('div');
+    optionsSection.className = 'modern-poll-options';
+    optionsSection.innerHTML =
+        '<label class="modern-topic-label">Options</label>' +
+        '<div class="modern-poll-options-list"></div>' +
+        '<button type="button" class="modern-btn modern-btn-secondary modern-poll-add-option">' +
+            '<i class="fa-regular fa-plus" aria-hidden="true"></i> Add option' +
+        '</button>';
+    body.appendChild(optionsSection);
+
+    var optionsList  = optionsSection.querySelector('.modern-poll-options-list');
+    var addOptionBtn = optionsSection.querySelector('.modern-poll-add-option');
+
+    function renderOptions() {
+        optionsList.innerHTML = '';
+        options.forEach(function (opt, idx) {
+            var row = document.createElement('div');
+            row.className = 'modern-poll-option-row';
+
+            var number = document.createElement('span');
+            number.className = 'modern-poll-option-number';
+            number.textContent = (idx + 1) + '.';
+
+            var input = document.createElement('input');
+            input.type = 'text';
+            input.className = 'modern-input modern-poll-option-input';
+            input.maxLength = 250;
+            input.placeholder = 'Option ' + (idx + 1);
+            input.value = opt;
+            input.addEventListener('input', function () { options[idx] = input.value; });
+
+            var upBtn = document.createElement('button');
+            upBtn.type = 'button';
+            upBtn.className = 'modern-poll-option-move';
+            upBtn.innerHTML = '<i class="fa-regular fa-arrow-up" aria-hidden="true"></i>';
+            upBtn.title = 'Move up';
+            upBtn.setAttribute('aria-label', 'Move option ' + (idx + 1) + ' up');
+            upBtn.disabled = idx === 0;
+            upBtn.addEventListener('click', function () {
+                if (idx === 0) return;
+                var tmp = options[idx - 1];
+                options[idx - 1] = options[idx];
+                options[idx] = tmp;
+                renderOptions();
+                var inputs = optionsList.querySelectorAll('.modern-poll-option-input');
+                if (inputs[idx - 1]) inputs[idx - 1].focus();
+            });
+
+            var downBtn = document.createElement('button');
+            downBtn.type = 'button';
+            downBtn.className = 'modern-poll-option-move';
+            downBtn.innerHTML = '<i class="fa-regular fa-arrow-down" aria-hidden="true"></i>';
+            downBtn.title = 'Move down';
+            downBtn.setAttribute('aria-label', 'Move option ' + (idx + 1) + ' down');
+            downBtn.disabled = idx === options.length - 1;
+            downBtn.addEventListener('click', function () {
+                if (idx === options.length - 1) return;
+                var tmp = options[idx + 1];
+                options[idx + 1] = options[idx];
+                options[idx] = tmp;
+                renderOptions();
+                var inputs = optionsList.querySelectorAll('.modern-poll-option-input');
+                if (inputs[idx + 1]) inputs[idx + 1].focus();
+            });
+
+            var removeBtn = document.createElement('button');
+            removeBtn.type = 'button';
+            removeBtn.className = 'modern-poll-option-remove';
+            removeBtn.innerHTML = '<i class="fa-regular fa-xmark" aria-hidden="true"></i>';
+            removeBtn.title = 'Remove option';
+            removeBtn.setAttribute('aria-label', 'Remove option ' + (idx + 1));
+            removeBtn.disabled = options.length <= 2;
+            removeBtn.addEventListener('click', function () {
+                if (options.length <= 2) return;
+                options.splice(idx, 1);
+                renderOptions();
+            });
+
+            row.appendChild(number);
+            row.appendChild(input);
+            row.appendChild(upBtn);
+            row.appendChild(downBtn);
+            row.appendChild(removeBtn);
+            optionsList.appendChild(row);
+        });
+    }
+    renderOptions();
+
+    addOptionBtn.addEventListener('click', function () {
+        if (options.length >= 300) return;
+        options.push('');
+        renderOptions();
+        var inputs = optionsList.querySelectorAll('.modern-poll-option-input');
+        if (inputs.length) inputs[inputs.length - 1].focus();
+    });
+
+    // ── Voting rules ────────────────────────────────────────────────────
+    var rules = document.createElement('div');
+    rules.className = 'modern-poll-rules';
+    rules.innerHTML =
+        '<div class="modern-poll-rule-group">' +
+            '<span class="modern-poll-rule-label">How many choices?</span>' +
+            '<div class="modern-poll-rule-options">' +
+                '<label class="modern-radio"><input type="radio" name="modern-poll-multi" value="one" checked><span>One</span></label>' +
+                '<label class="modern-radio"><input type="radio" name="modern-poll-multi" value="all"><span>All</span></label>' +
+                '<label class="modern-radio"><input type="radio" name="modern-poll-multi" value="up-to"><span>Up to</span> <input type="number" class="modern-input modern-poll-multi-n" min="2" max="299" value="2" disabled><span></span></label>' +
+            '</div>' +
+        '</div>';
+    body.appendChild(rules);
+
+    var multiRadios = rules.querySelectorAll('input[name="modern-poll-multi"]');
+    var multiNInput = rules.querySelector('.modern-poll-multi-n');
+
+    multiRadios.forEach(function (radio) {
+        radio.addEventListener('change', function () {
+            if (!radio.checked) return;
+            multiMode = radio.value;
+            multiNInput.disabled = multiMode !== 'up-to';
+            if (multiMode === 'up-to') multiNInput.focus();
+        });
+    });
+    multiNInput.addEventListener('input', function () {
+        var n = parseInt(multiNInput.value, 10);
+        if (isNaN(n) || n < 2) n = 2;
+        if (n > 299) n = 299;
+        multiN = n;
+    });
+
+    // ── Toggles ─────────────────────────────────────────────────────────
+    var toggles = document.createElement('div');
+    toggles.className = 'modern-poll-toggles';
+    toggles.innerHTML =
+        '<label class="modern-checkbox"><input type="checkbox" name="modern-poll-secret" checked> <span>Secret ballot (hide who voted)</span></label>' +
+        '<label class="modern-checkbox"><input type="checkbox" name="modern-poll-cancel-vote"> <span>Allow voters to change their vote</span></label>';
+    body.appendChild(toggles);
+
+    var secretCheckbox     = toggles.querySelector('input[name="modern-poll-secret"]');
+    var cancelVoteCheckbox = toggles.querySelector('input[name="modern-poll-cancel-vote"]');
+    secretCheckbox.addEventListener('change', function ()     { secretBallot = secretCheckbox.checked; });
+    cancelVoteCheckbox.addEventListener('change', function () { cancelVote   = cancelVoteCheckbox.checked; });
+
+    // ── Toggle handler ──────────────────────────────────────────────────
+    toggleBtn.addEventListener('click', function () {
+        enabled = !enabled;
+        body.hidden = !enabled;
+        toggleBtn.setAttribute('aria-expanded', String(enabled));
+        toggleLabel.textContent = enabled ? 'Remove poll' : 'Add poll';
+        toggleIcon.className = enabled
+            ? 'fa-regular fa-square-minus modern-poll-toggle-icon'
+            : 'fa-regular fa-square-plus modern-poll-toggle-icon';
+    });
+
+    // ── Validation ──────────────────────────────────────────────────────
+    function validate() {
+        if (!enabled) return true;
+        if (!pollTitleInput.value.trim()) {
+            pollTitleInput.classList.add('has-error');
+            pollTitleInput.focus();
+            showToast('Please enter a poll question', 'error');
+            return false;
+        }
+        pollTitleInput.classList.remove('has-error');
+        var filled = options.filter(function (o) { return o.trim().length > 0; });
+        if (filled.length < 2) {
+            showToast('A poll needs at least 2 options', 'error');
+            return false;
+        }
+        return true;
+    }
+
+    // ── Flush to legacy form ────────────────────────────────────────────
+    function flush() {
+        if (!enabled) {
+            if (ablePoll) ablePoll.value = '0';
+            return;
+        }
+        if (ablePoll) ablePoll.value = '1';
+
+        var title = pollTitleInput.value.trim();
+        if (pollTitleLegacy) pollTitleLegacy.value = title;
+
+        var filled = options
+            .map(function (o) { return o.trim(); })
+            .filter(function (o) { return o.length > 0; });
+
+        // Create / update / clear POLL_N textareas
+        var existing = legacyForm.querySelectorAll('textarea[name^="POLL_"]');
+        var maxExisting = 0;
+        existing.forEach(function (ta) {
+            var m = ta.id.match(/^POLL_(\d+)$/);
+            if (m) maxExisting = Math.max(maxExisting, parseInt(m[1], 10) + 1);
+        });
+        var total = Math.max(maxExisting, filled.length);
+
+        for (var i = 0; i < total; i++) {
+            var ta = legacyForm.querySelector('#POLL_' + i);
+            if (!ta) {
+                ta = document.createElement('textarea');
+                ta.name = 'POLL_' + i;
+                ta.id = 'POLL_' + i;
+                ta.style.display = 'none';
+                var sortable = legacyForm.querySelector('.Sortable');
+                if (sortable) {
+                    var optDiv = document.createElement('div');
+                    optDiv.id = 'Option' + i;
+                    optDiv.style.display = 'none';
+                    optDiv.appendChild(ta);
+                    sortable.appendChild(optDiv);
+                } else {
+                    legacyForm.appendChild(ta);
+                }
+            }
+            ta.value = (i < filled.length) ? filled[i] : '';
+        }
+
+        // Position order
+        if (posLeg) {
+            var ids = [];
+            for (var k = 0; k < filled.length; k++) ids.push('Option' + k);
+            posLeg.value = ids.join(',');
+        }
+
+        // Multi-choice
+        if (allowMultiLeg) {
+            if (multiMode === 'one')   allowMultiLeg.value = '0';
+            else if (multiMode === 'all') allowMultiLeg.value = '1';
+            else                          allowMultiLeg.value = '2';
+        }
+        if (allowMulti2Leg) {
+            allowMulti2Leg.value = (multiMode === 'up-to') ? String(multiN) : '2';
+        }
+
+        if (allowViewLeg) allowViewLeg.value = secretBallot ? '0' : '1';
+        if (allowDelLeg)  allowDelLeg.value  = cancelVote ? '1' : '0';
+        if (pollonlyLeg)  pollonlyLeg.value  = '0';
+    }
+
+    return {
+        element: wrapper,
+        validate: validate,
+        flush: flush,
+        isEnabled: function () { return enabled; }
+    };
 }
 
     async function buildEditorInto(host, opts) {
