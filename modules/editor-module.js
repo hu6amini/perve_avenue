@@ -1994,6 +1994,14 @@ function buildTopicMetaSection(opts) {
     }
     // ────────────────────────────────────────────────────────────────
 
+       // ── NEW: schedule builder (create mode only) ────────────────────
+    var scheduleBuilder = null;
+    if (mode === 'create') {
+        scheduleBuilder = buildScheduleBuilder(legacyForm);
+        if (scheduleBuilder) section.appendChild(scheduleBuilder.element);
+    }
+    // ────────────────────────────────────────────────────────────────
+
     // Edit-mode text note
     if (mode === 'edit' && originalDescValue && !hasExplicitImage) {
         var textNote = document.createElement('div');
@@ -2277,15 +2285,16 @@ function buildTopicMetaSection(opts) {
         return titleInput.value.trim().length > 0;
     };
 
-        section.validate = function () {
+         section.validate = function () {
         if (!titleInput.value.trim()) {
             titleInput.classList.add('has-error');
             titleInput.focus();
             showToast('Please enter a topic title', 'error');
             return false;
         }
-        // ── NEW ─────────────────────────────────────────────────────
         if (pollBuilder && !pollBuilder.validate()) return false;
+        // ── NEW ─────────────────────────────────────────────────────
+        if (scheduleBuilder && !scheduleBuilder.validate()) return false;
         // ────────────────────────────────────────────────────────────
         return true;
     };
@@ -2299,8 +2308,9 @@ function buildTopicMetaSection(opts) {
                 legacyDesc.value = '';
             }
         }
-        // ── NEW ─────────────────────────────────────────────────────
         if (pollBuilder) pollBuilder.flush();
+        // ── NEW ─────────────────────────────────────────────────────
+        if (scheduleBuilder) scheduleBuilder.flush();
         // ────────────────────────────────────────────────────────────
     };
 
@@ -2615,6 +2625,172 @@ function buildPollBuilder(legacyForm) {
         if (allowViewLeg) allowViewLeg.value = secretBallot ? '0' : '1';
         if (allowDelLeg)  allowDelLeg.value  = cancelVote ? '1' : '0';
         if (pollonlyLeg)  pollonlyLeg.value  = '0';
+    }
+
+    return {
+        element: wrapper,
+        validate: validate,
+        flush: flush,
+        isEnabled: function () { return enabled; }
+    };
+}
+
+   // ─────────────────────────────────────────────────────────────────────────
+// Schedule builder — create-topic only (CODE=01)
+//
+// Modern replacement for the legacy "Schedule post" toggle. When the
+// legacy form carries the scheduling UI (#ADDCRON link or #TopicTime
+// input), this renders a collapsed toggle that expands to a native
+// <input type="datetime-local">. The selected timestamp is written to
+// #TopicTime on submit.
+//
+// Legacy sync field:
+//   #TopicTime   scheduled publication timestamp, "" = publish now
+//
+// #TopicTime may be a hidden input inside .cronRow nascosta; readonly
+// and display:none on the parent do NOT prevent form submission —
+// only the disabled attribute does — so setting its value is enough.
+//
+// FORMAT: the forum's jQuery UI datepicker produces some locale- or
+// version-specific string. We emit ISO "YYYY-MM-DD HH:MM:SS" which
+// strtotime()/MySQL DATETIME accept. If the server rejects the value
+// (topic publishes immediately or errors), change SCHEDULE_FMT and
+// the formatForLegacy body below — nothing else needs touching.
+// ─────────────────────────────────────────────────────────────────────────
+function buildScheduleBuilder(legacyForm) {
+    if (!legacyForm) return null;
+    // Only build when the legacy form actually supports scheduling.
+    // #ADDCRON is the toggle in the Options row; #TopicTime is the
+    // field it controls. Either signals the feature is present.
+    var hasLegacySupport = !!(
+        legacyForm.querySelector('#ADDCRON') ||
+        legacyForm.querySelector('#TopicTime')
+    );
+    if (!hasLegacySupport) return null;
+
+    var enabled = false;
+    var body = null;
+
+    var wrapper = document.createElement('div');
+    wrapper.className = 'modern-schedule-builder';
+
+    var toggleRow = document.createElement('div');
+    toggleRow.className = 'modern-schedule-toggle-row';
+    toggleRow.innerHTML =
+        '<button type="button" class="modern-btn modern-btn-secondary modern-schedule-toggle" aria-expanded="false">' +
+            '<i class="fa-regular fa-calendar-plus modern-schedule-toggle-icon" aria-hidden="true"></i> ' +
+            '<span class="modern-schedule-toggle-label">Schedule post</span>' +
+        '</button>';
+    wrapper.appendChild(toggleRow);
+
+    var toggleBtn   = toggleRow.querySelector('.modern-schedule-toggle');
+    var toggleIcon  = toggleRow.querySelector('.modern-schedule-toggle-icon');
+    var toggleLabel = toggleRow.querySelector('.modern-schedule-toggle-label');
+
+    body = document.createElement('div');
+    body.className = 'modern-schedule-body';
+    body.hidden = true;
+    body.innerHTML =
+        '<label class="modern-topic-label" for="modern-topic-schedule">Publish at</label>' +
+        '<input type="datetime-local" id="modern-topic-schedule" ' +
+            'class="modern-input modern-schedule-input" step="60">' +
+        '<span class="modern-schedule-hint">The topic stays hidden until this time.</span>';
+    wrapper.appendChild(body);
+
+    var scheduleInput = body.querySelector('#modern-topic-schedule');
+
+    function pad2(n) { return String(n).padStart(2, '0'); }
+
+    function defaultFutureValue() {
+        var d = new Date(Date.now() + 60 * 60 * 1000); // +1h
+        d.setSeconds(0, 0);
+        return d.getFullYear() + '-' + pad2(d.getMonth() + 1) + '-' + pad2(d.getDate()) +
+               'T' + pad2(d.getHours()) + ':' + pad2(d.getMinutes());
+    }
+
+    function formatForLegacy(localValue) {
+        // "2026-11-02T15:30" → "2026-11-02 15:30:00"
+        // If the server rejects this, change the two lines below to
+        // whatever the legacy jQuery UI datepicker emits — e.g. for
+        // Italian locale: dd/mm/yyyy HH:mm →
+        //   var p = localValue.split('T');
+        //   var d = p[0].split('-');
+        //   return d[2] + '/' + d[1] + '/' + d[0] + ' ' + p[1];
+        if (!localValue) return '';
+        if (!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}/.test(localValue)) return '';
+        return localValue.replace('T', ' ') + ':00';
+    }
+
+    toggleBtn.addEventListener('click', function () {
+        enabled = !enabled;
+        body.hidden = !enabled;
+        toggleBtn.setAttribute('aria-expanded', String(enabled));
+        toggleLabel.textContent = enabled ? 'Remove schedule' : 'Schedule post';
+        toggleIcon.className = enabled
+            ? 'fa-regular fa-calendar-xmark modern-schedule-toggle-icon'
+            : 'fa-regular fa-calendar-plus modern-schedule-toggle-icon';
+        if (enabled) {
+            if (!scheduleInput.value) scheduleInput.value = defaultFutureValue();
+            scheduleInput.focus();
+        }
+    });
+
+    // ── Pre-fill from a legacy value (defensive; usually empty on
+    //    CODE=01, but if the forum has already written something into
+    //    #TopicTime we mirror it so we don't clobber it.)
+    (function prefillFromLegacy() {
+        var legacy = legacyForm.querySelector('#TopicTime');
+        if (!legacy || !legacy.value) return;
+        var m = legacy.value.match(/^(\d{4})-(\d{2})-(\d{2})[ T](\d{2}):(\d{2})/);
+        if (m) {
+            scheduleInput.value = m[1] + '-' + m[2] + '-' + m[3] + 'T' + m[4] + ':' + m[5];
+            enabled = true;
+            body.hidden = false;
+            toggleBtn.setAttribute('aria-expanded', 'true');
+            toggleLabel.textContent = 'Remove schedule';
+            toggleIcon.className = 'fa-regular fa-calendar-xmark modern-schedule-toggle-icon';
+        }
+    })();
+
+    function getOrCreateLegacyField() {
+        var tt = legacyForm.querySelector('#TopicTime');
+        if (tt) return tt;
+        tt = document.createElement('input');
+        tt.type = 'hidden';
+        tt.name = 'TopicTime';
+        tt.id = 'TopicTime';
+        legacyForm.appendChild(tt);
+        return tt;
+    }
+
+    function validate() {
+        if (!enabled) return true;
+        if (!scheduleInput.value) {
+            scheduleInput.classList.add('has-error');
+            scheduleInput.focus();
+            showToast('Please pick a publication date and time', 'error');
+            return false;
+        }
+        scheduleInput.classList.remove('has-error');
+        var parsed = new Date(scheduleInput.value);
+        if (isNaN(parsed.getTime())) {
+            showToast('That publication date is not valid', 'error');
+            return false;
+        }
+        if (parsed.getTime() <= Date.now()) {
+            showToast('The publication date must be in the future', 'error');
+            return false;
+        }
+        return true;
+    }
+
+    function flush() {
+        if (!enabled) {
+            var existing = legacyForm.querySelector('#TopicTime');
+            if (existing) existing.value = '';
+            return;
+        }
+        getOrCreateLegacyField().value = formatForLegacy(scheduleInput.value);
     }
 
     return {
