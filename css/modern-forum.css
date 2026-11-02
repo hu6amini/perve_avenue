@@ -269,7 +269,6 @@
   max-width: 100%;
   position: relative;
   overflow: hidden;
-  margin: var(--space-sm) 0;
 }
 .image-wrapper img {
   display: block;
