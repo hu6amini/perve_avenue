@@ -2353,7 +2353,7 @@ function buildPollBuilder(legacyForm) {
     toggleRow.className = 'modern-poll-toggle-row';
     toggleRow.innerHTML =
         '<button type="button" class="modern-btn modern-btn-secondary modern-poll-toggle" aria-expanded="false">' +
-            '<i class="fa-regular fa-square-plus modern-poll-toggle-icon" aria-hidden="true"></i> ' +
+            '<i class="fa-regular fa-chart-bar modern-poll-toggle-icon" aria-hidden="true"></i> ' +
             '<span class="modern-poll-toggle-label">Add poll</span>' +
         '</button>';
     wrapper.appendChild(toggleRow);
@@ -2528,8 +2528,8 @@ function buildPollBuilder(legacyForm) {
         toggleBtn.setAttribute('aria-expanded', String(enabled));
         toggleLabel.textContent = enabled ? 'Remove poll' : 'Add poll';
         toggleIcon.className = enabled
-            ? 'fa-regular fa-square-minus modern-poll-toggle-icon'
-            : 'fa-regular fa-square-plus modern-poll-toggle-icon';
+            ? 'fa-regular fa-xmark modern-poll-toggle-icon'
+            : 'fa-regular fa-chart-bar modern-poll-toggle-icon';
     });
 
     // ── Validation ──────────────────────────────────────────────────────
