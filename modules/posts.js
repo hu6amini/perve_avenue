@@ -3877,78 +3877,127 @@ function parseLegacyIframeProvider(src) {
         </div>`;
     }
 
-    function transformLegacyAttachments(htmlContent) {
-        if (!htmlContent || typeof htmlContent !== 'string') return htmlContent;
-        const tempDiv = document.createElement('div');
-        tempDiv.innerHTML = htmlContent;
-        const fancyTops = tempDiv.querySelectorAll('.fancytop');
-        fancyTops.forEach(fancyTop => {
-            let container = null;
-            let isImage = false;
-            let next = fancyTop.nextElementSibling;
+    // ─────────────────────────────────────────────────────────────────────────
+// Resolve the "download attachment" anchor inside a legacy .fancyborder
+// container, regardless of which state posts.js's tooltip pass has left
+// it in.
+//
+// The forum emits <a title="Download attachment">filename.ext</a>, but
+// autoTippyFromTitle (running from whenTippyReady / the tooltip observer)
+// rewrites that to data-tippy-content and strips the title. Depending on
+// whether tooltip init lands before or after the attachment scan, the
+// anchor carries either attribute — which is why conversion "sometimes"
+// works. Match both, plus a filename-text fallback for translated
+// tooltips (e.g. "Scarica allegato").
+// ─────────────────────────────────────────────────────────────────────────
+function findDownloadAttachmentLink(container) {
+    if (!container) return null;
 
-            if (next && next.tagName === 'DIV' && next.hasAttribute('align') && next.getAttribute('align') === 'center') {
-                const link = next.querySelector('a.fancyborder');
-                if (link && link.querySelector('img')) {
-                    container = next;
-                    isImage = true;
-                }
-            }
-            if (!container && next && next.classList && next.classList.contains('fancyborder')) {
-                const fileLink = next.querySelector('a[title="Download attachment"]');
-                if (fileLink) {
-                    container = next;
-                    isImage = false;
-                }
-            }
-            if (!container) return;
+    // 1. Original state — title attribute intact.
+    const byTitle = container.querySelector('a[title="Download attachment"]');
+    if (byTitle) return byTitle;
 
-            let modernHtml = '';
-            if (isImage) {
-                const link = container.querySelector('a.fancyborder');
-                const img = link ? link.querySelector('img') : null;
-                if (!link || !img) return;
-                const imageUrl = link.getAttribute('href');
-                const previewSrc = img.getAttribute('src') || imageUrl;
-                const alt = img.getAttribute('alt') || '';
-                const width = img.getAttribute('width') || '';
-                const height = img.getAttribute('height') || '';
-                modernHtml = buildModernImageAttachment(imageUrl, alt, width, height, previewSrc);
-            } else {
-                const fileLink = container.querySelector('a[title="Download attachment"]');
-                if (!fileLink) return;
-                const filename = fileLink.textContent.trim();
-                const downloadUrl = fileLink.getAttribute('href') || '#';
-                const small = container.querySelector('small');
-                let downloads = 0;
-                if (small) {
-                    const match = small.textContent.match(/\(Number of downloads:\s*(\d+)\)/i);
-                    if (match) downloads = parseInt(match[1], 10) || 0;
-                }
-                const extension = filename.split('.').pop().toLowerCase();
-                const fileType = extension.toUpperCase() + ' FILE';
-                modernHtml = buildModernFileAttachment(filename, downloadUrl, downloads, fileType);
-            }
-
-            if (modernHtml) {
-                const parent = fancyTop.parentNode;
-                const modernNode = createElementFromHTML(modernHtml);
-                if (modernNode) {
-                    parent.insertBefore(modernNode, fancyTop);
-                    fancyTop.remove();
-                    container.remove();
-
-                    let nextSibling = modernNode.nextSibling;
-                    while (nextSibling && nextSibling.tagName === 'BR') {
-                        const toRemove = nextSibling;
-                        nextSibling = nextSibling.nextSibling;
-                        toRemove.remove();
-                    }
-                }
-            }
-        });
-        return tempDiv.innerHTML;
+    // 2. Tooltip-converted state — data-tippy-content holds the tooltip
+    //    text either as plain text or as inner HTML like
+    //    <div class="tip-plain">Download attachment</div>.
+    const tipLinks = container.querySelectorAll('a[data-tippy-content]');
+    for (let i = 0; i < tipLinks.length; i++) {
+        const tip = tipLinks[i].getAttribute('data-tippy-content') || '';
+        if (tip.indexOf('Download attachment') !== -1 ||
+            tip.indexOf('Scarica allegato') !== -1) {
+            return tipLinks[i];
+        }
     }
+
+    // 3. Fallback — an <a> whose text looks like a filename (has an
+    //    extension) and does not wrap an <img>. Catches locale variants
+    //    of the tooltip that the string check above wouldn't.
+    const allLinks = container.querySelectorAll('a');
+    for (let j = 0; j < allLinks.length; j++) {
+        const a = allLinks[j];
+        if (a.querySelector('img')) continue;
+        const text = (a.textContent || '').trim();
+        if (text && /\.\w{1,8}$/.test(text)) return a;
+    }
+
+    return null;
+}
+
+function transformLegacyAttachments(htmlContent) {
+    if (!htmlContent || typeof htmlContent !== 'string') return htmlContent;
+    const tempDiv = document.createElement('div');
+    tempDiv.innerHTML = htmlContent;
+    const fancyTops = tempDiv.querySelectorAll('.fancytop');
+    fancyTops.forEach(fancyTop => {
+        let container = null;
+        let isImage = false;
+        let next = fancyTop.nextElementSibling;
+
+        // Image attachment: .fancytop → div[align="center"] > a.fancyborder > img
+        if (next && next.tagName === 'DIV' && next.hasAttribute('align') && next.getAttribute('align') === 'center') {
+            const link = next.querySelector('a.fancyborder');
+            if (link && link.querySelector('img')) {
+                container = next;
+                isImage = true;
+            }
+        }
+        // File attachment: .fancytop → div.fancyborder
+        // Tolerant lookup — survives the tooltip pass rewriting
+        // title → data-tippy-content.
+        if (!container && next && next.classList && next.classList.contains('fancyborder')) {
+            if (findDownloadAttachmentLink(next)) {
+                container = next;
+                isImage = false;
+            }
+        }
+        if (!container) return;
+
+        let modernHtml = '';
+        if (isImage) {
+            const link = container.querySelector('a.fancyborder');
+            const img = link ? link.querySelector('img') : null;
+            if (!link || !img) return;
+            const imageUrl = link.getAttribute('href');
+            const previewSrc = img.getAttribute('src') || imageUrl;
+            const alt = img.getAttribute('alt') || '';
+            const width = img.getAttribute('width') || '';
+            const height = img.getAttribute('height') || '';
+            modernHtml = buildModernImageAttachment(imageUrl, alt, width, height, previewSrc);
+        } else {
+            const fileLink = findDownloadAttachmentLink(container);
+            if (!fileLink) return;
+            const filename = fileLink.textContent.trim();
+            const downloadUrl = fileLink.getAttribute('href') || '#';
+            const small = container.querySelector('small');
+            let downloads = 0;
+            if (small) {
+                const match = small.textContent.match(/\(Number of downloads:\s*(\d+)\)/i);
+                if (match) downloads = parseInt(match[1], 10) || 0;
+            }
+            const extension = filename.split('.').pop().toLowerCase();
+            const fileType = extension.toUpperCase() + ' FILE';
+            modernHtml = buildModernFileAttachment(filename, downloadUrl, downloads, fileType);
+        }
+
+        if (modernHtml) {
+            const parent = fancyTop.parentNode;
+            const modernNode = createElementFromHTML(modernHtml);
+            if (modernNode) {
+                parent.insertBefore(modernNode, fancyTop);
+                fancyTop.remove();
+                container.remove();
+
+                let nextSibling = modernNode.nextSibling;
+                while (nextSibling && nextSibling.tagName === 'BR') {
+                    const toRemove = nextSibling;
+                    nextSibling = nextSibling.nextSibling;
+                    toRemove.remove();
+                }
+            }
+        }
+    });
+    return tempDiv.innerHTML;
+}
 
     // ============================================================================
     // POLL CONVERSION
