@@ -327,15 +327,18 @@ var SimilarTopicsModule = (function () {
     function getTopicContext() {
         // Fast path: Commons, when available and populated.
         if (window.Commons && window.Commons.location && window.Commons.location.topic) {
-            var c = window.Commons.location;
-            if (c.isTopic && c.topic.id) {
-                return {
-                    topicId:   c.topic.id,
-                    sectionId: c.section.id,
-                    title:     c.topic.title || ''
-                };
-            }
-        }
+    var c = window.Commons.location;
+    if (c.isTopic && c.topic.id && c.section && c.section.id && c.topic.title) {
+        return {
+            topicId:   c.topic.id,
+            sectionId: c.section.id,
+            title:     c.topic.title || ''
+        };
+    }
+    // Fall through to DOM-based extraction rather than returning a
+    // half-populated object. If Commons has topic.id but not section.id
+    // or title yet, the DOM is usually already in a better state.
+}
 
         var isTopic = document.body.id === 'topic' ||
                       /(?:^|\s)t\d+(?:\s|$)/.test(document.body.className);
@@ -774,77 +777,117 @@ function animateOpen(previewEl) {
     /* ================================================================
        LIFECYCLE
        ================================================================ */
-    function initialize() {
-        if (initialized) return Promise.resolve();
-        initialized = true;
+    var _initRetryTimer = null;
 
-        if (CONFIG.firstPageOnly) {
-            var params = new URLSearchParams(window.location.search);
-            if (parseInt(params.get('st') || '0', 10) > 0) return Promise.resolve();
-        }
+function initialize() {
+    if (initialized) return Promise.resolve();
 
-        var ctx = getTopicContext();
-        if (CONFIG.debug) console.log('[SimilarTopics] context:', ctx);
-        if (!ctx || !ctx.topicId || !ctx.sectionId || !ctx.title) return Promise.resolve();
-
-        if (CONFIG.blacklist.length &&
-            (CONFIG.blacklist.indexOf(ctx.sectionId) !== -1 ||
-             CONFIG.blacklist.indexOf(String(ctx.sectionId)) !== -1)) return Promise.resolve();
-        if (CONFIG.whitelist.length &&
-            CONFIG.whitelist.indexOf(ctx.sectionId) === -1 &&
-            CONFIG.whitelist.indexOf(String(ctx.sectionId)) === -1) return Promise.resolve();
-
-        topicId   = ctx.topicId;
-        sectionId = ctx.sectionId;
-        domain    = document.domain;
-
-        queryTokens = tokenize(ctx.title);
-        if (!queryTokens.length) return Promise.resolve();
-
-        effectiveMinHits = (queryTokens.length > CONFIG.minHits)
-            ? CONFIG.minHits
-            : Math.max(1, queryTokens.length - 1);
-
-        cacheKey = CONFIG.cachePrefix + topicId;
-
-        injectContainer();
-
-        var cached = readCache();
-        if (cached) {
-            // Re-fetch avatars for the cached set before rendering so
-            // group-class borders resolve correctly.
-            prefetchStarterUsers(cached).then(function () {
-                renderList(cached);
-            });
+    if (CONFIG.firstPageOnly) {
+        var params = new URLSearchParams(window.location.search);
+        if (parseInt(params.get('st') || '0', 10) > 0) {
+            initialized = true;
             return Promise.resolve();
         }
+    }
 
-        candidates.length = 0;
-        seen              = {};
-        seen[topicId]     = true;
-        hadError          = false;
+    var ctx = getTopicContext();
+    if (CONFIG.debug) console.log('[SimilarTopics] context:', ctx);
 
-        collect();
+    var missing =
+        !ctx ||
+        !ctx.topicId ||
+        !ctx.sectionId ||
+        !ctx.title;
 
+    if (missing) {
+        // Retry a bounded number of times. Timing matters: the module can
+        // be invoked before the title element is parsed or before
+        // Commons finishes populating, especially on direct external
+        // navigation to a topic page ≥ 2. Marking `initialized = true`
+        // here would lock the module into a permanently failed state,
+        // so the flag stays false until we have a valid context.
+        if (!_initRetryTimer) {
+            _initRetryTimer = setTimeout(function () {
+                _initRetryTimer = null;
+                initialize();
+            }, 250);
+        }
         return Promise.resolve();
     }
 
-    function reset() {
-        initialized = false;
-        topicId     = null;
-        sectionId   = null;
-        domain      = '';
-        queryTokens = [];
-        effectiveMinHits = 0;
-        cacheKey    = null;
-        candidates  = [];
-        seen        = {};
-        hadError    = false;
-        userDataCache.clear();
-
-        var root = document.getElementById(CONFIG.containerId);
-        if (root) root.remove();
+    // ── Commit point ─────────────────────────────────────────────
+    // Context is valid. Every failure past this line is a permanent
+    // verdict for this page load (blacklist, all-stop-word title,
+    // etc.), not a timing issue, so retrying would be pointless.
+    initialized = true;
+    if (_initRetryTimer) {
+        clearTimeout(_initRetryTimer);
+        _initRetryTimer = null;
     }
+
+    // Blacklist / whitelist. Section is now known to be valid, so
+    // these verdicts are final — no retry needed.
+    if (CONFIG.blacklist.length &&
+        (CONFIG.blacklist.indexOf(ctx.sectionId) !== -1 ||
+         CONFIG.blacklist.indexOf(String(ctx.sectionId)) !== -1)) return Promise.resolve();
+    if (CONFIG.whitelist.length &&
+        CONFIG.whitelist.indexOf(ctx.sectionId) === -1 &&
+        CONFIG.whitelist.indexOf(String(ctx.sectionId)) === -1) return Promise.resolve();
+
+    topicId   = ctx.topicId;
+    sectionId = ctx.sectionId;
+    domain    = document.domain;
+
+    queryTokens = tokenize(ctx.title);
+    if (!queryTokens.length) return Promise.resolve();
+
+    effectiveMinHits = (queryTokens.length > CONFIG.minHits)
+        ? CONFIG.minHits
+        : Math.max(1, queryTokens.length - 1);
+
+    cacheKey = CONFIG.cachePrefix + topicId;
+
+    injectContainer();
+
+    var cached = readCache();
+    if (cached) {
+        // Re-fetch avatars for the cached set before rendering so
+        // group-class borders resolve correctly.
+        prefetchStarterUsers(cached).then(function () {
+            renderList(cached);
+        });
+        return Promise.resolve();
+    }
+
+    candidates.length = 0;
+    seen              = {};
+    seen[topicId]     = true;
+    hadError          = false;
+
+    collect();
+
+    return Promise.resolve();
+}
+
+    function reset() {
+    initialized = false;
+    if (_initRetryTimer) {
+        clearTimeout(_initRetryTimer);
+        _initRetryTimer = null;
+    }
+    topicId     = null;
+    sectionId   = null;
+    domain      = '';
+    queryTokens = [];
+    effectiveMinHits = 0;
+    cacheKey    = null;
+    candidates  = [];
+    seen        = {};
+    hadError    = false;
+    userDataCache.clear();
+    var root = document.getElementById(CONFIG.containerId);
+    if (root) root.remove();
+}
 
     return {
         initialize: initialize,
