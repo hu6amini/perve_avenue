@@ -1980,11 +1980,6 @@ function buildTopicMetaSection(opts) {
     var uploadBtn    = thumbBlock.querySelector('.modern-thumb-upload');
     var urlBtn       = thumbBlock.querySelector('.modern-thumb-url');
     var autoBtn      = thumbBlock.querySelector('.modern-thumb-auto');
-        var thumbPreview = thumbBlock.querySelector('.modern-thumb-preview');
-    var thumbStatus  = thumbBlock.querySelector('.modern-thumb-status');
-    var uploadBtn    = thumbBlock.querySelector('.modern-thumb-upload');
-    var urlBtn       = thumbBlock.querySelector('.modern-thumb-url');
-    var autoBtn      = thumbBlock.querySelector('.modern-thumb-auto');
 
     // ── NEW: poll builder (create mode only) ────────────────────────
     var pollBuilder = null;
