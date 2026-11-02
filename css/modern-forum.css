@@ -3193,6 +3193,7 @@ body.modal-open {
     text-transform: uppercase;
     letter-spacing: 0.05em;
     margin-bottom: var(--space-xs);
+    text-align: left;
 }
 
 .required-star {
@@ -3207,8 +3208,6 @@ body.modal-open {
 .modern-topic-title-input-wrap .modern-input {
     width: 100%;
     padding-right: 80px;
-    font-size: var(--text-lg);
-    font-family: var(--font-heading);
     font-weight: 400;
     height: var(--btn-height);
 }
@@ -3246,6 +3245,7 @@ body.modal-open {
     font-size: var(--text-xs);
     color: var(--text-tertiary);
     margin-top: 2px;
+    text-align: left;
 }
 
 .modern-thumb-row {
@@ -3346,6 +3346,7 @@ body.modal-open {
 
 .modern-poll-toggle-row {
     margin-bottom: var(--space-sm);
+    text-align: left;
 }
 
 .modern-poll-toggle {
