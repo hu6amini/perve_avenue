@@ -807,23 +807,32 @@ function transformLegacyEmbedLinks(html) {
     }
 
     function fetchCurrentUserData() {
-        if (_currentUserCache) return Promise.resolve(_currentUserCache);
-        var mid = getCurrentUserId();
-        if (!mid) return Promise.resolve(null);
-        return fetch('/api.php?mid=' + mid)
-            .then(function (r) { return r.ok ? r.json() : null; })
-            .then(function (data) {
-                var user = data && (data['m' + mid] || data.info);
-                if (user) {
-                    user.mid = mid;
-                    if (typeof user.nickname === 'string') user.nickname = decodeHtmlEntities(user.nickname);
-                    if (typeof user.name === 'string') user.name = decodeHtmlEntities(user.name);
-                    _currentUserCache = user;
-                }
-                return user || null;
-            })
-            .catch(function () { return null; });
+    var mid = getCurrentUserId();
+    if (!mid) return Promise.resolve(null);
+
+    // Serve from cache only when the cached MID matches the CURRENT
+    // body/menu MID. Without this check, switching accounts in the same
+    // tab (AJAX login, SPA navigation, bfcache restore) leaves
+    // _currentUserCache holding the previous account's data, and the
+    // editor header + profile tooltip render the wrong user.
+    if (_currentUserCache && String(_currentUserCache.mid) === String(mid)) {
+        return Promise.resolve(_currentUserCache);
     }
+
+    return fetch('/api.php?mid=' + mid)
+        .then(function (r) { return r.ok ? r.json() : null; })
+        .then(function (data) {
+            var user = data && (data['m' + mid] || data.info);
+            if (user) {
+                user.mid = mid;
+                if (typeof user.nickname === 'string') user.nickname = decodeHtmlEntities(user.nickname);
+                if (typeof user.name === 'string') user.name = decodeHtmlEntities(user.name);
+                _currentUserCache = user;
+            }
+            return user || null;
+        })
+        .catch(function () { return null; });
+}
 
     function buildUserHeader(user, label) {
         if (!user) return null;
@@ -6004,7 +6013,7 @@ body.set('Post', newBbcode);
         } catch (e) { console.error('[EditorModule] observer (full) failed:', e); }
     }
 
-    function initialize() {
+        function initialize() {
         if (isInitialized) return Promise.resolve();
         if (!globalThis.forumObserver) {
             console.error('[EditorModule] forumObserver not available');
@@ -6057,6 +6066,12 @@ body.set('Post', newBbcode);
         }
         _dropdownBackdrop = null;
         _currentUserCache = null;
+    }
+
+   if (typeof window !== 'undefined') {
+        window.addEventListener('pageshow', function (e) {
+            if (e.persisted) _currentUserCache = null;
+        });
     }
 
     return {
