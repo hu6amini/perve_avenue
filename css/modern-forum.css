@@ -3526,6 +3526,12 @@ body.modal-open {
 .modern-schedule-input {
     max-width: 320px;
     width: 100%;
+   color-scheme: dark;
+}
+
+/* Light theme override */
+[data-theme="emerald-light"] .modern-schedule-input {
+    color-scheme: light;
 }
 
 .modern-schedule-input.has-error {
