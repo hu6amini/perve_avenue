@@ -2170,9 +2170,26 @@ function buildTopicMetaSection(opts) {
     }
 
         function refreshAutoImage() {
-        autoImageSrc = scanForAutoImage();
-        renderPreview();
+    autoImageSrc = scanForAutoImage();
+
+    // Edit-mode reconciliation. The forum server writes the auto-picked
+    // thumbnail back into #TopicDesc, so on the next edit the field
+    // carries an <img> even though the user never set one. If that
+    // image equals the first qualifying body image right now, the topic
+    // is effectively auto — downgrade so the "revert" button stays
+    // hidden and the preview tracks later body edits. descTouched is
+    // set so flush() clears #TopicDesc on save, letting the server
+    // re-pick from the current body (important when the user moves or
+    // replaces the first image during this edit).
+    if (mode === 'edit' && hasExplicitImage && explicitImageData && autoImageSrc
+        && explicitImageData.src === autoImageSrc) {
+        hasExplicitImage = false;
+        explicitImageData = null;
+        descTouched = true;
     }
+
+    renderPreview();
+}
 
     // ── Upload ───────────────────────────────────────────────────────────
     function uploadThumbnail(file) {
