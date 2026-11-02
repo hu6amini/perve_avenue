@@ -780,14 +780,46 @@ function transformLegacyEmbedLinks(html) {
         return 'group-' + sanitizeGroupName(user.group.name || 'member');
     }
 
-    function getCurrentUserId() {
-        var match = document.body.className.match(/\ba(\d{5,})\b/);
-        if (match) return match[1];
+        function getCurrentUserId() {
+        // Priority order — most reliable to least:
+        //
+        // 1. .menuwrap a[href*="MID="] — the desktop menu shows the
+        //    current user's profile link. This is what the forum's own
+        //    JS updates on AJAX login/logout, so it's the freshest MID
+        //    on the page. Desktop only; the mobile menu drops the MID=
+        //    parameter from its UserCP links.
+        //
+        // 2. .menuwrap .avatar img → fc<MID> in the upload path.
+        //    Forumfree stores each user's avatar under
+        //    /i/fc<MID>/avatar/, and the menu avatar is uploaded by the
+        //    current user. Works on mobile when the user has a custom
+        //    avatar. The src is weserv-wrapped (%2F-encoded), so we
+        //    read data-original first (un-encoded) and fall back to a
+        //    plain fc<digits> substring on src.
+        //
+        // 3. body.className a{mid} — the server writes this at page
+        //    render time and never updates it after an AJAX session
+        //    change, so it can be stale from a prior account. Last
+        //    resort only.
         var menuLink = document.querySelector('.menuwrap a[href*="MID="]');
         if (menuLink) {
             var m = menuLink.getAttribute('href').match(/MID=(\d+)/);
             if (m) return m[1];
         }
+
+        var avatarImg = document.querySelector('.menuwrap .avatar img');
+        if (avatarImg) {
+            var orig = avatarImg.getAttribute('data-original') || '';
+            var om = orig.match(/\/fc(\d{5,})\//);
+            if (om) return om[1];
+
+            var src = avatarImg.getAttribute('src') || '';
+            var sm = src.match(/fc(\d{5,})/);
+            if (sm) return sm[1];
+        }
+
+        var bodyMatch = document.body.className.match(/\ba(\d{5,})\b/);
+        if (bodyMatch) return bodyMatch[1];
         return null;
     }
 
