@@ -218,9 +218,9 @@ async function bootSystem() {
                 loadScript("https://cdn.jsdelivr.net/gh/hu6amini/perve_avenue@8ac11085ba71dc6deadefa7994447777672af4ad/modules/boards.min.js"),
                 loadScript("https://cdn.jsdelivr.net/gh/hu6amini/perve_avenue@a95b896562b71d416750ac80b772a95dd5a30590/modules/posts.min.js"),
                 loadScript("https://cdn.jsdelivr.net/gh/hu6amini/perve_avenue@403484e8351e4fd2b9f757b5c340979cf7d452b8/modules/modals.min.js"),
-                loadScript("https://cdn.jsdelivr.net/gh/hu6amini/perve_avenue@1f3d41dea22de57c2639fd91369fde854bfb17fb/modules/editor-module.min.js"),
+                loadScript("https://cdn.jsdelivr.net/gh/hu6amini/perve_avenue@e2b1d5e4849b3ed62faa9f097ab7fe3e23862d2c/modules/editor-module.min.js"),
                 loadScript("https://cdn.jsdelivr.net/gh/hu6amini/perve_avenue@38fc938cb030128c968b01749ffd02b509c869cc/modules/quote-queue.min.js"),
-                loadScript("https://cdn.jsdelivr.net/gh/hu6amini/perve_avenue@a443ddad0ad23289456ab95f0da6cffc7011689d/modules/similar-topics.js")
+                loadScript("https://cdn.jsdelivr.net/gh/hu6amini/perve_avenue@a443ddad0ad23289456ab95f0da6cffc7011689d/modules/similar-topics.min.js")
             ]);
 
             const failed = results.filter(r => r.status === 'rejected');
