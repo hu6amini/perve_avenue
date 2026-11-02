@@ -269,6 +269,7 @@
   max-width: 100%;
   position: relative;
   overflow: hidden;
+  vertical-align: text-bottom;
 }
 .image-wrapper img {
   display: block;
