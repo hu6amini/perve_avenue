@@ -1937,7 +1937,6 @@ function buildTopicMetaSection(opts) {
         // 'emoji', but a twemoji pasted from another site can parse as
         // an image node with a twemoji URL. Reject both.
         if (src.indexOf('twemoji') !== -1) return false;
-        if (src.indexOf('twemoji.maxcdn.com') !== -1) return false;
 
         // Forumfree legacy emoticon — lives on upload.forumfree.net and
         // carries a :shortcode: alt. convertEmojisForEditor normally
