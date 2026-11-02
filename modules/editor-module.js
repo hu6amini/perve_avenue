@@ -28,7 +28,11 @@ var EditorModule = (function (Utils, EventBus) {
             'pbs.twimg.com', 'i.redd.it', 'lh3.googleusercontent.com'
         ],
         MAX_MESSAGE_LENGTH: 0,
-        LIVE_PREVIEW_DEBOUNCE_MS: 800
+        LIVE_PREVIEW_DEBOUNCE_MS: 800,
+        // Auto-thumbnail scanning: reject animated GIFs. Animated images
+        // in a board listing are distracting and rarely represent the
+        // user's intended preview. Flip to false if that ever changes.
+        EXCLUDE_GIF_THUMBNAILS: true
     };
 
     var MAX_MESSAGE_LENGTH   = CONFIG.MAX_MESSAGE_LENGTH;
@@ -39,6 +43,8 @@ var EditorModule = (function (Utils, EventBus) {
     var MAX_UPLOAD_BYTES     = CONFIG.MAX_UPLOAD_BYTES;
     var IMAGE_URL_EXTENSIONS = CONFIG.IMAGE_URL_EXTENSIONS;
     var IMAGE_URL_HOSTS      = CONFIG.IMAGE_URL_HOSTS;
+    var MAX_MESSAGE_LENGTH   = CONFIG.MAX_MESSAGE_LENGTH;
+    var EXCLUDE_GIF_THUMBNAILS = CONFIG.EXCLUDE_GIF_THUMBNAILS;
 
     function escapeHtml(str) {
         if (!str) return '';
@@ -1912,6 +1918,69 @@ function buildTopicMetaSection(opts) {
     var isUploading       = false;
     var editorRef         = null;
     var sendStateUpdater  = null;
+        // ── Auto-thumbnail scanning ─────────────────────────────────────────
+    // The auto thumbnail is the first image in the post body that isn't
+    // an emoji, an emoticon, a GIF, or hidden inside a quote / spoiler.
+    // Explicit overrides (upload / URL) short-circuit this scan but the
+    // scan result is kept fresh so "Use first image from post" reverts
+    // instantly.
+    var _autoScanTimer = null;
+
+    function isAutoThumbCandidate(node) {
+        if (!node || node.type.name !== 'image') return false;
+        var attrs = node.attrs || {};
+        var src = attrs.src || '';
+        var alt = attrs.alt || '';
+        if (!src) return false;
+
+        // Twemoji — by URL signature. Emoji nodes already have type
+        // 'emoji', but a twemoji pasted from another site can parse as
+        // an image node with a twemoji URL. Reject both.
+        if (src.indexOf('twemoji') !== -1) return false;
+        if (src.indexOf('twemoji.maxcdn.com') !== -1) return false;
+
+        // Forumfree legacy emoticon — lives on upload.forumfree.net and
+        // carries a :shortcode: alt. convertEmojisForEditor normally
+        // upgrades these to twemoji first, but an unmapped emoticon can
+        // still slip through as a plain image node.
+        if (src.indexOf('upload.forumfree.net') !== -1 &&
+            alt.charAt(0) === ':' && alt.charAt(alt.length - 1) === ':') {
+            return false;
+        }
+
+        // Animated GIFs make poor thumbnails — see CONFIG comment.
+        if (EXCLUDE_GIF_THUMBNAILS && /\.gif(?:[?#]|$)/i.test(src)) return false;
+
+        return true;
+    }
+
+    // Walks the doc top-down and returns the src of the first qualifying
+    // image. Skips blockquotes and spoilers entirely at the top level —
+    // an image inside a quote is someone else's content, and an image
+    // inside a spoiler is hidden by design. Both are poor board-thumbnail
+    // candidates even if they're technically the "first" image.
+    function scanForAutoImage() {
+        if (!editorRef) return null;
+        try {
+            var found = null;
+            editorRef.state.doc.content.content.forEach(function (topNode) {
+                if (found) return;
+                var topName = topNode.type.name;
+                if (topName === 'blockquote' || topName === 'spoiler') return;
+                if (isAutoThumbCandidate(topNode)) {
+                    found = topNode.attrs.src;
+                    return;
+                }
+                topNode.descendants(function (n) {
+                    if (found) return;
+                    if (isAutoThumbCandidate(n)) found = n.attrs.src;
+                });
+            });
+            return found;
+        } catch (e) {
+            return null;
+        }
+    }
 
     // Parse whatever the legacy form already carried.
     if (originalDescValue) {
@@ -1976,11 +2045,6 @@ function buildTopicMetaSection(opts) {
     section.appendChild(thumbBlock);
 
     var thumbPreview = thumbBlock.querySelector('.modern-thumb-preview');
-    var thumbStatus  = thumbBlock.querySelector('.modern-thumb-status');
-    var uploadBtn    = thumbBlock.querySelector('.modern-thumb-upload');
-    var urlBtn       = thumbBlock.querySelector('.modern-thumb-url');
-    var autoBtn      = thumbBlock.querySelector('.modern-thumb-auto');
-        var thumbPreview = thumbBlock.querySelector('.modern-thumb-preview');
     var thumbStatus  = thumbBlock.querySelector('.modern-thumb-status');
     var uploadBtn    = thumbBlock.querySelector('.modern-thumb-upload');
     var urlBtn       = thumbBlock.querySelector('.modern-thumb-url');
@@ -2098,28 +2162,17 @@ function buildTopicMetaSection(opts) {
         if (sendStateUpdater) sendStateUpdater();
     }
 
-    function clearExplicitImage() {
+        function clearExplicitImage() {
         hasExplicitImage = false;
         explicitImageData = null;
         descTouched = true;
-        renderPreview();
+        refreshAutoImage(); // rescan body — may have changed while override was active
         if (sendStateUpdater) sendStateUpdater();
     }
 
-    function refreshAutoImage() {
-        if (!editorRef) { autoImageSrc = null; renderPreview(); return; }
-        try {
-            var found = null;
-            editorRef.state.doc.descendants(function (node) {
-                if (found) return;
-                if (node.type.name === 'image' && node.attrs.src) found = node.attrs.src;
-            });
-            autoImageSrc = found;
-            renderPreview();
-        } catch (e) {
-            autoImageSrc = null;
-            renderPreview();
-        }
+        function refreshAutoImage() {
+        autoImageSrc = scanForAutoImage();
+        renderPreview();
     }
 
     // ── Upload ───────────────────────────────────────────────────────────
@@ -2266,9 +2319,20 @@ function buildTopicMetaSection(opts) {
         refreshAutoImage();
     };
 
-    section.onEditorUpdate = function () {
-        if (hasExplicitImage) return; // explicit overrides auto
-        refreshAutoImage();
+        section.onEditorUpdate = function () {
+        // Debounce — onUpdate fires on every keystroke. A full-doc scan
+        // per keystroke is wasteful on long posts, and the result only
+        // changes when an image node is added, removed, or moved.
+        if (_autoScanTimer) clearTimeout(_autoScanTimer);
+        _autoScanTimer = setTimeout(function () {
+            _autoScanTimer = null;
+            // Always refresh — explicit overrides suppress the render,
+            // but a fresh autoImageSrc is what makes "Use first image
+            // from post" produce the right result when clicked later.
+            autoImageSrc = scanForAutoImage();
+            if (hasExplicitImage) return;
+            renderPreview();
+        }, 150);
     };
 
     section.setSendStateUpdater = function (fn) { sendStateUpdater = fn; };
