@@ -429,27 +429,96 @@ var SimilarTopicsModule = (function () {
         }
     }
 
-    function collect() {
-        var page = 0;
-        var totalPages = 1;
+    function collect(onDone) {
+    var page = 0;
+    var totalPages = 1;
+    var threadsSeen = 0;
 
-        function step() {
-            if (page >= CONFIG.maxPages) return finish();
-            if (page > 0 && page >= totalPages) return finish();
-            if (candidates.length >= CONFIG.limit * 2) return finish();
+    function step() {
+        if (page >= CONFIG.maxPages) return onDone(threadsSeen);
+        if (page > 0 && page >= totalPages) return onDone(threadsSeen);
+        if (candidates.length >= CONFIG.limit * 2) return onDone(threadsSeen);
 
-            fetchPage(page * CONFIG.pageSize)
-                .then(function (data) {
-                    if (!data || !data.info) { finish(); return; }
-                    totalPages = data.info.pages || 1;
-                    consumePage(data);
-                    page++;
-                    step();
-                })
-                .catch(function () { hadError = true; finish(); });
-        }
-        step();
+        fetchPage(page * CONFIG.pageSize)
+            .then(function (data) {
+                if (!data || !data.info) {
+                    // Malformed response — treat as error, not "no matches".
+                    hadError = true;
+                    return onDone(threadsSeen);
+                }
+                totalPages = data.info.pages || 1;
+
+                var threads = (data.articles && data.articles.length)
+                    ? data.articles
+                    : (data.threads || []);
+                threadsSeen += threads.length;
+
+                consumePage(data);
+                page++;
+                step();
+            })
+            .catch(function () {
+                hadError = true;
+                onDone(threadsSeen);
+            });
     }
+    step();
+}
+
+    function runCollectWithRetry(attempt) {
+    var sectionAtStart = sectionId;
+
+    collect(function (threadsSeen) {
+        // Success — render.
+        if (candidates.length > 0) {
+            finish();
+            return;
+        }
+
+        // Error path — don't retry a network failure.
+        if (hadError) {
+            finish();
+            return;
+        }
+
+        // Empty but no error. Two possibilities:
+        //   (a) section was stale — getTopicContext() will now return
+        //       a different section id because the DOM has settled;
+        //   (b) section was right but genuinely has no similar topics.
+        // We can only distinguish (a) from (b) by re-resolving context.
+        if (attempt >= 1) {
+            finish();   // one retry max — budget is spent
+            return;
+        }
+
+        var fresh = getTopicContext();
+        var sectionChanged = fresh && fresh.sectionId && fresh.sectionId !== sectionAtStart;
+        var sectionSuspiciouslyEmpty = threadsSeen < 5;
+
+        if (!sectionChanged && !sectionSuspiciouslyEmpty) {
+            finish();
+            return;
+        }
+
+        if (sectionChanged) {
+            sectionId = fresh.sectionId;
+            if (CONFIG.debug) {
+                console.log('[SimilarTopics] section changed from',
+                    sectionAtStart, 'to', sectionId, '— retrying');
+            }
+        } else if (CONFIG.debug) {
+            console.log('[SimilarTopics] section returned', threadsSeen,
+                'threads — retrying (possible cold cache)');
+        }
+
+        candidates.length = 0;
+        seen              = {};
+        seen[topicId]     = true;
+        hadError          = false;
+
+        setTimeout(function () { runCollectWithRetry(attempt + 1); }, 800);
+    });
+}
 
     async function finish() {
         if (candidates.length === 0) {
@@ -849,24 +918,21 @@ function initialize() {
 
     injectContainer();
 
-    var cached = readCache();
-    if (cached) {
-        // Re-fetch avatars for the cached set before rendering so
-        // group-class borders resolve correctly.
-        prefetchStarterUsers(cached).then(function () {
-            renderList(cached);
-        });
-        return Promise.resolve();
-    }
-
-    candidates.length = 0;
-    seen              = {};
-    seen[topicId]     = true;
-    hadError          = false;
-
-    collect();
-
+var cached = readCache();
+if (cached) {
+    prefetchStarterUsers(cached).then(function () {
+        renderList(cached);
+    });
     return Promise.resolve();
+}
+
+candidates.length = 0;
+seen              = {};
+seen[topicId]     = true;
+hadError          = false;
+
+runCollectWithRetry(0);
+return Promise.resolve();
 }
 
     function reset() {
