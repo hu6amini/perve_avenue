@@ -109,8 +109,8 @@ var SimilarTopicsModule = (function () {
 
     function tokenize(text) {
         if (!text) return [];
-        var s = stripDiacritics(String(text)).toLowerCase();
-        s = s.replace(/[^a-z0-9\s]/g, ' ');
+    var s = stripDiacritics(stripHtml(String(text))).toLowerCase();
+    s = s.replace(/[^a-z0-9\s]/g, ' ');
         var raw = s.split(/\s+/);
         var out = [];
         for (var i = 0; i < raw.length; i++) {
@@ -329,12 +329,12 @@ var SimilarTopicsModule = (function () {
         if (window.Commons && window.Commons.location && window.Commons.location.topic) {
     var c = window.Commons.location;
     if (c.isTopic && c.topic.id && c.section && c.section.id && c.topic.title) {
-        return {
-            topicId:   c.topic.id,
-            sectionId: c.section.id,
-            title:     c.topic.title || ''
-        };
-    }
+    return {
+        topicId:   c.topic.id,
+        sectionId: c.section.id,
+        title:     stripHtml(c.topic.title || '').trim()
+    };
+}
     // Fall through to DOM-based extraction rather than returning a
     // half-populated object. If Commons has topic.id but not section.id
     // or title yet, the DOM is usually already in a better state.
