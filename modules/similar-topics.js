@@ -131,6 +131,14 @@ var SimilarTopicsModule = (function () {
         return s.slice(0, n).replace(/\s+\S*$/, '') + '…';
     }
 
+    function decodeHtmlEntities(str) {
+    if (!str || typeof str !== 'string') return str || '';
+    if (str.indexOf('&') === -1) return str;
+    var ta = document.createElement('textarea');
+    ta.innerHTML = str;
+    return ta.value;
+}
+
     function escapeHtml(str) {
         if (typeof str !== 'string') return '';
         return str.replace(/[&<>"']/g, function (c) {
@@ -602,43 +610,43 @@ var SimilarTopicsModule = (function () {
        RENDERING
        ================================================================ */
     function buildTopicCard(thread) {
-        var start       = (thread.info && thread.info.start) ? thread.info.start : {};
-        var starterId   = start.id   || 0;
-        var starterName = start.name || 'Unknown';
-        var titleText   = thread.title || '(untitled)';
-        var topicId     = thread.id;
+    var start       = (thread.info && thread.info.start) ? thread.info.start : {};
+    var starterId   = start.id   || 0;
+    var starterName = decodeHtmlEntities(start.name || '') || 'Unknown';
+    var titleText   = decodeHtmlEntities(thread.title  || '') || '(untitled)';
+    var topicId     = thread.id;
 
-        var user = starterId ? userDataCache.get(starterId) : null;
-        var avatarHtml = generateAvatarHtml(user, starterName, starterId, CONFIG.avatarSize);
-        var profileUrl = starterId ? '/?act=Profile&MID=' + starterId : '#';
-        var topicUrl   = '?t=' + topicId;
+    var user       = starterId ? userDataCache.get(starterId) : null;
+    var avatarHtml = generateAvatarHtml(user, starterName, starterId, CONFIG.avatarSize);
+    var profileUrl = starterId ? '/?act=Profile&MID=' + starterId : '#';
+    var topicUrl   = '?t=' + topicId;
 
-        return (
-            '<article class="latest-post-card similar-topic-card" data-topic-id="' + topicId + '" role="listitem">' +
-                '<div class="latest-post-avatar">' +
-                    '<a href="' + escapeHtml(profileUrl) + '" aria-label="View ' + escapeHtml(starterName) + '\'s profile" rel="nofollow">' +
-                        avatarHtml +
-                    '</a>' +
+    return (
+        '<article class="latest-post-card similar-topic-card" data-topic-id="' + topicId + '" role="listitem">' +
+            '<div class="latest-post-avatar">' +
+                '<a href="' + escapeHtml(profileUrl) + '" aria-label="View ' + escapeHtml(starterName) + '\'s profile" rel="nofollow">' +
+                    avatarHtml +
+                '</a>' +
+            '</div>' +
+            '<div class="latest-post-content">' +
+                '<div class="latest-post-title">' +
+                    '<a href="' + escapeHtml(topicUrl) + '">' + escapeHtml(titleText) + '</a>' +
                 '</div>' +
-                '<div class="latest-post-content">' +
-                    '<div class="latest-post-title">' +
-                        '<a href="' + escapeHtml(topicUrl) + '">' + escapeHtml(titleText) + '</a>' +
-                    '</div>' +
-                    '<div class="latest-post-meta">' +
-                        '<a href="' + escapeHtml(profileUrl) + '" class="latest-post-author" rel="nofollow">' + escapeHtml(starterName) + '</a>' +
-                        '<button type="button" class="similar-topic-preview-toggle" ' +
-                            'data-topic-id="' + topicId + '" ' +
-                            'aria-expanded="false" ' +
-                            'aria-controls="similar-topic-preview-' + topicId + '" ' +
-                            'title="Show preview" aria-label="Show preview of this topic">' +
-                            '<i class="fa-regular fa-eye" aria-hidden="true"></i>' +
-                        '</button>' +
-                    '</div>' +
+                '<div class="latest-post-meta">' +
+                    '<a href="' + escapeHtml(profileUrl) + '" class="latest-post-author" rel="nofollow">' + escapeHtml(starterName) + '</a>' +
+                    '<button type="button" class="similar-topic-preview-toggle" ' +
+                        'data-topic-id="' + topicId + '" ' +
+                        'aria-expanded="false" ' +
+                        'aria-controls="similar-topic-preview-' + topicId + '" ' +
+                        'title="Show preview" aria-label="Show preview of this topic">' +
+                        '<i class="fa-regular fa-eye" aria-hidden="true"></i>' +
+                    '</button>' +
                 '</div>' +
-                '<div id="similar-topic-preview-' + topicId + '" class="similar-topic-preview" aria-hidden="true"></div>' +
-            '</article>'
-        );
-    }
+            '</div>' +
+            '<div id="similar-topic-preview-' + topicId + '" class="similar-topic-preview" aria-hidden="true"></div>' +
+        '</article>'
+    );
+}
 
     function renderList(threads) {
         var listEl = document.querySelector('#' + CONFIG.containerId + ' .similar-topics-list');
@@ -658,25 +666,35 @@ var SimilarTopicsModule = (function () {
         attachPreviewHandlers(listEl);
     }
 
-    function renderEmpty(isError) {
-        var listEl = document.querySelector('#' + CONFIG.containerId + ' .similar-topics-list');
-        if (!listEl) return;
+    function renderList(threads) {
+    var listEl = document.querySelector('#' + CONFIG.containerId + ' .similar-topics-list');
+    if (!listEl) return;
 
-        if (isError) {
-            listEl.innerHTML =
-                '<div class="similar-topics-empty">' +
-                    '<i class="fa-regular fa-circle-exclamation" aria-hidden="true"></i>' +
-                    '<span>Could not load similar topics.</span>' +
-                '</div>';
-        } else {
-            listEl.innerHTML =
-                '<div class="similar-topics-empty">' +
-                    '<i class="fa-regular fa-circle-info" aria-hidden="true"></i>' +
-                    '<span>No similar topics found.</span>' +
-                '</div>';
-        }
+    if (threads.length === 0) {
+        renderEmpty(false);
+        return;
     }
 
+    var html = '';
+    for (var i = 0; i < threads.length; i++) {
+        html += buildTopicCard(threads[i]);
+    }
+    listEl.innerHTML = html;
+
+    if (window.emojiReplacer && typeof window.emojiReplacer.replaceSync === 'function') {
+        window.emojiReplacer.replaceSync(listEl);
+    } else if (window.twemoji && typeof window.twemoji.parse === 'function') {
+        window.twemoji.parse(listEl, {
+            folder: 'svg',
+            ext: '.svg',
+            base: 'https://twemoji.maxcdn.com/v/latest/',
+            className: 'twemoji',
+            size: 'svg'
+        });
+    }
+
+    attachPreviewHandlers(listEl);
+}
     /* ================================================================
        PREVIEW
        ================================================================ */
