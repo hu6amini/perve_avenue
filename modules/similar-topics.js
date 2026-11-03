@@ -50,7 +50,7 @@ var SimilarTopicsModule = (function () {
         avatarSize: 32,
 
         // Debug
-        debug: false
+        debug: true
     };
 
     /* ================================================================
