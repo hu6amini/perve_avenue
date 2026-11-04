@@ -49,12 +49,6 @@ class MediaDimensionExtractor {
     // Emoji sizes for different contexts
     static #EMOJI_SIZE_NORMAL = 20;
     static #EMOJI_SIZE_SMALL = 18;
-    static #EMOJI_SIZE_H1 = 35;
-    static #EMOJI_SIZE_H2 = 29;
-    static #EMOJI_SIZE_H3 = 24;
-    static #EMOJI_SIZE_H4 = 20;
-    static #EMOJI_SIZE_H5 = 18;
-    static #EMOJI_SIZE_H6 = 16;
     static #BROKEN_IMAGE_SIZE = { width: 600, height: 400 };
     static #BATCH_SIZE = 50;
 
@@ -284,49 +278,11 @@ class MediaDimensionExtractor {
                         (img.alt && (img.alt.includes(':)') || img.alt.includes(':(') || img.alt.includes('emoji')));
         
         if (isTwemoji) {
-            let size = MediaDimensionExtractor.#EMOJI_SIZE_NORMAL;
-            
-            if (this.#isInSmallContext(img)) {
-                size = MediaDimensionExtractor.#EMOJI_SIZE_SMALL;
-            } else {
-                const heading = img.closest('h1, h2, h3, h4, h5, h6');
-                if (heading) {
-                    switch(heading.tagName) {
-                        case 'H1': size = MediaDimensionExtractor.#EMOJI_SIZE_H1; break;
-                        case 'H2': size = MediaDimensionExtractor.#EMOJI_SIZE_H2; break;
-                        case 'H3': size = MediaDimensionExtractor.#EMOJI_SIZE_H3; break;
-                        case 'H4': size = MediaDimensionExtractor.#EMOJI_SIZE_H4; break;
-                        case 'H5': size = MediaDimensionExtractor.#EMOJI_SIZE_H5; break;
-                        case 'H6': size = MediaDimensionExtractor.#EMOJI_SIZE_H6; break;
-                    }
-                }
-            }
-            
-            img.removeAttribute('width');
-            img.removeAttribute('height');
-            img.setAttribute('width', size);
-            img.setAttribute('height', size);
-            
-            let currentStyle = img.style.cssText || '';
-            if (currentStyle) {
-                currentStyle = currentStyle
-                    .replace(/width[^;]*;/g, '')
-                    .replace(/height[^;]*;/g, '')
-                    .replace(/max-width[^;]*;/g, '')
-                    .replace(/max-height[^;]*;/g, '');
-                img.style.cssText = currentStyle;
-            }
-            img.style.aspectRatio = size + ' / ' + size;
-            img.style.display = 'inline-block';
-            img.style.verticalAlign = 'text-bottom';
-            
-            const cacheKey = this.#getCacheKey(img.src);
-            this.#dimensionCache.delete(cacheKey);
-            this.#lruMap.delete(cacheKey);
-            this.#cacheDimension(img.src, size, size);
-            this.#processedMedia.add(img);
-            return;
-        }
+    // Sizing, vertical-align, display, and aspect-ratio are owned by
+    // CSS (.twemoji rule in critical.css). Do not touch the element.
+    this.#processedMedia.add(img);
+    return;
+}
 
         if (!this.#weservReady && !img.hasAttribute('data-optimized')) {
             this.#pendingImages.add(img);
@@ -388,9 +344,6 @@ class MediaDimensionExtractor {
     }
 
     #getCacheKey(src) {
-        if (src.includes('twemoji')) {
-            return 'emoji:twemoji';
-        }
         if (src.length > 100) {
             return 'h' + this.#hashString(src);
         }
