@@ -42,6 +42,42 @@ const BreadcrumbsModule = (function () {
         return div.innerHTML;
     };
 
+   function applyEmojiReplacer(container, retries) {
+    if (!container) return;
+
+    // Preferred path: the emojiReplacer helper from twemoji.js
+    if (window.emojiReplacer) {
+        try {
+            if (typeof window.emojiReplacer.replaceSync === 'function') {
+                window.emojiReplacer.replaceSync(container);
+            } else if (typeof window.emojiReplacer.replace === 'function') {
+                window.emojiReplacer.replace(container);
+            }
+        } catch (e) { console.warn('[BreadcrumbsModule] emoji replacer failed:', e); }
+        return;
+    }
+
+    // Fallback: twemoji is loaded but emojiReplacer hasn't been wired yet
+    // (emojiReplacer is only published after ForumObserver is ready).
+    if (window.twemoji && typeof window.twemoji.parse === 'function') {
+        try {
+            window.twemoji.parse(container, {
+                folder: 'svg',
+                ext: '.svg',
+                base: 'https://twemoji.maxcdn.com/v/latest/',
+                className: 'twemoji',
+                size: 'svg'
+            });
+        } catch (e) { console.warn('[BreadcrumbsModule] twemoji.parse failed:', e); }
+        return;
+    }
+
+    // Neither ready yet: keep retrying for up to 5 s
+    if (retries > 0) {
+        setTimeout(function () { applyEmojiReplacer(container, retries - 1); }, 100);
+    }
+}
+
     function extractPageJumpParams(hrefOrOnclick) {
         if (!hrefOrOnclick) return null;
         var match = hrefOrOnclick.match(/page_jump\('([^']+)'\s*,\s*(\d+)\s*,\s*(\d+)\)/);
@@ -58,6 +94,45 @@ const BreadcrumbsModule = (function () {
     function toSentenceCase(text) {
         if (!text) return '';
         return text.charAt(0).toUpperCase() + text.slice(1).toLowerCase();
+    }
+
+       function extractTitleContent(titleEl) {
+        if (!titleEl) return { text: '', html: '' };
+        var text = '';
+        var html = '';
+        var nodes = titleEl.childNodes;
+        for (var i = 0; i < nodes.length; i++) {
+            var node = nodes[i];
+            if (node.nodeType === Node.TEXT_NODE) {
+                var t = node.textContent;
+                text += t;
+                html += escapeHtml(t);
+            } else if (node.nodeType === Node.ELEMENT_NODE) {
+                if (node.tagName === 'IMG') {
+                    var src        = node.getAttribute('src')        || '';
+                    var alt        = node.getAttribute('alt')        || '';
+                    var cls        = node.getAttribute('class')      || '';
+                    var w          = node.getAttribute('width');
+                    var h          = node.getAttribute('height');
+                    var ariaHidden = node.getAttribute('aria-hidden');
+                    if (alt) text += alt;
+                    html += '<img src="' + escapeHtml(src) + '" alt="' + escapeHtml(alt) + '"';
+                    if (cls)              html += ' class="' + escapeHtml(cls) + '"';
+                    if (w != null)        html += ' width="'  + escapeHtml(String(w)) + '"';
+                    if (h != null)        html += ' height="' + escapeHtml(String(h)) + '"';
+                    if (ariaHidden)       html += ' aria-hidden="' + escapeHtml(ariaHidden) + '"';
+                    html += '>';
+                } else if (node.tagName === 'BR') {
+                    text += ' ';
+                    html += '<br>';
+                } else {
+                    var sub = node.textContent || '';
+                    text += sub;
+                    html += escapeHtml(sub);
+                }
+            }
+        }
+        return { text: text.trim(), html: html.trim() };
     }
 
     // =========================================================================
@@ -149,9 +224,12 @@ const BreadcrumbsModule = (function () {
     // =========================================================================
     // TOPIC HEADER
     // =========================================================================
-    function extractTopicHeaderData() {
+        function extractTopicHeaderData() {
         var titleEl = document.querySelector(CONFIG.LEGACY_TITLE_SELECTOR);
-        var topicTitle = titleEl ? titleEl.textContent.trim() : '';
+        var titleContent = extractTitleContent(titleEl);
+        var topicTitle     = titleContent.text;
+        var topicTitleHtml = titleContent.html;
+
         var statsEl = document.querySelector(CONFIG.LEGACY_STATS_SELECTOR);
         var replyCount = '', viewCount = '';
         if (statsEl) {
@@ -168,12 +246,13 @@ const BreadcrumbsModule = (function () {
             }
         }
         var shareLink = statsEl ? statsEl.querySelector('a.a2a_dd') : null;
-        return { topicTitle, replyCount, viewCount, shareLink };
+        return { topicTitle, topicTitleHtml, replyCount, viewCount, shareLink };
     }
 
-    function buildTopicHeaderHtml(data) {
+        function buildTopicHeaderHtml(data) {
         if (!data.topicTitle) return '';
-        var html = '<div class="topic-header"><div class="topic-title-content"><h1 class="topic-title">' + escapeHtml(data.topicTitle) + '</h1>';
+        var titleHtml = data.topicTitleHtml || escapeHtml(data.topicTitle);
+        var html = '<div class="topic-header"><div class="topic-title-content"><h1 class="topic-title">' + titleHtml + '</h1>';
         if (data.viewCount || data.replyCount) {
             html += '<div class="topic-meta">';
             if (data.viewCount) html += '<span class="topic-stats"><i class="fa-regular fa-eye" aria-hidden="true"></i><span>Views: ' + escapeHtml(data.viewCount) + '</span></span>';
@@ -209,16 +288,24 @@ const BreadcrumbsModule = (function () {
     }
 
     function renderTopicHeader(data) {
-        if (!data.topicTitle) return;
-        var container = getOrCreateContainer(CONFIG.MODERN_TOPIC_HEADER_ID, 'div', 'modern-topic-header', '#' + CONFIG.MODERN_BREADCRUMB_ID);
-        if (!container) return;
-        container.innerHTML = buildTopicHeaderHtml(data);
-        if (data.shareLink) {
-            var shareBtn = container.querySelector('.modern-share-topic-btn');
-            if (shareBtn) shareBtn.addEventListener('click', function () { data.shareLink.click(); });
-        }
-        console.log('[BreadcrumbsModule] Topic header rendered');
+    if (!data.topicTitle) return;
+    var container = getOrCreateContainer(
+        CONFIG.MODERN_TOPIC_HEADER_ID, 'div', 'modern-topic-header',
+        '#' + CONFIG.MODERN_BREADCRUMB_ID
+    );
+    if (!container) return;
+
+    container.innerHTML = buildTopicHeaderHtml(data);
+
+    // NEW: normalise unicode emoji that survived from the legacy title
+    applyEmojiReplacer(container, 50);
+
+    if (data.shareLink) {
+        var shareBtn = container.querySelector('.modern-share-topic-btn');
+        if (shareBtn) shareBtn.addEventListener('click', function () { data.shareLink.click(); });
     }
+    console.log('[BreadcrumbsModule] Topic header rendered');
+}
 
     // =========================================================================
     // MEMBER POSTS HEADER
@@ -247,16 +334,25 @@ const BreadcrumbsModule = (function () {
     }
 
     function convertMemberPostsHeader() {
-        if (document.body.id !== 'search') return;
-        var container = document.querySelector(CONFIG.MEMBER_POSTS_SELECTOR);
-        if (!container) return;
-        var data = extractMemberPostsHeaderData(container);
-        if (!data.memberName) return;
-        var headerContainer = getOrCreateContainer(CONFIG.MODERN_TOPIC_HEADER_ID, 'div', 'modern-topic-header', '#' + CONFIG.MODERN_BREADCRUMB_ID);
-        if (!headerContainer) return;
-        headerContainer.innerHTML = buildMemberPostsHeaderHtml(data);
-        console.log('[BreadcrumbsModule] Member posts header rendered');
-    }
+    if (document.body.id !== 'search') return;
+    var container = document.querySelector(CONFIG.MEMBER_POSTS_SELECTOR);
+    if (!container) return;
+    var data = extractMemberPostsHeaderData(container);
+    if (!data.memberName) return;
+
+    var headerContainer = getOrCreateContainer(
+        CONFIG.MODERN_TOPIC_HEADER_ID, 'div', 'modern-topic-header',
+        '#' + CONFIG.MODERN_BREADCRUMB_ID
+    );
+    if (!headerContainer) return;
+
+    headerContainer.innerHTML = buildMemberPostsHeaderHtml(data);
+
+    // NEW: also normalise the member name (names can contain emoji)
+    applyEmojiReplacer(headerContainer, 50);
+
+    console.log('[BreadcrumbsModule] Member posts header rendered');
+}
 
     // =========================================================================
     // PAGINATION & ACTION BAR
@@ -415,15 +511,35 @@ function extractPaginationData(legacyBar) {
     // OBSERVER INTEGRATION
     // =========================================================================
     function registerObserver() {
-        if (!globalThis.forumObserver) return;
-        try { globalThis.forumObserver.register({ id: 'breadcrumbs-module', selector: CONFIG.LEGACY_NAV_SELECTOR, priority: 'high', callback: convertBreadcrumb }); } catch (e) { console.error(e); }
-        try { globalThis.forumObserver.register({ id: 'topic-header-module', selector: CONFIG.LEGACY_TITLE_SELECTOR, priority: 'high', pageTypes: ['topic'], callback: convertTopicHeader }); } catch (e) { console.error(e); }
-        try { globalThis.forumObserver.register({ id: 'member-posts-header-module', selector: CONFIG.MEMBER_POSTS_SELECTOR, priority: 'high', callback: convertMemberPostsHeader }); } catch (e) { console.error(e); }
-        [CONFIG.LEGACY_PAGINATION_SELECTOR_TOP, CONFIG.LEGACY_PAGINATION_SELECTOR_BOTTOM, CONFIG.LEGACY_PAGINATION_PLAIN_TOP, CONFIG.LEGACY_PAGINATION_PLAIN_BOTTOM].forEach(function (sel, idx) {
-            try { globalThis.forumObserver.register({ id: 'pagination-module-' + idx, selector: sel, priority: 'high', callback: convertAllPagination }); } catch (e) { console.error(e); }
+    if (!globalThis.forumObserver) return;
+
+    try { globalThis.forumObserver.register({ id: 'breadcrumbs-module', selector: CONFIG.LEGACY_NAV_SELECTOR, priority: 'high', callback: convertBreadcrumb }); } catch (e) { console.error(e); }
+    try { globalThis.forumObserver.register({ id: 'topic-header-module', selector: CONFIG.LEGACY_TITLE_SELECTOR, priority: 'high', pageTypes: ['topic'], callback: convertTopicHeader }); } catch (e) { console.error(e); }
+    try { globalThis.forumObserver.register({ id: 'member-posts-header-module', selector: CONFIG.MEMBER_POSTS_SELECTOR, priority: 'high', callback: convertMemberPostsHeader }); } catch (e) { console.error(e); }
+
+    [CONFIG.LEGACY_PAGINATION_SELECTOR_TOP, CONFIG.LEGACY_PAGINATION_SELECTOR_BOTTOM, CONFIG.LEGACY_PAGINATION_PLAIN_TOP, CONFIG.LEGACY_PAGINATION_PLAIN_BOTTOM].forEach(function (sel, idx) {
+        try { globalThis.forumObserver.register({ id: 'pagination-module-' + idx, selector: sel, priority: 'high', callback: convertAllPagination }); } catch (e) { console.error(e); }
+    });
+
+    // NEW: belt-and-braces emoji normalisation for the modern topic title.
+    // Catches late-injected unicode emoji that survived initial render
+    // (e.g. if twemoji.js loaded after breadcrumbs.js).
+    try {
+        globalThis.forumObserver.register({
+            id: 'topic-title-emoji-refresh',
+            selector: '.topic-title',
+            priority: 'high',
+            pageTypes: ['topic', 'search'],
+            callback: function (node) {
+                if (window.emojiReplacer) {
+                    try { window.emojiReplacer.replace(node); } catch (e) {}
+                }
+            }
         });
-        console.log('[BreadcrumbsModule] Registered with ForumCoreObserver');
-    }
+    } catch (e) { console.error(e); }
+
+    console.log('[BreadcrumbsModule] Registered with ForumCoreObserver');
+}
 
     // =========================================================================
     // INITIALIZATION
