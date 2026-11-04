@@ -97,43 +97,48 @@ const BreadcrumbsModule = (function () {
     }
 
        function extractTitleContent(titleEl) {
-        if (!titleEl) return { text: '', html: '' };
-        var text = '';
-        var html = '';
-        var nodes = titleEl.childNodes;
-        for (var i = 0; i < nodes.length; i++) {
-            var node = nodes[i];
-            if (node.nodeType === Node.TEXT_NODE) {
-                var t = node.textContent;
-                text += t;
-                html += escapeHtml(t);
-            } else if (node.nodeType === Node.ELEMENT_NODE) {
-                if (node.tagName === 'IMG') {
-                    var src        = node.getAttribute('src')        || '';
-                    var alt        = node.getAttribute('alt')        || '';
-                    var cls        = node.getAttribute('class')      || '';
-                    var w          = node.getAttribute('width');
-                    var h          = node.getAttribute('height');
-                    var ariaHidden = node.getAttribute('aria-hidden');
-                    if (alt) text += alt;
-                    html += '<img src="' + escapeHtml(src) + '" alt="' + escapeHtml(alt) + '"';
-                    if (cls)              html += ' class="' + escapeHtml(cls) + '"';
-                    if (w != null)        html += ' width="'  + escapeHtml(String(w)) + '"';
-                    if (h != null)        html += ' height="' + escapeHtml(String(h)) + '"';
-                    if (ariaHidden)       html += ' aria-hidden="' + escapeHtml(ariaHidden) + '"';
-                    html += '>';
-                } else if (node.tagName === 'BR') {
-                    text += ' ';
-                    html += '<br>';
-                } else {
-                    var sub = node.textContent || '';
-                    text += sub;
-                    html += escapeHtml(sub);
-                }
+    if (!titleEl) return { text: '', html: '' };
+    var text = '';
+    var html = '';
+    var nodes = titleEl.childNodes;
+    for (var i = 0; i < nodes.length; i++) {
+        var node = nodes[i];
+        if (node.nodeType === Node.TEXT_NODE) {
+            var t = node.textContent;
+            text += t;
+            html += escapeHtml(t);
+        } else if (node.nodeType === Node.ELEMENT_NODE) {
+            if (node.tagName === 'IMG') {
+                var src        = node.getAttribute('src')        || '';
+                var alt        = node.getAttribute('alt')        || '';
+                var cls        = node.getAttribute('class')      || '';
+                var style      = node.getAttribute('style');
+                var w          = node.getAttribute('width');
+                var h          = node.getAttribute('height');
+                var ariaHidden = node.getAttribute('aria-hidden');
+
+                if (alt) text += alt;
+
+                html += '<img src="' + escapeHtml(src) + '" alt="' + escapeHtml(alt) + '"';
+                if (cls)              html += ' class="' + escapeHtml(cls) + '"';
+                if (style)            html += ' style="' + escapeHtml(style) + '"';
+                if (w != null)        html += ' width="'  + escapeHtml(String(w)) + '"';
+                if (h != null)        html += ' height="' + escapeHtml(String(h)) + '"';
+                if (ariaHidden)       html += ' aria-hidden="' + escapeHtml(ariaHidden) + '"';
+                html += '>';
+            } else if (node.tagName === 'BR') {
+                text += ' ';
+                html += '<br>';
+            } else {
+                // Recurse into wrappers (spans, etc.) so nested imgs survive.
+                var sub = extractTitleContent(node);
+                text += sub.text;
+                html += sub.html;
             }
         }
-        return { text: text.trim(), html: html.trim() };
     }
+    return { text: text.trim(), html: html.trim() };
+}
 
     // =========================================================================
     // CONTAINER HELPERS
@@ -177,49 +182,60 @@ const BreadcrumbsModule = (function () {
     // BREADCRUMB
     // =========================================================================
     function extractBreadcrumbItems(legacyNav) {
-        const items = [];
-        const listItems = legacyNav.querySelectorAll('li');
+    const items = [];
+    const listItems = legacyNav.querySelectorAll('li');
 
-        for (var i = 0; i < listItems.length; i++) {
-            var li = listItems[i];
-            var link = li.querySelector('a');
-            if (link) {
-                items.push({ text: link.textContent.trim(), url: link.getAttribute('href'), isCurrent: false });
-            } else {
-                var text = li.textContent.trim().replace(/^\u200B/, '');
-                if (text) items.push({ text: text, url: null, isCurrent: true });
-            }
-        }
-        return items;
+    for (var i = 0; i < listItems.length; i++) {
+        var li = listItems[i];
+        var link = li.querySelector('a');
+        var target = link || li;
+        var content = extractTitleContent(target);
+
+        // Strip leading zero-width space that FF injects on the current item
+        content.text = content.text.replace(/^\u200B+/, '');
+        content.html = content.html.replace(/^\u200B+/, '');
+
+        if (!content.text) continue;
+
+        items.push({
+            text: content.text,
+            html: content.html,
+            url: link ? link.getAttribute('href') : null,
+            isCurrent: !link
+        });
     }
+    return items;
+}
 
     function buildBreadcrumbHtml(items) {
-        if (items.length === 0) return '';
-        var html = '<ol class="modern-breadcrumb-list">';
-        items.forEach(function (item, index) {
-            var isLast = index === items.length - 1;
-            var isCurrent = !item.url;
-            html += '<li class="modern-breadcrumb-item' + (isCurrent ? ' modern-breadcrumb-item--current' : '') + '">';
-            if (item.url) {
-                html += '<a href="' + escapeHtml(item.url) + '" class="modern-breadcrumb-link">' + escapeHtml(item.text) + '</a>';
-            } else {
-                html += '<span class="modern-breadcrumb-text" aria-current="page">' + escapeHtml(item.text) + '</span>';
-            }
-            if (!isLast) html += '<i class="fa-regular fa-angle-right modern-breadcrumb-separator" aria-hidden="true"></i>';
-            html += '</li>';
-        });
-        html += '</ol>';
-        return html;
-    }
+    if (items.length === 0) return '';
+    var html = '<ol class="modern-breadcrumb-list">';
+    items.forEach(function (item, index) {
+        var isLast = index === items.length - 1;
+        var isCurrent = !item.url;
+        var labelHtml = item.html || escapeHtml(item.text);
+        html += '<li class="modern-breadcrumb-item' + (isCurrent ? ' modern-breadcrumb-item--current' : '') + '">';
+        if (item.url) {
+            html += '<a href="' + escapeHtml(item.url) + '" class="modern-breadcrumb-link">' + labelHtml + '</a>';
+        } else {
+            html += '<span class="modern-breadcrumb-text" aria-current="page">' + labelHtml + '</span>';
+        }
+        if (!isLast) html += '<i class="fa-regular fa-angle-right modern-breadcrumb-separator" aria-hidden="true"></i>';
+        html += '</li>';
+    });
+    html += '</ol>';
+    return html;
+}
 
     function convertBreadcrumb() {
-        var legacyNav = document.querySelector(CONFIG.LEGACY_NAV_SELECTOR);
-        if (!legacyNav) return;
-        var container = getOrCreateContainer(CONFIG.MODERN_BREADCRUMB_ID, 'nav', 'modern-breadcrumbs', CONFIG.INSERT_AFTER_SELECTOR);
-        if (!container) return;
-        container.innerHTML = buildBreadcrumbHtml(extractBreadcrumbItems(legacyNav));
-        console.log('[BreadcrumbsModule] Breadcrumb modernised');
-    }
+    var legacyNav = document.querySelector(CONFIG.LEGACY_NAV_SELECTOR);
+    if (!legacyNav) return;
+    var container = getOrCreateContainer(CONFIG.MODERN_BREADCRUMB_ID, 'nav', 'modern-breadcrumbs', CONFIG.INSERT_AFTER_SELECTOR);
+    if (!container) return;
+    container.innerHTML = buildBreadcrumbHtml(extractBreadcrumbItems(legacyNav));
+    applyEmojiReplacer(container, 50);            // <— NEW
+    console.log('[BreadcrumbsModule] Breadcrumb modernised');
+}
 
     // =========================================================================
     // TOPIC HEADER
