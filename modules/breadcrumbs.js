@@ -373,6 +373,7 @@ const BreadcrumbsModule = (function () {
     // =========================================================================
     // PAGINATION & ACTION BAR
     // =========================================================================
+   
 function extractPaginationData(legacyBar) {
     var pageItems = [];
     var pagesList = legacyBar.querySelector('.left.Sub ul.pages') || legacyBar.querySelector('ul.pages');
