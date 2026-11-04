@@ -2861,7 +2861,7 @@ body.modal-open {
   .notify-modal-content { padding: 1rem; }
 }
 
-.forumfree-modal.\.report-modal-notify.Blocker.current {
+.forumfree-modal.\.report-modal-notify.Blocker.current, .Blocker {
   display: none;
 }
 
