@@ -4513,8 +4513,8 @@ section.modern-stats { flex-direction: column; width: 100%; }
 
 .modern-wysiwyg .ProseMirror img.twemoji,
 .modern-wysiwyg .ProseMirror img[src*="twemoji"] {
-  width: 20px;
-  height: 20px;
+  width: 1.25em;
+  height: 1.25em;
   vertical-align: text-bottom;
   display: inline-block;
   padding: 0;
