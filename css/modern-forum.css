@@ -3033,7 +3033,6 @@ body.modal-open {
   font-family: var(--font-heading);
   color: var(--text-primary);
   margin: 0 0 var(--space-xs) 0;
-  display: flex;
   text-align: left;
 }
 .topic-meta {
