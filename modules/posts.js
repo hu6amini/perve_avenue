@@ -1400,15 +1400,29 @@ function postProcessPreviewContent(el) {
         } catch (e) { return null; }
     }
 
-    function extractDomain(url) {
-        try {
-            const a = document.createElement('a');
-            a.href = url;
-            let hostname = a.hostname;
-            if (hostname.startsWith('www.')) hostname = hostname.substring(4);
-            return hostname;
-        } catch (e) { return url.split('/')[2] || url; }
+    const SHORTENER_MAP = {
+    't.co': 'twitter.com',
+    'youtu.be': 'youtube.com',
+    'bit.ly': 'bitly.com',
+    'goo.gl': 'google.com',
+    'ow.ly': 'hootsuite.com',
+    'buff.ly': 'buffer.com'
+};
+
+function extractDomain(url) {
+    try {
+        const a = document.createElement('a');
+        a.href = url;
+        let hostname = a.hostname;
+        if (SHORTENER_MAP[hostname]) {
+            hostname = SHORTENER_MAP[hostname];
+        }
+        if (hostname.startsWith('www.')) hostname = hostname.substring(4);
+        return hostname;
+    } catch (e) { 
+        return url.split('/')[2] || url; 
     }
+}
 
     // ============================================================================
     // USER TAG TRANSFORMATION (replaces legacy <mark data-uid>)
@@ -2786,28 +2800,51 @@ if (data.availableActions?.delete) actionsHtml += '<button class="action-icon de
     // FAVICON INJECTION
     // ============================================================================
     function applyFaviconsToMessageLinks(container) {
-        if (!container) return;
-        const links = container.querySelectorAll('.post-message a[href]:not(.has-favicon)');
-        for (const link of links) {
-            if (link.closest('.attachment-actions')) continue;
-            if (link.classList.contains('attachment-download-btn') || link.classList.contains('attachment-view-btn')) continue;
-            if (link.querySelector('img')) continue;
-            if (link.classList.contains('user-tag')) continue;
-            if (link.classList.contains('link-preview-link')) continue; 
-            try {
+    if (!container) return;
+    
+    // Removed :not(.has-favicon) so we re-evaluate and fix legacy shortener icons
+    const links = container.querySelectorAll('.post-message a[href]');
+    
+    for (const link of links) {
+        if (link.closest('.attachment-actions')) continue;
+        if (link.classList.contains('attachment-download-btn') || link.classList.contains('attachment-view-btn')) continue;
+        if (link.querySelector('img')) continue;
+        if (link.classList.contains('user-tag')) continue;
+        if (link.classList.contains('link-preview-link')) continue; 
+        
+        try {
+            // 1. Initial domain resolution (includes shortener map)
+            let domain = extractDomain(link.href);
+
+            // 2. Heuristic: Extract domain from the visible text if it looks like a URL
+            // Example: <a href="https://t.co/123">pic.twitter.com/123</a>
+            const text = link.textContent.trim();
+            const textDomainMatch = text.match(/^(?:https?:\/\/)?(?:www\.)?([a-z0-9.-]+\.[a-z]{2,})/i);
+            if (textDomainMatch && textDomainMatch[1]) {
+                const textDomain = textDomainMatch[1].toLowerCase();
                 const urlObj = new URL(link.href);
-                const domain = urlObj.hostname;
-                const faviconUrl = 'https://www.google.com/s2/favicons?domain=' + domain + '&sz=32';
-                link.style.backgroundImage = 'url(' + faviconUrl + ')';
-                link.style.backgroundRepeat = 'no-repeat';
-                link.style.backgroundPosition = 'left center';
-                link.style.backgroundSize = '16px 16px';
-                link.style.paddingLeft = '22px';
-                link.style.display = 'inline';
-                link.classList.add('has-favicon');
-            } catch (e) {}
-        }
+                const SHORTENERS = ['t.co', 'bit.ly', 'goo.gl', 'tinyurl.com', 'ow.ly', 'is.gd', 'buff.ly'];
+                
+                // Use the text domain if the href is a shortener or if they differ
+                if (SHORTENERS.includes(urlObj.hostname) || textDomain !== domain) {
+                    domain = textDomain;
+                    if (SHORTENER_MAP[domain]) domain = SHORTENER_MAP[domain];
+                }
+            }
+
+            const faviconUrl = 'https://www.google.com/s2/favicons?domain=' + encodeURIComponent(domain) + '&sz=32';
+            
+            // Apply the corrected styles
+            link.style.backgroundImage = 'url(' + faviconUrl + ')';
+            link.style.backgroundRepeat = 'no-repeat';
+            link.style.backgroundPosition = 'left center';
+            link.style.backgroundSize = '16px 16px';
+            link.style.paddingLeft = '22px';
+            link.style.display = 'inline';
+            link.classList.add('has-favicon');
+        } catch (e) {}
     }
+}
 
     // ============================================================================
     // REFRESH FUNCTIONS
