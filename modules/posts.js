@@ -1406,7 +1406,8 @@ function postProcessPreviewContent(el) {
     'bit.ly': 'bitly.com',
     'goo.gl': 'google.com',
     'ow.ly': 'hootsuite.com',
-    'buff.ly': 'buffer.com'
+    'buff.ly': 'buffer.com',
+    'pic.twitter.com': 'twitter.com'
 };
 
 function extractDomain(url) {
