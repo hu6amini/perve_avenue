@@ -1443,6 +1443,19 @@ function postProcessPreviewContent(el) {
     'sgiz.eu': 'surveymonkey.com'
 };
 
+    const MULTI_TENANT_DOMAINS = [
+    'forumcommunity.net',
+    'forumfree.it',
+    'blogfree.net',
+    'tapatalk.com',
+    'altervista.org',
+    'blogspot.com',
+    'wordpress.com',
+    'github.io',
+    'netlify.app',
+    'vercel.app'
+];
+
 function extractDomain(url) {
     try {
         const a = document.createElement('a');
@@ -2836,7 +2849,6 @@ if (data.availableActions?.delete) actionsHtml += '<button class="action-icon de
     function applyFaviconsToMessageLinks(container) {
     if (!container) return;
     
-    // Removed :not(.has-favicon) so we re-evaluate and fix legacy shortener icons
     const links = container.querySelectorAll('.post-message a[href]');
     
     for (const link of links) {
@@ -2847,28 +2859,31 @@ if (data.availableActions?.delete) actionsHtml += '<button class="action-icon de
         if (link.classList.contains('link-preview-link')) continue; 
         
         try {
-            // 1. Initial domain resolution (includes shortener map)
             let domain = extractDomain(link.href);
-
-            // 2. Heuristic: Extract domain from the visible text if it looks like a URL
-            // Example: <a href="https://t.co/123">pic.twitter.com/123</a>
             const text = link.textContent.trim();
             const textDomainMatch = text.match(/^(?:https?:\/\/)?(?:www\.)?([a-z0-9.-]+\.[a-z]{2,})/i);
+            
             if (textDomainMatch && textDomainMatch[1]) {
                 const textDomain = textDomainMatch[1].toLowerCase();
                 const urlObj = new URL(link.href);
                 const SHORTENERS = ['t.co', 'bit.ly', 'goo.gl', 'tinyurl.com', 'ow.ly', 'is.gd', 'buff.ly'];
                 
-                // Use the text domain if the href is a shortener or if they differ
                 if (SHORTENERS.includes(urlObj.hostname) || textDomain !== domain) {
                     domain = textDomain;
                     if (SHORTENER_MAP[domain]) domain = SHORTENER_MAP[domain];
                 }
             }
 
+            // --- NEW: Collapse multi-tenant subdomains to the root domain ---
+            for (const multiTenant of MULTI_TENANT_DOMAINS) {
+                if (domain === multiTenant || domain.endsWith('.' + multiTenant)) {
+                    domain = multiTenant;
+                    break;
+                }
+            }
+
             const faviconUrl = 'https://www.google.com/s2/favicons?domain=' + encodeURIComponent(domain) + '&sz=32';
             
-            // Apply the corrected styles
             link.style.backgroundImage = 'url(' + faviconUrl + ')';
             link.style.backgroundRepeat = 'no-repeat';
             link.style.backgroundPosition = 'left center';
