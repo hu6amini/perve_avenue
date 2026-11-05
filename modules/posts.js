@@ -1401,13 +1401,46 @@ function postProcessPreviewContent(el) {
     }
 
     const SHORTENER_MAP = {
+    // --- Social Media & Platform Shorteners ---
     't.co': 'twitter.com',
+    'pic.twitter.com': 'twitter.com',
     'youtu.be': 'youtube.com',
+    'amzn.to': 'amazon.com',        // Amazon short links
+    'dis.gd': 'discord.com',        // Discord marketing links
+    'fb.me': 'facebook.com',        // Facebook short links
+    'l.facebook.com': 'facebook.com', // Facebook link tracking
+    'lm.facebook.com': 'facebook.com', // Facebook link tracking
+    'm.me': 'messenger.com',        // Facebook Messenger
+    'ig.me': 'instagram.com',       // Instagram DM links
+    'tiktok.com': 'tiktok.com',     // Standard, but useful for consistency
+    'vmn.to': 'vimeo.com',          // Vimeo short links
+
+    // --- Major General Shorteners ---
     'bit.ly': 'bitly.com',
     'goo.gl': 'google.com',
+    'tinyurl.com': 'tinyurl.com',
+    'tiny.cc': 'tiny.cc',
+    'is.gd': 'is.gd',
+    'v.gd': 'v.gd',
     'ow.ly': 'hootsuite.com',
     'buff.ly': 'buffer.com',
-    'pic.twitter.com': 'twitter.com'
+    'rebrand.ly': 'rebrandly.com',
+    'cutt.ly': 'cutt.ly',
+    'shorte.st': 'shorte.st',
+    'adf.ly': 'adf.ly',
+    's.id': 's.id',
+    'bl.ink': 'bl.ink',
+    'po.st': 'po.st',
+    'qrco.de': 'qrco.de',
+    't.ly': 't.ly',
+    'trib.al': 'trib.al',           // Used by major news outlets
+    'geni.us': 'geniuslink.com',    // Used for affiliate links
+
+    // --- Email Marketing (Often seen in forum notifications) ---
+    'eepurl.com': 'mailchimp.com',
+    'mailchi.mp': 'mailchimp.com',
+    'sgiz.mobi': 'surveymonkey.com',
+    'sgiz.eu': 'surveymonkey.com'
 };
 
 function extractDomain(url) {
