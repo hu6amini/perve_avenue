@@ -2846,6 +2846,50 @@ if (data.availableActions?.delete) actionsHtml += '<button class="action-icon de
     // ============================================================================
     // FAVICON INJECTION
     // ============================================================================
+    const faviconCache = new Map();
+
+function resolveFaviconUrl(domain) {
+    if (faviconCache.has(domain)) return faviconCache.get(domain);
+
+    const promise = new Promise((resolve) => {
+        // Check if it's a multi-tenant subdomain (e.g., patestt.forumcommunity.net)
+        let rootDomain = null;
+        for (const root of MULTI_TENANT_DOMAINS) {
+            if (domain !== root && domain.endsWith('.' + root)) {
+                rootDomain = root;
+                break;
+            }
+        }
+
+        // If it's not a subdomain, just use Google's API directly
+        if (!rootDomain) {
+            return resolve(`https://www.google.com/s2/favicons?domain=${encodeURIComponent(domain)}&sz=32`);
+        }
+
+        // It IS a subdomain. Let's probe the subdomain's direct /favicon.ico
+        const probe = new Image();
+        probe.src = `https://${domain}/favicon.ico`;
+        
+        probe.onload = () => {
+            // Success! The subdomain has its own custom favicon.
+            // (We check naturalWidth to ignore empty 0x0 responses)
+            if (probe.naturalWidth > 0) {
+                resolve(`https://${domain}/favicon.ico`);
+            } else {
+                resolve(`https://www.google.com/s2/favicons?domain=${encodeURIComponent(rootDomain)}&sz=32`);
+            }
+        };
+        
+        probe.onerror = () => {
+            // Failed (404). Fallback to the root domain's Google favicon.
+            resolve(`https://www.google.com/s2/favicons?domain=${encodeURIComponent(rootDomain)}&sz=32`);
+        };
+    });
+
+    faviconCache.set(domain, promise);
+    return promise;
+}
+    
     function applyFaviconsToMessageLinks(container) {
     if (!container) return;
     
@@ -2874,27 +2918,23 @@ if (data.availableActions?.delete) actionsHtml += '<button class="action-icon de
                 }
             }
 
-            // --- NEW: Collapse multi-tenant subdomains to the root domain ---
-            for (const multiTenant of MULTI_TENANT_DOMAINS) {
-                if (domain === multiTenant || domain.endsWith('.' + multiTenant)) {
-                    domain = multiTenant;
-                    break;
-                }
-            }
-
-            const faviconUrl = 'https://www.google.com/s2/favicons?domain=' + encodeURIComponent(domain) + '&sz=32';
+            // --- NEW: Resolve the favicon asynchronously ---
+            resolveFaviconUrl(domain).then(faviconUrl => {
+                // Ensure the link is still in the DOM before applying (in case of rapid navigation)
+                if (!link.isConnected) return;
+                
+                link.style.backgroundImage = 'url("' + faviconUrl + '")';
+                link.style.backgroundRepeat = 'no-repeat';
+                link.style.backgroundPosition = 'left center';
+                link.style.backgroundSize = '16px 16px';
+                link.style.paddingLeft = '22px';
+                link.style.display = 'inline';
+                link.classList.add('has-favicon');
+            });
             
-            link.style.backgroundImage = 'url(' + faviconUrl + ')';
-            link.style.backgroundRepeat = 'no-repeat';
-            link.style.backgroundPosition = 'left center';
-            link.style.backgroundSize = '16px 16px';
-            link.style.paddingLeft = '22px';
-            link.style.display = 'inline';
-            link.classList.add('has-favicon');
         } catch (e) {}
     }
 }
-
     // ============================================================================
     // REFRESH FUNCTIONS
     // ============================================================================
