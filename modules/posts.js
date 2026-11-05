@@ -1591,9 +1591,15 @@ function transformLegacyQuotesAndSpoilers(htmlContent) {
 }
 
     function convertLegacyQuote(quoteTopElem, quoteBodyElem) {
-        try {
-            const fullText = quoteTopElem.textContent || '';
-            let author = 'Unknown';
+    try {
+        const fullText = quoteTopElem.textContent || '';
+
+        // Strip the leading marker so we can tell "QUOTE" (no author)
+        // apart from "QUOTE (Author @ Date)".
+        const strippedText = fullText.replace(/^QUOTE\s*/i, '').trim();
+
+        let author = null;                 // null = no author
+        if (strippedText) {
             const match = fullText.match(/\(([^@]+?)@/);
             if (match && match[1]) {
                 author = match[1].trim();
@@ -1602,44 +1608,52 @@ function transformLegacyQuotesAndSpoilers(htmlContent) {
                 if (fallbackMatch && fallbackMatch[1]) {
                     author = fallbackMatch[1].trim();
                 } else {
-                    const simpleMatch = fullText.match(/^[^(]*\(?([^@(]+?)(?:\s+@|\s+said:|$)/i);
+                    // Anchored on "QUOTE\s+" so it cannot backtrack
+                    // into the marker itself.
+                    const simpleMatch = fullText.match(/^QUOTE\s+(.+?)(?:\s+@|\s+said:|$)/i);
                     if (simpleMatch && simpleMatch[1]) {
                         author = simpleMatch[1].trim();
                     }
                 }
             }
-            author = author.replace(/^QUOTE\s*/i, '').trim();
-            if (author === '') author = 'Unknown';
+            if (author) {
+                author = author.replace(/^QUOTE\s*/i, '').trim();
+                if (author === '') author = null;
+            }
+        }
 
-            const jumpLink = quoteTopElem.querySelector('a');
-            const targetUrl = jumpLink ? jumpLink.getAttribute('href') : '';
-            let anchorId = '';
-            if (targetUrl) {
-                const match = targetUrl.match(/#entry(\d+)/);
-                if (match) anchorId = match[1];
-            }
-            const contentClone = quoteBodyElem.cloneNode(true);
-            contentClone.querySelectorAll('div[align="center"], .quote_top, .quote').forEach(el => el.remove());
-            const innerHtml = contentClone.innerHTML;
-            let quoteHtml = `<div class="modern-quote long-quote">
-                <div class="quote-header">
-                    <div class="quote-meta">
-                        <div class="quote-icon"><i class="fa-regular fa-quote-left"></i></div>
-                        <div class="quote-info">
-                            <span class="quote-author">${escapeHtml(author)} <span class="quote-said">said:</span></span>
-                        </div>
-                    </div>`;
-            if (targetUrl && anchorId) {
-                quoteHtml += `<button class="quote-jump-btn" data-anchor-id="${anchorId}" data-is-cross-page="false" data-target-url="${escapeHtml(targetUrl)}" title="Jump to quoted post" aria-label="Jump to quoted post" type="button"><i class="fa-regular fa-angle-up"></i></button>`;
-            }
-            quoteHtml += `</div><div class="quote-content">${innerHtml}</div>`;
-            quoteHtml += `<button class="quote-expand-btn" type="button" aria-expanded="false" aria-label="Show full quote">
-    <i class="fa-regular fa-angle-down"></i> <span class="expand-text">Show more</span>
-</button>`;
-            quoteHtml += `</div>`;
-            return createElementFromHTML(quoteHtml);
-        } catch (e) { return null; }
-    }
+        const jumpLink   = quoteTopElem.querySelector('a');
+        const targetUrl  = jumpLink ? jumpLink.getAttribute('href') : '';
+        let   anchorId   = '';
+        if (targetUrl) {
+            const m = targetUrl.match(/#entry(\d+)/);
+            if (m) anchorId = m[1];
+        }
+
+        const contentClone = quoteBodyElem.cloneNode(true);
+        contentClone.querySelectorAll('div[align="center"], .quote_top, .quote').forEach(el => el.remove());
+        const innerHtml = contentClone.innerHTML;
+
+        const quoteInfoHtml = author
+            ? `<span class="quote-author">${escapeHtml(author)} <span class="quote-said">said:</span></span>`
+            : `<span class="quote-author">Quote</span>`;
+
+        let quoteHtml = `<div class="modern-quote long-quote">
+            <div class="quote-header">
+                <div class="quote-meta">
+                    <div class="quote-icon"><i class="fa-regular fa-quote-left"></i></div>
+                    <div class="quote-info">${quoteInfoHtml}</div>
+                </div>`;
+        if (targetUrl && anchorId) {
+            quoteHtml += `<button class="quote-jump-btn" data-anchor-id="${anchorId}" data-is-cross-page="false" data-target-url="${escapeHtml(targetUrl)}" title="Jump to quoted post" aria-label="Jump to quoted post" type="button"><i class="fa-regular fa-angle-up"></i></button>`;
+        }
+        quoteHtml += `</div><div class="quote-content">${innerHtml}</div>`;
+        quoteHtml += `<button class="quote-expand-btn" type="button" aria-expanded="false" aria-label="Show full quote">
+            <i class="fa-regular fa-angle-down"></i> <span class="expand-text">Show more</span>
+        </button></div>`;
+        return createElementFromHTML(quoteHtml);
+    } catch (e) { return null; }
+}
 
 function convertLegacySpoiler(codeTopElem, codeBodyElem, title) {
     try {
