@@ -267,6 +267,7 @@
 .image-wrapper {
   display: inline-block;
   max-width: 100%;
+  margin: var(--space-sm) 0;
   position: relative;
   overflow: hidden;
   vertical-align: text-bottom;
