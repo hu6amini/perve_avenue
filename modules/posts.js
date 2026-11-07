@@ -2105,22 +2105,42 @@ function attemptWrapImage(img) {
     }
 
     function autoTippyFromTitle(root) {
-        if (isGuest() || !isTippyAvailable()) return;
-        const scope = root || document.body;
-        const els = scope.querySelectorAll('[title]');
-        els.forEach(function (el) {
-            if (el._tippy || el.hasAttribute('data-tippy-content')) return;
-            if (el.closest('.tippy-box')) return;
-            if (el.tagName === 'HTML' || el.tagName === 'BODY' || el.tagName === 'IFRAME') return;
+    if (isGuest() || !isTippyAvailable()) return;
+    const scope = root || document.body;
+    const els = scope.querySelectorAll('[title]');
+    els.forEach(function (el) {
+        if (el.closest('.tippy-box')) return;
+        if (el.tagName === 'HTML' || el.tagName === 'BODY' || el.tagName === 'IFRAME') return;
 
-            const text = (el.getAttribute('title') || '').trim();
-            if (!text) return;
+        const text = (el.getAttribute('title') || '').trim();
+        if (!text) return;
 
-            el.setAttribute('data-tippy-content', '<div class="tip-plain">' + escapeHtml(text) + '</div>');
+        const tipHtml = '<div class="tip-plain">' + escapeHtml(text) + '</div>';
+
+        // Element already carries tippy content — most likely a tooltip
+        // was initialised earlier from a different title, then another
+        // module (EditorModule, etc.) updated the title attribute. The
+        // title is the fresher label, so sync tippy to match and drop
+        // the competing attribute so browsers don't also show a native
+        // tooltip underneath.
+        if (el.hasAttribute('data-tippy-content')) {
+            if (el.getAttribute('data-tippy-content') !== tipHtml) {
+                el.setAttribute('data-tippy-content', tipHtml);
+                if (el._tippy && typeof el._tippy.setContent === 'function') {
+                    el._tippy.setContent(tipHtml);
+                }
+            }
             el.removeAttribute('title');
-            initTippyOn(el);
-        });
-    }
+            return;
+        }
+
+        if (el._tippy) return;
+
+        el.setAttribute('data-tippy-content', tipHtml);
+        el.removeAttribute('title');
+        initTippyOn(el);
+    });
+}
 
     function initAllTippys(root) {
         if (isGuest() || !isTippyAvailable()) return;
@@ -2166,40 +2186,85 @@ function attemptWrapImage(img) {
     }
 
     let tooltipObserver = null;
-    function setupTooltipObserver() {
-        if (isGuest()) return;
-        if (tooltipObserver) return;
-        tooltipObserver = new MutationObserver(function (mutations) {
-            if (!isTippyAvailable()) return;
-            mutations.forEach(function (mutation) {
-                mutation.addedNodes.forEach(function (node) {
-                    if (node.nodeType !== Node.ELEMENT_NODE) return;
-                    if (node.hasAttribute && node.hasAttribute('data-tippy-content')) {
-                        initTippyOn(node);
-                    }
-                    if (node.hasAttribute && node.hasAttribute('title')) {
-                        autoTippyFromTitle(node.parentNode || document.body);
-                    }
-                    if (node.querySelectorAll) {
-                        node.querySelectorAll('[data-tippy-content]').forEach(function (el) {
-                            initTippyOn(el);
-                        });
-                        node.querySelectorAll('[title]').forEach(function (el) {
-                            if (!el._tippy && !el.hasAttribute('data-tippy-content')) {
-                                const t = (el.getAttribute('title') || '').trim();
-                                if (t) {
-                                    el.setAttribute('data-tippy-content', '<div class="tip-plain">' + escapeHtml(t) + '</div>');
-                                    el.removeAttribute('title');
-                                    initTippyOn(el);
-                                }
+function setupTooltipObserver() {
+    if (isGuest()) return;
+    if (tooltipObserver) return;
+
+    tooltipObserver = new MutationObserver(function (mutations) {
+        if (!isTippyAvailable()) return;
+
+        mutations.forEach(function (mutation) {
+
+            // ------------------------------------------------------------
+            // Attribute mutation: another module re-labelled an element
+            // after tooltip init. The freshest label lives in `title`,
+            // so re-run the conversion on the element's parent scope.
+            //
+            // autoTippyFromTitle reconciles the "already has tippy
+            // content" case by syncing tippy to the new title text and
+            // dropping the (now-redundant) title attribute, which also
+            // prevents the browser's native tooltip from appearing
+            // underneath tippy's.
+            //
+            // The `!current` guard matters: autoTippyFromTitle removes
+            // the title attribute itself, which fires another attributes
+            // mutation. That removal must not re-enter the observer.
+            // ------------------------------------------------------------
+            if (mutation.type === 'attributes' && mutation.attributeName === 'title') {
+                const current = (mutation.target.getAttribute('title') || '').trim();
+                if (!current) return;                 // our own removal — ignore
+                const parent = mutation.target.parentNode || document.body;
+                autoTippyFromTitle(parent);
+                return;
+            }
+
+            // ------------------------------------------------------------
+            // Added nodes: elements that arrived already carrying
+            // data-tippy-content get tippy attached directly; elements
+            // that arrived with a bare `title` go through
+            // autoTippyFromTitle so the title → tippy-content swap is
+            // done in one place.
+            // ------------------------------------------------------------
+            mutation.addedNodes.forEach(function (node) {
+                if (node.nodeType !== Node.ELEMENT_NODE) return;
+
+                if (node.hasAttribute && node.hasAttribute('data-tippy-content')) {
+                    initTippyOn(node);
+                }
+
+                if (node.hasAttribute && node.hasAttribute('title')) {
+                    autoTippyFromTitle(node.parentNode || document.body);
+                }
+
+                if (node.querySelectorAll) {
+                    node.querySelectorAll('[data-tippy-content]').forEach(function (el) {
+                        initTippyOn(el);
+                    });
+                    node.querySelectorAll('[title]').forEach(function (el) {
+                        if (!el._tippy && !el.hasAttribute('data-tippy-content')) {
+                            const t = (el.getAttribute('title') || '').trim();
+                            if (t) {
+                                el.setAttribute(
+                                    'data-tippy-content',
+                                    '<div class="tip-plain">' + escapeHtml(t) + '</div>'
+                                );
+                                el.removeAttribute('title');
+                                initTippyOn(el);
                             }
-                        });
-                    }
-                });
+                        }
+                    });
+                }
             });
         });
-        tooltipObserver.observe(document.body, { childList: true, subtree: true });
-    }
+    });
+
+    tooltipObserver.observe(document.body, {
+        childList: true,
+        subtree: true,
+        attributes: true,
+        attributeFilter: ['title']
+    });
+}
 
     const ROLE_DESCRIPTIONS = {
         'founder': 'The site founder',
