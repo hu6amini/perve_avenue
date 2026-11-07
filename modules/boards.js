@@ -97,6 +97,20 @@ const ForumBoardsModule = (function () {
     ];
 
     // =========================================================================
+    // TOPIC PLACEHOLDER COLORS
+    // =========================================================================
+    const TOPIC_PLACEHOLDER_COLORS = [
+        'var(--warning-color)',    // 1. Orange
+        'var(--accent-color)',     // 2. Blue (questionmark)
+        'var(--secondary-color)',  // 3. Purple
+        'var(--danger-color)',     // 4. Red
+        'var(--success-color)',    // 5. Green (gaming)
+        'var(--game-dev-color)',   // 6. Blue (code icon)
+        'var(--primary-color)',    // 7. Green (comments)
+        'var(--fan-color)'         // 8. Pink
+    ];
+
+    // =========================================================================
     // UTILITIES
     // =========================================================================
     const escapeHtml = (str) => {
@@ -483,15 +497,16 @@ const ForumBoardsModule = (function () {
         return { categoryId, categoryName };
     }
 
-    function buildThumbnailDiv(linkUrl, label, bgUrl) {
+    function buildThumbnailDiv(linkUrl, label, bgUrl, placeholderColor) {
         if (bgUrl) {
             return '<div class="modern-thumbnail modern-thumbnail--bg" style="background-image: url(\'' + escapeHtml(bgUrl) + '\');">' +
                        '<a href="' + escapeHtml(linkUrl) + '" aria-label="' + escapeHtml(label) + '" class="modern-thumbnail-cover-link"></a>' +
                    '</div>';
         } else {
-            return '<div class="modern-thumbnail modern-thumbnail--placeholder">' +
+            const style = placeholderColor ? ' style="background-color: ' + placeholderColor + ';"' : '';
+            return '<div class="modern-thumbnail modern-thumbnail--placeholder"' + style + '>' +
                        '<a href="' + escapeHtml(linkUrl) + '" aria-label="' + escapeHtml(label) + '">' +
-                           '<i class="fa-regular fa-comments" aria-hidden="true"></i>' +
+                           '<img src="https://res.cloudinary.com/dbdf6gwgo/image/upload/v1794068234/forum/Thumbnails/discuss_ajhn2f.svg" alt="Discussion" class="modern-thumbnail-placeholder-icon" width="64" height="64" loading="lazy">' +
                        '</a>' +
                    '</div>';
         }
@@ -630,8 +645,8 @@ const ForumBoardsModule = (function () {
         };
     }
 
-    function generateTopicCard(data) {
-        var imageHtml = buildThumbnailDiv(data.topicUrl, 'View topic: ' + data.topicTitle, data.thumbnailUrl);
+    function generateTopicCard(data, placeholderColor) {
+        var imageHtml = buildThumbnailDiv(data.topicUrl, 'View topic: ' + data.topicTitle, data.thumbnailUrl, placeholderColor);
 
         var statusIconTitle = data.isUnread ? 'New replies' : 'No new replies';
         var statusIconHtml =
@@ -1589,9 +1604,10 @@ const ForumBoardsModule = (function () {
                 '</header>' +
                 '<div class="modern-cards-grid">';
 
-        rows.forEach(function (row) {
+        rows.forEach(function (row, index) {
             const data = extractTopicData(row);
-            html += generateTopicCard(data);
+            const color = TOPIC_PLACEHOLDER_COLORS[index % TOPIC_PLACEHOLDER_COLORS.length];
+            html += generateTopicCard(data, color);
         });
 
         html += '</div></section>';
