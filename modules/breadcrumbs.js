@@ -29,7 +29,8 @@ const BreadcrumbsModule = (function () {
         LEGACY_TITLE_SELECTOR: 'div.mtitle h1, h1.mtitle, h2.mtitle',
         LEGACY_STATS_SELECTOR: '.title.bottom.Item.Justify',
         MODERN_TOPIC_HEADER_ID: 'modern-topic-header',
-        MEMBER_POSTS_SELECTOR: '.topic.member_posts'
+        MEMBER_POSTS_SELECTOR: '.topic.member_posts',
+        SKIP_TOPIC_HEADER_BODY_IDS: ['board']
     });
 
     // =========================================================================
@@ -372,34 +373,38 @@ const BreadcrumbsModule = (function () {
         return html;
     }
 
-    function convertTopicHeader() {
-    var titleEl = document.querySelector(CONFIG.LEGACY_TITLE_SELECTOR);
-    if (!titleEl) return;                       // no .mtitle on this page → nothing to do
+        function convertTopicHeader() {
+        // Skip on any body listed in SKIP_TOPIC_HEADER_BODY_IDS (default: board)
+        if (CONFIG.SKIP_TOPIC_HEADER_BODY_IDS.indexOf(document.body.id) !== -1) return;
 
-    var data = extractTopicHeaderData();
-    if (!data.topicTitle) {
-        setTimeout(function () {
-            var retryEl = document.querySelector(CONFIG.LEGACY_TITLE_SELECTOR);
-            if (!retryEl) return;               // removed in the meantime
-            var retryData = extractTopicHeaderData();
-            if (!retryData.topicTitle) {
-                var breadcrumb = document.getElementById(CONFIG.MODERN_BREADCRUMB_ID);
-                if (breadcrumb) {
-                    var currentEl = breadcrumb.querySelector(
-                        '.modern-breadcrumb-item--current .modern-breadcrumb-text'
-                    );
-                    if (currentEl) {
-                        retryData.topicTitle     = currentEl.textContent.trim();
-                        retryData.topicTitleHtml = currentEl.innerHTML;   // preserves any <img>
+        var titleEl = document.querySelector(CONFIG.LEGACY_TITLE_SELECTOR);
+        if (!titleEl) return;
+
+        var data = extractTopicHeaderData();
+        if (!data.topicTitle) {
+            setTimeout(function () {
+                if (CONFIG.SKIP_TOPIC_HEADER_BODY_IDS.indexOf(document.body.id) !== -1) return;
+                var retryEl = document.querySelector(CONFIG.LEGACY_TITLE_SELECTOR);
+                if (!retryEl) return;
+                var retryData = extractTopicHeaderData();
+                if (!retryData.topicTitle) {
+                    var breadcrumb = document.getElementById(CONFIG.MODERN_BREADCRUMB_ID);
+                    if (breadcrumb) {
+                        var currentEl = breadcrumb.querySelector(
+                            '.modern-breadcrumb-item--current .modern-breadcrumb-text'
+                        );
+                        if (currentEl) {
+                            retryData.topicTitle     = currentEl.textContent.trim();
+                            retryData.topicTitleHtml = currentEl.innerHTML;
+                        }
                     }
                 }
-            }
-            if (retryData.topicTitle) renderTopicHeader(retryData);
-        }, 100);
-        return;
+                if (retryData.topicTitle) renderTopicHeader(retryData);
+            }, 100);
+            return;
+        }
+        renderTopicHeader(data);
     }
-    renderTopicHeader(data);
-}
 
     function renderTopicHeader(data) {
     if (!data.topicTitle) return;
