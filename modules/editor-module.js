@@ -2754,8 +2754,11 @@ function buildPollBuilder(legacyForm) {
             host.classList.add('modern-editor-dockable');
 
             // Clean up previous DOM elements if this is a rebuild
-            var existingSentinel = host.querySelector('.modern-dock-sentinel');
-            if (existingSentinel) existingSentinel.remove();
+            var prevSentinel = host.parentNode.querySelector('.modern-dock-sentinel');
+            if (prevSentinel && prevSentinel.nextSibling === host) prevSentinel.remove();
+            var prevPlaceholder = host.parentNode.querySelector('.modern-dock-placeholder');
+            if (prevPlaceholder && prevPlaceholder.nextSibling === host) prevPlaceholder.remove();
+            
             var existingHeader = host.querySelector('.modern-dock-header');
             if (existingHeader) existingHeader.remove();
 
@@ -2764,11 +2767,19 @@ function buildPollBuilder(legacyForm) {
                 host.__dockObserver.disconnect();
                 host.__dockObserver = null;
             }
+            
+            // Clean up body class
+            document.body.classList.remove('has-docked-editor');
+
+            // Create placeholder to keep document height stable when we switch to fixed positioning
+            var placeholder = document.createElement('div');
+            placeholder.className = 'modern-dock-placeholder';
+            host.parentNode.insertBefore(placeholder, host);
 
             // The sentinel determines when we've scrolled past the editor
             var sentinel = document.createElement('div');
             sentinel.className = 'modern-dock-sentinel';
-            host.appendChild(sentinel);
+            host.parentNode.insertBefore(sentinel, host);
 
             // The mini bar shown when docked
             var dockHeader = document.createElement('div');
@@ -2780,11 +2791,28 @@ function buildPollBuilder(legacyForm) {
             var isDocked = false;
             var dockObserver = new IntersectionObserver(function(entries) {
                 entries.forEach(function(entry) {
-                    // If sentinel is out of view and above the viewport, we are docked
-                    var docked = !entry.isIntersecting && entry.boundingClientRect.top < 0;
+                    // Dock when the sentinel has scrolled past the top of the viewport
+                    var docked = entry.boundingClientRect.top < 0;
+                    
                     if (docked !== isDocked) {
                         isDocked = docked;
-                        host.classList.toggle('is-docked', isDocked);
+                        
+                        if (isDocked) {
+                            // Measure height BEFORE changing to fixed
+                            var h = host.offsetHeight;
+                            placeholder.style.height = h + 'px';
+                            
+                            // Apply fixed positioning
+                            host.classList.add('is-docked');
+                            document.body.classList.add('has-docked-editor');
+                        } else {
+                            // Remove fixed positioning and restore flow
+                            host.classList.remove('is-docked');
+                            if (!document.querySelector('.modern-editor-dockable.is-docked')) {
+                                document.body.classList.remove('has-docked-editor');
+                            }
+                            placeholder.style.height = '0px';
+                        }
                     }
                 });
             }, { threshold: 0 });
@@ -2793,23 +2821,32 @@ function buildPollBuilder(legacyForm) {
 
             // Click docked bar to expand and focus
             dockHeader.addEventListener('click', function() {
-                host.classList.remove('is-docked');
-                isDocked = false;
-                host.scrollIntoView({ behavior: 'smooth', block: 'end' });
-                if (editorRef.current) {
-                    setTimeout(function() {
-                        if (editorRef.current) editorRef.current.commands.focus('end');
-                    }, 300);
+                if (isDocked) {
+                    host.classList.remove('is-docked');
+                    if (!document.querySelector('.modern-editor-dockable.is-docked')) {
+                        document.body.classList.remove('has-docked-editor');
+                    }
+                    placeholder.style.height = '0px';
+                    isDocked = false;
+                    
+                    host.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                    if (editorRef.current) {
+                        setTimeout(function() {
+                            if (editorRef.current) editorRef.current.commands.focus('end');
+                        }, 300);
+                    }
                 }
             });
 
-            // Fallback: expand on focus
-            host.addEventListener('focusin', function() {
-                if (isDocked) {
-                    host.classList.remove('is-docked');
-                    isDocked = false;
+            // Clean up on destroy
+            host.__dockCleanup = function() {
+                if (placeholder && placeholder.parentNode) placeholder.parentNode.removeChild(placeholder);
+                if (sentinel && sentinel.parentNode) sentinel.parentNode.removeChild(sentinel);
+                host.classList.remove('is-docked');
+                if (!document.querySelector('.modern-editor-dockable.is-docked')) {
+                    document.body.classList.remove('has-docked-editor');
                 }
-            });
+            };
         }
         // ────────────────────────────────────────────────────────────────────
 
@@ -5321,13 +5358,16 @@ function buildPollBuilder(legacyForm) {
             }
         };
         
-        host.__editorDestroy = function () {
+                host.__editorDestroy = function () {
             if (editor) {
                 try { editor.destroy(); } catch (e) {}
             }
             if (host.__dockObserver) {
                 host.__dockObserver.disconnect();
                 host.__dockObserver = null;
+            }
+            if (typeof host.__dockCleanup === 'function') {
+                host.__dockCleanup();
             }
         };
     }
