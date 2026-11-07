@@ -216,10 +216,10 @@ async function bootSystem() {
                 loadScript("https://cdn.jsdelivr.net/gh/hu6amini/perve_avenue@874bc26ad559c7d2ec21d3091fdbefcbd4b20b2a/modules/breadcrumbs.min.js"),
                 loadScript("https://cdn.jsdelivr.net/gh/hu6amini/perve_avenue@c3354d99d0652f4e94408f094ae0879d2be83e9b/modules/twemoji.min.js"),
                 loadScript("https://cdn.jsdelivr.net/gh/hu6amini/perve_avenue@8ac11085ba71dc6deadefa7994447777672af4ad/modules/boards.min.js"),
-                loadScript("https://cdn.jsdelivr.net/gh/hu6amini/perve_avenue@927274cfd26121c39c9039a047156b97aec2c98d/modules/posts.min.js"),
+                loadScript("https://cdn.jsdelivr.net/gh/hu6amini/perve_avenue@481d0f3fb72b6e3db587d0029ef6a9b241973728/modules/posts.min.js"),
                 loadScript("https://cdn.jsdelivr.net/gh/hu6amini/perve_avenue@403484e8351e4fd2b9f757b5c340979cf7d452b8/modules/modals.min.js"),
                 loadScript("https://cdn.jsdelivr.net/gh/hu6amini/perve_avenue@aeb59e8cc064b40e3bc990be6b58fb01d1ac1ecd/modules/editor-module.min.js"),
-                loadScript("https://cdn.jsdelivr.net/gh/hu6amini/perve_avenue@38fc938cb030128c968b01749ffd02b509c869cc/modules/quote-queue.min.js"),
+                loadScript("https://cdn.jsdelivr.net/gh/hu6amini/perve_avenue@4b6c36ab3cde44f79c3ddb4f7dfbeed8b98a83b6/modules/quote-queue.min.js"),
                 loadScript("https://cdn.jsdelivr.net/gh/hu6amini/perve_avenue@2618ed130f4d80096fa5f98166827ab47ca04000/modules/similar-topics.min.js")
             ]);
 
