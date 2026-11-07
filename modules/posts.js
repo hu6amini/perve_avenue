@@ -2124,15 +2124,16 @@ function attemptWrapImage(img) {
         // the competing attribute so browsers don't also show a native
         // tooltip underneath.
         if (el.hasAttribute('data-tippy-content')) {
-            if (el.getAttribute('data-tippy-content') !== tipHtml) {
-                el.setAttribute('data-tippy-content', tipHtml);
-                if (el._tippy && typeof el._tippy.setContent === 'function') {
-                    el._tippy.setContent(tipHtml);
-                }
-            }
-            el.removeAttribute('title');
-            return;
+    if (el.getAttribute('data-tippy-content') !== tipHtml) {
+        el.setAttribute('data-tippy-content', tipHtml);
+        if (el._tippy && typeof el._tippy.setContent === 'function') {
+            el._tippy.setContent(tipHtml);
         }
+    }
+    if (!el._tippy) initTippyOn(el);   // ← fallback attach
+    el.removeAttribute('title');
+    return;
+}
 
         if (el._tippy) return;
 
