@@ -2784,18 +2784,23 @@ function buildPollBuilder(legacyForm) {
             // The mini bar shown when docked
             var dockHeader = document.createElement('div');
             dockHeader.className = 'modern-dock-header';
-            var dockLabel = opts.metaSection ? 'Write your topic…' : (opts.mode === 'full' ? 'Write your post…' : 'Write a reply…');
-            dockHeader.innerHTML = '<i class="fa-regular fa-pen-to-square" aria-hidden="true"></i> <span>' + escapeHtml(dockLabel) + '</span>';
             host.appendChild(dockHeader);
 
             var isDocked = false;
-            var isExpanding = false; // Prevents observer from re-docking during scroll
+            var isExpanded = false;
+
+            function updateDockHeader() {
+                if (isExpanded) {
+                    dockHeader.innerHTML = '<i class="fa-regular fa-chevron-down" aria-hidden="true"></i> <span>Minimize</span>';
+                } else {
+                    var dockLabel = opts.metaSection ? 'Write your topic…' : (opts.mode === 'full' ? 'Write your post…' : 'Write a reply…');
+                    dockHeader.innerHTML = '<i class="fa-regular fa-pen-to-square" aria-hidden="true"></i> <span>' + escapeHtml(dockLabel) + '</span>';
+                }
+            }
+            updateDockHeader();
 
             var dockObserver = new IntersectionObserver(function(entries) {
-                if (isExpanding) return; // Ignore observer events while expanding
-
                 entries.forEach(function(entry) {
-                    // Dock when the sentinel has scrolled past the top of the viewport
                     var docked = entry.boundingClientRect.top < 0;
                     
                     if (docked !== isDocked) {
@@ -2808,10 +2813,20 @@ function buildPollBuilder(legacyForm) {
                             
                             // Apply fixed positioning
                             host.classList.add('is-docked');
+                            
+                            // By default, open minified unless already expanded
+                            if (!isExpanded) {
+                                host.classList.add('is-minified');
+                            }
+                            
                             document.body.classList.add('has-docked-editor');
                         } else {
                             // Remove fixed positioning and restore flow
                             host.classList.remove('is-docked');
+                            host.classList.remove('is-minified');
+                            isExpanded = false;
+                            updateDockHeader();
+                            
                             if (!document.querySelector('.modern-editor-dockable.is-docked')) {
                                 document.body.classList.remove('has-docked-editor');
                             }
@@ -2823,29 +2838,20 @@ function buildPollBuilder(legacyForm) {
             dockObserver.observe(sentinel);
             host.__dockObserver = dockObserver;
 
-            // Click docked bar to expand and focus
+            // Click docked bar to toggle expanded state
             dockHeader.addEventListener('click', function() {
                 if (isDocked) {
-                    isExpanding = true;
-                    host.classList.remove('is-docked');
-                    if (!document.querySelector('.modern-editor-dockable.is-docked')) {
-                        document.body.classList.remove('has-docked-editor');
-                    }
-                    placeholder.style.height = '0px';
-                    isDocked = false;
+                    isExpanded = !isExpanded;
+                    host.classList.toggle('is-minified', !isExpanded);
+                    updateDockHeader();
                     
-                    // Wait for layout to settle before scrolling
-                    setTimeout(function() {
-                        host.scrollIntoView({ behavior: 'smooth', block: 'center' });
-                        if (editorRef.current) {
-                            editorRef.current.commands.focus('end');
-                        }
-                    }, 50);
-
-                    // Re-enable observer after the scroll and CSS transition settle
-                    setTimeout(function() {
-                        isExpanding = false;
-                    }, 600);
+                    if (isExpanded) {
+                        setTimeout(function() {
+                            if (editorRef.current) {
+                                editorRef.current.commands.focus('end');
+                            }
+                        }, 50);
+                    }
                 }
             });
 
@@ -2854,13 +2860,14 @@ function buildPollBuilder(legacyForm) {
                 if (placeholder && placeholder.parentNode) placeholder.parentNode.removeChild(placeholder);
                 if (sentinel && sentinel.parentNode) sentinel.parentNode.removeChild(sentinel);
                 host.classList.remove('is-docked');
+                host.classList.remove('is-minified');
                 if (!document.querySelector('.modern-editor-dockable.is-docked')) {
                     document.body.classList.remove('has-docked-editor');
                 }
             };
         }
         // ────────────────────────────────────────────────────────────────────
-
+           
         var deps = await loadTipTapDeps();
         var {
             Editor, Node, Extension, Mark,
