@@ -3037,11 +3037,12 @@ body.modal-open {
   text-align: left;
 }
 .topic-eyebrow {
-    margin: 0 0 .25rem;
-    font-size: .875rem;
+    margin: 0 0 var(--space-2xs) 0;
+    font-size: var(--text-sm);
     font-weight: 400;
-    color: var(--text-muted, #888);
+    color: var(--text-muted);
     letter-spacing: .01em;
+    text-align: left;
 }
 .topic-meta {
   display: flex;
