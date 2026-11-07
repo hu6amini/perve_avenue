@@ -290,22 +290,37 @@ const BreadcrumbsModule = (function () {
         return null;
     }
 
-    function classifyEyebrowByText(text) {
+        function classifyEyebrowByText(text) {
         if (!text) return null;
-        var t = text.toLowerCase();
+        var t = text.toLowerCase().trim();
 
-        // Edit — checked first because these stems are distinctive
-        if (/\b(?:edit\w*|modif\w*|änder\w*|bearbeit\w*|edita\w*|editar\w*|editando\w*|rediger\w*|cambiar\w*|edytuj\w*|szerk\w*|muokkaa\w*|breyta\w*|bewerk\w*)/i.test(t)) {
+        // ---- Anchored: the verb always leads the eyebrow phrase ----
+        // No \b here — \b relies on ASCII \w and silently fails for
+        // accented/non-ASCII first letters (ä, é, é, ñ, etc).
+
+        // Edit — includes DE "Ändere", FR "Modifie", ES "Editar",
+        // IT "Modifica", PT "Editando", plus PL/NL/TR/SV/RU stems.
+        if (/^(?:edit|modif|änder|bearbeit|edita|editar|editando|edytuj|rediger|cambiar|bewerk|muokkaa|breyta|riscrivi|измен|редакт|zmień|wijzig|düzenle|redigera)/i.test(t)) {
             return 'edit';
         }
 
-        // Reply / quote
-        if (/\b(?:quot\w*|repl\w*|risp\w*|antw\w*|répond\w*|respond\w*|responder\w*|antworten\w*)/i.test(t)) {
+        // Reply
+        if (/^(?:quot|repl|risp|antw|répond|respond|responder|antworten|vastaa|vastaus|ответ|odpowiedz|antwoorden|yanıtla|svara)/i.test(t)) {
             return 'reply';
         }
 
-        // New topic — detected by any common "new + topic" stem pair
-        if (/\b(?:new|nuev[oa]|nouve(?:au|lle)|neu[e]?[snr]?|nuov[oa]|nov[oa]|yeni|нов[а-я]*)\b/i.test(t)) {
+        // New topic — "post"/"new"/"create" verbs. "cr[eé]e?" covers
+        // both FR "Crée" and "Créer" without requiring an accent match
+        // on the e (i-flag does not fold accents).
+        if (/^(?:post|new|nuev|nouve|nuov|nov|neu|yeni|нов|создать|erstell|erschaff|crea|cr[eé]e?|utwórz|nowy|nieuw|uusi|nytt|oluştur)/i.test(t)) {
+            return 'newtopic';
+        }
+
+        // ---- Fallback: for cases where the verb is not the very
+        //      first word (e.g. "Erschaffe eine neue Diskussion"
+        //      is already anchored above, but future variants may
+        //      lead with a noun). ASCII-only to keep \b reliable.
+        if (/\bneu[e]?[snr]?\b|\bnuev[oa]\b|\bnouve(?:au|lle)\b|\bnuov[oa]\b|\bnov[oa]\b/i.test(t)) {
             return 'newtopic';
         }
 
