@@ -5827,11 +5827,15 @@ body#topic .post .fastedit > :not(.modern-editor-container--fastedit) {
 
 /* ── Sticky Docked Editor ────────────────────────────────────────── */
 .modern-editor-dockable {
-    position: sticky;
-    bottom: 0;
-    z-index: 1000;
-    /* Ensure it has a little breathing room from the bottom edge */
-    margin-bottom: var(--space-sm) !important;
+    position: relative;
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.modern-dock-placeholder {
+    width: 100%;
+    height: 0;
+    transition: height 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    pointer-events: none;
 }
 
 .modern-dock-sentinel {
@@ -5846,6 +5850,11 @@ body#topic .post .fastedit > :not(.modern-editor-container--fastedit) {
 
 /* When docked (scrolled past the editor) */
 .modern-editor-dockable.is-docked {
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    z-index: 1000;
     background: transparent !important;
     border: none !important;
     box-shadow: none !important;
@@ -5853,7 +5862,7 @@ body#topic .post .fastedit > :not(.modern-editor-container--fastedit) {
     padding: 0 !important;
 }
 
-.modern-editor-dockable.is-docked > *:not(.modern-dock-header):not(.modern-dock-sentinel) {
+.modern-editor-dockable.is-docked > *:not(.modern-dock-header) {
     display: none !important;
 }
 
@@ -5864,16 +5873,17 @@ body#topic .post .fastedit > :not(.modern-editor-container--fastedit) {
     padding: var(--pad-3) var(--pad-4);
     background: var(--surface-color);
     border: 1px solid var(--border-color);
-    border-radius: var(--radius);
-    box-shadow: var(--shadow-md);
+    border-radius: var(--radius) var(--radius) 0 0;
+    box-shadow: 0 -4px 12px rgba(0, 0, 0, 0.1);
     color: var(--text-secondary);
     font-weight: 500;
     font-size: var(--text-sm);
     cursor: pointer;
     transition: all 0.2s ease;
     width: 100%;
+    max-width: 900px;
+    margin: 0 auto;
     box-sizing: border-box;
-    margin-bottom: var(--space-sm);
 }
 
 .modern-editor-dockable.is-docked .modern-dock-header:hover {
@@ -5889,6 +5899,11 @@ body#topic .post .fastedit > :not(.modern-editor-container--fastedit) {
 /* Default state for dock header (hidden) */
 .modern-editor-dockable .modern-dock-header {
     display: none;
+}
+
+/* Prevent the docked bar from covering the footer */
+body.has-docked-editor {
+    padding-bottom: 70px !important;
 }
 
 /* ------------------------------------------------------------
