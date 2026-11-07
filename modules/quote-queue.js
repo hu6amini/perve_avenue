@@ -78,20 +78,35 @@ var QuoteQueueModule = (function (Utils) {
     }
 
     function setButtonQueued(card, isQueued) {
-        var btn = findQuoteButton(card);
-        if (!btn) return;
-        btn.classList.toggle('is-queued', isQueued);
-        btn.setAttribute('aria-pressed', String(isQueued));
-        btn.title = isQueued ? 'Remove from quote queue' : 'Add to quote queue';
-        btn.setAttribute('aria-label', btn.title);
-        var icon = btn.querySelector('i');
-        if (icon) {
-            icon.className = isQueued
-                ? 'fa-regular fa-check'
-                : 'fa-regular fa-quote-left';
-        }
-        card.classList.toggle('is-quote-queued', isQueued);
+    var btn = findQuoteButton(card);
+    if (!btn) return;
+    btn.classList.toggle('is-queued', isQueued);
+    btn.setAttribute('aria-pressed', String(isQueued));
+
+    var label = isQueued ? 'Remove from quote queue' : 'Add to quote queue';
+    btn.setAttribute('aria-label', label);
+
+    // Speak tippy's language, not the browser's. The title attribute
+    // is only for native browser tooltips — writing it on an element
+    // tippy already owns creates a two-source-of-truth conflict: tippy
+    // shows the old data-tippy-content while the browser shows the new
+    // title underneath. Use data-tippy-content and, if tippy is
+    // already attached, push the new content via the API.
+    var tipHtml = '<div class="tip-plain">' + Utils.escapeHtml(label) + '</div>';
+    btn.setAttribute('data-tippy-content', tipHtml);
+    if (btn._tippy && typeof btn._tippy.setContent === 'function') {
+        btn._tippy.setContent(tipHtml);
     }
+    btn.removeAttribute('title');
+
+    var icon = btn.querySelector('i');
+    if (icon) {
+        icon.className = isQueued
+            ? 'fa-regular fa-check'
+            : 'fa-regular fa-quote-left';
+    }
+    card.classList.toggle('is-quote-queued', isQueued);
+}
 
     function refreshAllButtonStates() {
         var byId = new Map(queue.map(function (q) { return [q.postId, true]; }));
