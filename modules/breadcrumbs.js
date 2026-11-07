@@ -284,24 +284,33 @@ const BreadcrumbsModule = (function () {
     }
 
     function convertTopicHeader() {
-        if (document.body.id !== 'topic') return;
-        var data = extractTopicHeaderData();
-        if (!data.topicTitle) {
-            setTimeout(function () {
-                var retryData = extractTopicHeaderData();
-                if (!retryData.topicTitle) {
-                    var breadcrumb = document.getElementById(CONFIG.MODERN_BREADCRUMB_ID);
-                    if (breadcrumb) {
-                        var currentEl = breadcrumb.querySelector('.modern-breadcrumb-item--current .modern-breadcrumb-text');
-                        if (currentEl) retryData.topicTitle = currentEl.textContent.trim();
+    var titleEl = document.querySelector(CONFIG.LEGACY_TITLE_SELECTOR);
+    if (!titleEl) return;                       // no .mtitle on this page → nothing to do
+
+    var data = extractTopicHeaderData();
+    if (!data.topicTitle) {
+        setTimeout(function () {
+            var retryEl = document.querySelector(CONFIG.LEGACY_TITLE_SELECTOR);
+            if (!retryEl) return;               // removed in the meantime
+            var retryData = extractTopicHeaderData();
+            if (!retryData.topicTitle) {
+                var breadcrumb = document.getElementById(CONFIG.MODERN_BREADCRUMB_ID);
+                if (breadcrumb) {
+                    var currentEl = breadcrumb.querySelector(
+                        '.modern-breadcrumb-item--current .modern-breadcrumb-text'
+                    );
+                    if (currentEl) {
+                        retryData.topicTitle     = currentEl.textContent.trim();
+                        retryData.topicTitleHtml = currentEl.innerHTML;   // preserves any <img>
                     }
                 }
-                if (retryData.topicTitle) renderTopicHeader(retryData);
-            }, 100);
-            return;
-        }
-        renderTopicHeader(data);
+            }
+            if (retryData.topicTitle) renderTopicHeader(retryData);
+        }, 100);
+        return;
     }
+    renderTopicHeader(data);
+}
 
     function renderTopicHeader(data) {
     if (!data.topicTitle) return;
@@ -350,7 +359,6 @@ const BreadcrumbsModule = (function () {
     }
 
     function convertMemberPostsHeader() {
-    if (document.body.id !== 'search') return;
     var container = document.querySelector(CONFIG.MEMBER_POSTS_SELECTOR);
     if (!container) return;
     var data = extractMemberPostsHeaderData(container);
@@ -363,8 +371,6 @@ const BreadcrumbsModule = (function () {
     if (!headerContainer) return;
 
     headerContainer.innerHTML = buildMemberPostsHeaderHtml(data);
-
-    // NEW: also normalise the member name (names can contain emoji)
     applyEmojiReplacer(headerContainer, 50);
 
     console.log('[BreadcrumbsModule] Member posts header rendered');
@@ -531,22 +537,20 @@ function extractPaginationData(legacyBar) {
     if (!globalThis.forumObserver) return;
 
     try { globalThis.forumObserver.register({ id: 'breadcrumbs-module', selector: CONFIG.LEGACY_NAV_SELECTOR, priority: 'high', callback: convertBreadcrumb }); } catch (e) { console.error(e); }
-    try { globalThis.forumObserver.register({ id: 'topic-header-module', selector: CONFIG.LEGACY_TITLE_SELECTOR, priority: 'high', pageTypes: ['topic'], callback: convertTopicHeader }); } catch (e) { console.error(e); }
+    try { globalThis.forumObserver.register({ id: 'topic-header-module', selector: CONFIG.LEGACY_TITLE_SELECTOR, priority: 'high', callback: convertTopicHeader }); } catch (e) { console.error(e); }
     try { globalThis.forumObserver.register({ id: 'member-posts-header-module', selector: CONFIG.MEMBER_POSTS_SELECTOR, priority: 'high', callback: convertMemberPostsHeader }); } catch (e) { console.error(e); }
 
     [CONFIG.LEGACY_PAGINATION_SELECTOR_TOP, CONFIG.LEGACY_PAGINATION_SELECTOR_BOTTOM, CONFIG.LEGACY_PAGINATION_PLAIN_TOP, CONFIG.LEGACY_PAGINATION_PLAIN_BOTTOM].forEach(function (sel, idx) {
         try { globalThis.forumObserver.register({ id: 'pagination-module-' + idx, selector: sel, priority: 'high', callback: convertAllPagination }); } catch (e) { console.error(e); }
     });
 
-    // NEW: belt-and-braces emoji normalisation for the modern topic title.
-    // Catches late-injected unicode emoji that survived initial render
-    // (e.g. if twemoji.js loaded after breadcrumbs.js).
+    // Emoji normalisation for the modern topic title — now fires on every page
+    // where .topic-title exists, not just topic/search/send.
     try {
         globalThis.forumObserver.register({
             id: 'topic-title-emoji-refresh',
             selector: '.topic-title',
             priority: 'high',
-            pageTypes: ['topic', 'search'],
             callback: function (node) {
                 if (window.emojiReplacer) {
                     try { window.emojiReplacer.replace(node); } catch (e) {}
@@ -562,22 +566,22 @@ function extractPaginationData(legacyBar) {
     // INITIALIZATION
     // =========================================================================
     function initialize() {
-        if (document.querySelector(CONFIG.LEGACY_NAV_SELECTOR)) convertBreadcrumb();
-        if (document.body.id === 'topic' && document.querySelector(CONFIG.LEGACY_TITLE_SELECTOR)) convertTopicHeader();
-        if (document.body.id === 'search' && document.querySelector(CONFIG.MEMBER_POSTS_SELECTOR)) convertMemberPostsHeader();
-        convertAllPagination();
-        registerObserver();
-        console.log('[BreadcrumbsModule] Initialised');
-    }
+    if (document.querySelector(CONFIG.LEGACY_NAV_SELECTOR))      convertBreadcrumb();
+    if (document.querySelector(CONFIG.LEGACY_TITLE_SELECTOR))    convertTopicHeader();
+    if (document.querySelector(CONFIG.MEMBER_POSTS_SELECTOR))    convertMemberPostsHeader();
+    convertAllPagination();
+    registerObserver();
+    console.log('[BreadcrumbsModule] Initialised');
+}
 
     return {
         initialize: initialize,
         refresh: function () {
-            convertBreadcrumb();
-            if (document.body.id === 'topic') convertTopicHeader();
-            if (document.body.id === 'search' && document.querySelector(CONFIG.MEMBER_POSTS_SELECTOR)) convertMemberPostsHeader();
-            convertAllPagination();
-        }
+    convertBreadcrumb();
+    convertTopicHeader();
+    convertMemberPostsHeader();
+    convertAllPagination();
+}
     };
 })();
 
