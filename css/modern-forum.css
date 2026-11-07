@@ -5858,7 +5858,8 @@ body#topic .post .fastedit > :not(.modern-editor-container--fastedit) {
     background: var(--bg-color) !important;
     border-top: 1px solid var(--border-color) !important;
     box-shadow: 0 -4px 24px rgba(0, 0, 0, 0.15) !important;
-    margin: 0 !important;
+    max-width: 1200px; 
+    margin: auto;
     border-radius: var(--radius-lg) var(--radius-lg) 0 0 !important;
     max-height: 85vh;
     display: flex;
