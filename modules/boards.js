@@ -216,14 +216,11 @@ const ForumBoardsModule = (function () {
     // =========================================================================
     function getBodyLanguage() {
         const classList = document.body.className.split(/\s+/);
-        // The last class is the language code (en, it, es, fr, de, pt, etc.)
         const lastClass = classList[classList.length - 1];
-        // European languages that use DD/MM/YYYY
         const european = ['it', 'es', 'fr', 'de', 'pt', 'nl', 'sv', 'no', 'da', 'fi', 'pl', 'hu', 'cs', 'ro', 'bg', 'el'];
         if (european.includes(lastClass)) {
             return 'eu';
         }
-        // Default to US for English and unknown
         return 'us';
     }
 
@@ -489,7 +486,15 @@ const ForumBoardsModule = (function () {
         };
     }
 
-        function buildThumbnailDiv(linkUrl, label, bgUrl, placeholderColor) {
+    function extractCategoryData(catLi) {
+        const id = catLi.id;
+        const categoryId = id ? id.replace('c', '') : '';
+        const titleEl = catLi.querySelector('h2.mtitle');
+        const categoryName = titleEl ? titleEl.textContent.trim() : 'Category';
+        return { categoryId, categoryName };
+    }
+
+    function buildThumbnailDiv(linkUrl, label, bgUrl, placeholderColor) {
         let className = 'modern-thumbnail';
         let style = '';
 
@@ -1101,11 +1106,9 @@ const ForumBoardsModule = (function () {
     // MEMBER EXTRACTION – FIXED AVATAR, DATE FORMAT, REPUTATION
     // =========================================================================
     function extractMemberData(row, columnMapping) {
-        // Check for "No results" row
         const noResults = row.querySelector('.aa[style*="width:98%"]');
         if (noResults) return null;
 
-        // ---- Avatar: prefer data-original, then src, then default-avatar ----
         let avatarSrc = null;
         const img = row.querySelector('.aa.thumbs img');
         if (img) {
@@ -1125,7 +1128,6 @@ const ForumBoardsModule = (function () {
         const profileUrl = nickLink ? nickLink.getAttribute('href') : '#';
         const mid = extractMidFromUrl(profileUrl);
 
-        // ---- Group ----
         let groupName = 'Member';
         let groupClass = 'group-member';
         const classList = row.className.split(/\s+/);
@@ -1145,7 +1147,6 @@ const ForumBoardsModule = (function () {
             else if (groupText.toLowerCase().includes('moderator')) { groupName = 'Moderator'; groupClass = 'group-moderator'; }
         }
 
-        // ---- Extract fields using column mapping ----
         const defaultMapping = { aa: 'avatar', bb: 'name', cc: 'level', xx: 'posts', yy: 'joined', zz: 'contacts' };
         const map = columnMapping || defaultMapping;
 
@@ -1157,23 +1158,16 @@ const ForumBoardsModule = (function () {
             if (field === 'level') level = text;
             else if (field === 'posts') posts = text.replace(/,/g, '');
             else if (field === 'joined') joined = text;
-            else if (field === 'reputation') {
-                // Remove leading '+' if present
-                reputation = text.replace(/^\+/, '');
-            }
+            else if (field === 'reputation') reputation = text.replace(/^\+/, '');
             else if (field === 'friends') friends = text;
         }
 
-        // Fallback for posts
         if (!posts) {
             const postsEl = row.querySelector('.xx a');
             if (postsEl) posts = postsEl.textContent.trim().replace(/,/g, '');
         }
 
-        // ---- Format joined date using detected language ----
         const formattedJoined = parseAndFormatDate(joined);
-
-        // ---- Contacts (PM button) ----
         const contactLink = row.querySelector('.zz .mini_buttons a:first-child');
         let contactUrl = contactLink ? contactLink.getAttribute('href') : '';
 
@@ -1186,10 +1180,10 @@ const ForumBoardsModule = (function () {
             groupClass,
             level,
             posts: posts || '0',
-            joined: joined,            // raw, for fallback
-            formattedJoined,           // formatted
+            joined,
+            formattedJoined,
             reputation,
-            friends,                   // kept but not displayed
+            friends,
             contactUrl
         };
     }
@@ -1218,7 +1212,6 @@ const ForumBoardsModule = (function () {
             contactHtml = '<a href="' + escapeHtml(data.contactUrl) + '" class="modern-btn modern-btn-secondary modern-member-contact" title="Send PM"><i class="fa-regular fa-envelope" aria-hidden="true"></i></a>';
         }
 
-        // Build stats row – no friends, reputation is a link
         let statsHtml = '';
         if (data.level && data.level !== '—') statsHtml += '<span><i class="fa-regular fa-fire" aria-hidden="true"></i> ' + escapeHtml(data.level) + '</span>';
         if (data.posts && data.posts !== '0') statsHtml += '<span><i class="fa-regular fa-message" aria-hidden="true"></i> ' + formatNumber(parseInt(data.posts, 10)) + ' posts</span>';
