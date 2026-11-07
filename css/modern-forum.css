@@ -5855,25 +5855,47 @@ body#topic .post .fastedit > :not(.modern-editor-container--fastedit) {
     left: 0;
     right: 0;
     z-index: 1000;
+    background: var(--bg-color) !important;
+    border-top: 1px solid var(--border-color) !important;
+    box-shadow: 0 -4px 24px rgba(0, 0, 0, 0.15) !important;
+    margin: 0 !important;
+    border-radius: var(--radius-lg) var(--radius-lg) 0 0 !important;
+    max-height: 85vh;
+    display: flex;
+    flex-direction: column;
+}
+
+.modern-editor-dockable.is-docked .modern-wysiwyg {
+    max-height: 40vh;
+}
+
+.modern-editor-dockable.is-docked .modern-actions {
+    border-bottom-right-radius: 0 !important;
+    border-bottom-left-radius: 0 !important;
+    padding-bottom: max(var(--pad-5), env(safe-area-inset-bottom));
+}
+
+/* Minified state */
+.modern-editor-dockable.is-docked.is-minified {
     background: transparent !important;
     border: none !important;
     box-shadow: none !important;
-    margin: 0 !important;
     padding: 0 !important;
+    max-height: none;
 }
 
-.modern-editor-dockable.is-docked > *:not(.modern-dock-header) {
+.modern-editor-dockable.is-docked.is-minified > *:not(.modern-dock-header) {
     display: none !important;
 }
 
-.modern-editor-dockable.is-docked .modern-dock-header {
+.modern-editor-dockable.is-docked.is-minified .modern-dock-header {
     display: flex;
     align-items: center;
     gap: var(--space-sm);
     padding: var(--pad-3) var(--pad-4);
     background: var(--surface-color);
     border: 1px solid var(--border-color);
-    border-radius: var(--radius) var(--radius) 0 0;
+    border-radius: var(--radius);
     box-shadow: 0 -4px 12px rgba(0, 0, 0, 0.1);
     color: var(--text-secondary);
     font-weight: 500;
@@ -5882,21 +5904,43 @@ body#topic .post .fastedit > :not(.modern-editor-container--fastedit) {
     transition: all 0.2s ease;
     width: 100%;
     max-width: 900px;
-    margin: 0 auto;
+    margin: 0 auto var(--space-sm);
     box-sizing: border-box;
 }
 
-.modern-editor-dockable.is-docked .modern-dock-header:hover {
+.modern-editor-dockable.is-docked.is-minified .modern-dock-header:hover {
     background: var(--hover-color);
     color: var(--text-primary);
     border-color: var(--primary-color);
 }
 
-.modern-editor-dockable.is-docked .modern-dock-header i {
+.modern-editor-dockable.is-docked.is-minified .modern-dock-header i {
     color: var(--primary-color);
 }
 
-/* Default state for dock header (hidden) */
+/* Expanded state header (Minimize button) */
+.modern-editor-dockable.is-docked:not(.is-minified) .modern-dock-header {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: var(--space-sm);
+    padding: var(--space-sm);
+    background: var(--bg-color);
+    border-bottom: 1px solid var(--border-color);
+    border-radius: var(--radius-lg) var(--radius-lg) 0 0;
+    color: var(--text-tertiary);
+    font-size: var(--text-xs);
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.modern-editor-dockable.is-docked:not(.is-minified) .modern-dock-header:hover {
+    background: var(--hover-color);
+    color: var(--text-primary);
+}
+
+/* Default state for dock header (hidden unless docked) */
 .modern-editor-dockable .modern-dock-header {
     display: none;
 }
