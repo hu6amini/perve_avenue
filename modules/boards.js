@@ -489,27 +489,22 @@ const ForumBoardsModule = (function () {
         };
     }
 
-    function extractCategoryData(catLi) {
-        const id = catLi.id;
-        const categoryId = id ? id.replace('c', '') : '';
-        const titleEl = catLi.querySelector('h2.mtitle');
-        const categoryName = titleEl ? titleEl.textContent.trim() : 'Category';
-        return { categoryId, categoryName };
-    }
+        function buildThumbnailDiv(linkUrl, label, bgUrl, placeholderColor) {
+        let className = 'modern-thumbnail';
+        let style = '';
 
-    function buildThumbnailDiv(linkUrl, label, bgUrl, placeholderColor) {
         if (bgUrl) {
-            return '<div class="modern-thumbnail modern-thumbnail--bg" style="background-image: url(\'' + escapeHtml(bgUrl) + '\');">' +
-                       '<a href="' + escapeHtml(linkUrl) + '" aria-label="' + escapeHtml(label) + '" class="modern-thumbnail-cover-link"></a>' +
-                   '</div>';
+            className += ' modern-thumbnail--bg';
+            style = `background-image: url('${escapeHtml(bgUrl)}');`;
         } else {
-            const style = placeholderColor ? ' style="background-color: ' + placeholderColor + ';"' : '';
-            return '<div class="modern-thumbnail modern-thumbnail--placeholder"' + style + '>' +
-                       '<a href="' + escapeHtml(linkUrl) + '" aria-label="' + escapeHtml(label) + '">' +
-                           '<img src="https://res.cloudinary.com/dbdf6gwgo/image/upload/v1794068234/forum/Thumbnails/discuss_ajhn2f.svg" alt="Discussion" class="modern-thumbnail-placeholder-icon" width="64" height="64" loading="lazy">' +
-                       '</a>' +
-                   '</div>';
+            className += ' modern-thumbnail--placeholder-bg';
+            const bgColor = placeholderColor || 'var(--surface-light)';
+            style = `background-color: ${bgColor}; background-image: url('https://res.cloudinary.com/dbdf6gwgo/image/upload/v1794071914/forum/Thumbnails/discuss_wm2uek.svg');`;
         }
+
+        return `<div class="${className}" style="${style}">` +
+                   `<a href="${escapeHtml(linkUrl)}" aria-label="${escapeHtml(label)}" class="modern-thumbnail-cover-link"></a>` +
+               `</div>`;
     }
 
     function generateForumCard(data) {
