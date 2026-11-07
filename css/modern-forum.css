@@ -4796,9 +4796,17 @@ lite-vimeo.lite-activated > .lite-embed-playbtn { display: none; }
   cursor: pointer;
   transition: all 0.2s ease;
 }
-.modern-btn i { margin-right: var(--space-xs); }
-.modern-btn-primary { background: var(--primary-color); color: white; }
-.modern-btn-primary:hover { background: var(--primary-dark); transform: translateY(-1px); }
+.modern-btn i { margin-right: var(--space-xs); 
+}
+.modern-btn-primary { 
+  background: var(--primary-color); 
+  color: white; 
+}
+.modern-btn-primary:hover { 
+  background: var(--primary-dark); 
+  text-decoration: none;
+  transform: translateY(-1px); 
+}
 .modern-btn-secondary {
   background: var(--surface-color);
   border: 1px solid var(--border-color);
@@ -4808,6 +4816,7 @@ lite-vimeo.lite-activated > .lite-embed-playbtn { display: none; }
   background: var(--hover-color);
   border-color: var(--primary-color);
   color: var(--text-primary);
+  text-decoration: none;
   transform: translateY(-1px);
 }
 
