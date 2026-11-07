@@ -872,6 +872,24 @@
   overflow: hidden;
   position: relative;
 }
+/* Gradient fade at the bottom of collapsed quotes to indicate more content */
+.modern-quote.long-quote .quote-content::after {
+  content: '';
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: 60px;
+  background: linear-gradient(to bottom, transparent, var(--bg-color) 90%);
+  pointer-events: none; /* Let clicks pass through */
+  transition: opacity 0.35s ease;
+  opacity: 1;
+  z-index: 1;
+}
+/* Hide the gradient when the quote is expanded */
+.modern-quote.expanded .quote-content::after {
+  opacity: 0;
+}
 /* max-height must be a finite value for the transition to run —
    9999px is effectively "unbounded" but lets the browser
    interpolate from 250px. */
