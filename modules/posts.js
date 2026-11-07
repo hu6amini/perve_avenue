@@ -2260,11 +2260,11 @@ function setupTooltipObserver() {
     });
 
     tooltipObserver.observe(document.body, {
-        childList: true,
-        subtree: true,
-        attributes: true,
-        attributeFilter: ['title']
-    });
+    childList: true,
+    subtree: true,
+    attributes: true,
+    attributeFilter: ['title', 'data-tippy-content']   // ← add
+});
 }
 
     const ROLE_DESCRIPTIONS = {
