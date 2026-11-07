@@ -241,6 +241,86 @@ const BreadcrumbsModule = (function () {
     // =========================================================================
     // TOPIC HEADER
     // =========================================================================
+
+        // =========================================================================
+    // TOPIC HEADER — English eyebrow normalisation
+    //
+    // Forumfree renders the .mtitle verb phrase in the user's chosen
+    // language, e.g. "Modifica messaggio:" (IT), "Ändere Nachricht:" (DE),
+    // "Postar um novo tópico em" (PT).  The modern header is a design
+    // decision and should stay in English, so we ignore the raw text and
+    // rebuild it from a canonical label chosen by context.
+    // =========================================================================
+
+    function detectSendMode() {
+        // 1. Hidden mode field (most reliable — language-independent)
+        var modeInputs = document.querySelectorAll('input[name="mode"], input[name="action"]');
+        for (var i = 0; i < modeInputs.length; i++) {
+            var v = (modeInputs[i].value || '').toLowerCase();
+            if (!v) continue;
+            if (v.indexOf('edit') !== -1) return 'edit';
+            if (v.indexOf('new') !== -1 || v.indexOf('topic') !== -1) return 'newtopic';
+            if (v.indexOf('quote') !== -1 || v.indexOf('reply') !== -1) return 'reply';
+        }
+
+        // 2. URL query / hash
+        var url = (window.location.search || '') + (window.location.hash || '');
+        if (/([?&](?:mode|action)=(?:edit|editpost|edit_post|edit-post))/i.test(url)) return 'edit';
+        if (/([?&](?:mode|action)=(?:newtopic|new_topic|new-topic|post))/i.test(url)) return 'newtopic';
+        if (/([?&](?:mode|action)=(?:quote|reply))/i.test(url)) return 'reply';
+        if (/editpost|edit_post|edit-post/i.test(url)) return 'edit';
+        if (/newtopic|new_topic|new-topic/i.test(url)) return 'newtopic';
+
+        // 3. Form action
+        var form = document.querySelector('form[action]');
+        if (form) {
+            var action = (form.getAttribute('action') || '').toLowerCase();
+            if (action.indexOf('edit') !== -1) return 'edit';
+            if (action.indexOf('newtopic') !== -1 || action.indexOf('new_topic') !== -1) return 'newtopic';
+            if (action.indexOf('quote') !== -1) return 'reply';
+            if (action.indexOf('reply') !== -1) return 'reply';
+        }
+
+        // 4. Presence of a post ID — only edit pages carry one
+        var pid = document.querySelector(
+            'input[name="pid"], input[name="post_id"], input[name="postid"]'
+        );
+        if (pid && pid.value && pid.value !== '0') return 'edit';
+
+        return null;
+    }
+
+    function classifyEyebrowByText(text) {
+        if (!text) return null;
+        var t = text.toLowerCase();
+
+        // Edit — checked first because these stems are distinctive
+        if (/\b(?:edit\w*|modif\w*|änder\w*|bearbeit\w*|edita\w*|editar\w*|editando\w*|rediger\w*|cambiar\w*|edytuj\w*|szerk\w*|muokkaa\w*|breyta\w*|bewerk\w*)/i.test(t)) {
+            return 'edit';
+        }
+
+        // Reply / quote
+        if (/\b(?:quot\w*|repl\w*|risp\w*|antw\w*|répond\w*|respond\w*|responder\w*|antworten\w*)/i.test(t)) {
+            return 'reply';
+        }
+
+        // New topic — detected by any common "new + topic" stem pair
+        if (/\b(?:new|nuev[oa]|nouve(?:au|lle)|neu[e]?[snr]?|nuov[oa]|nov[oa]|yeni|нов[а-я]*)\b/i.test(t)) {
+            return 'newtopic';
+        }
+
+        return null;
+    }
+
+    function englishEyebrowForMode(mode) {
+        switch (mode) {
+            case 'edit':     return 'Editing a post in';
+            case 'newtopic': return 'Post a new topic in';
+            case 'reply':    return 'Replying to';
+            default:         return null;
+        }
+    }
+   
        function extractTopicHeaderSplit(titleEl) {
         if (!titleEl) return { eyebrow: '', eyebrowHtml: '', title: '', titleHtml: '' };
 
@@ -313,9 +393,20 @@ const BreadcrumbsModule = (function () {
         };
     }     
    
-       function extractTopicHeaderData() {
+           function extractTopicHeaderData() {
         var titleEl = document.querySelector(CONFIG.LEGACY_TITLE_SELECTOR);
         var split = extractTopicHeaderSplit(titleEl);
+
+        // English normalisation — the eyebrow is FF's own UI string,
+        // so ignore its actual language and rebuild it from context.
+        if (split.eyebrow) {
+            var mode    = detectSendMode() || classifyEyebrowByText(split.eyebrow);
+            var english = englishEyebrowForMode(mode);
+            if (english) {
+                split.eyebrow     = english;
+                split.eyebrowHtml = escapeHtml(english);
+            }
+        }
 
         var statsEl = document.querySelector(CONFIG.LEGACY_STATS_SELECTOR);
         var replyCount = '', viewCount = '';
