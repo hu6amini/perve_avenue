@@ -2749,7 +2749,7 @@ function buildPollBuilder(legacyForm) {
         async function buildEditorInto(host, opts) {
         var editorRef = { current: null };
 
-        // ── Sticky Docked Editor Logic ──────────────────────────────────────
+                // ── Sticky Docked Editor Logic ──────────────────────────────────────
         if (opts.mode === 'reply' || opts.mode === 'full') {
             host.classList.add('modern-editor-dockable');
 
@@ -2789,7 +2789,11 @@ function buildPollBuilder(legacyForm) {
             host.appendChild(dockHeader);
 
             var isDocked = false;
+            var isExpanding = false; // Prevents observer from re-docking during scroll
+
             var dockObserver = new IntersectionObserver(function(entries) {
+                if (isExpanding) return; // Ignore observer events while expanding
+
                 entries.forEach(function(entry) {
                     // Dock when the sentinel has scrolled past the top of the viewport
                     var docked = entry.boundingClientRect.top < 0;
@@ -2822,6 +2826,7 @@ function buildPollBuilder(legacyForm) {
             // Click docked bar to expand and focus
             dockHeader.addEventListener('click', function() {
                 if (isDocked) {
+                    isExpanding = true;
                     host.classList.remove('is-docked');
                     if (!document.querySelector('.modern-editor-dockable.is-docked')) {
                         document.body.classList.remove('has-docked-editor');
@@ -2829,12 +2834,18 @@ function buildPollBuilder(legacyForm) {
                     placeholder.style.height = '0px';
                     isDocked = false;
                     
-                    host.scrollIntoView({ behavior: 'smooth', block: 'center' });
-                    if (editorRef.current) {
-                        setTimeout(function() {
-                            if (editorRef.current) editorRef.current.commands.focus('end');
-                        }, 300);
-                    }
+                    // Wait for layout to settle before scrolling
+                    setTimeout(function() {
+                        host.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                        if (editorRef.current) {
+                            editorRef.current.commands.focus('end');
+                        }
+                    }, 50);
+
+                    // Re-enable observer after the scroll and CSS transition settle
+                    setTimeout(function() {
+                        isExpanding = false;
+                    }, 600);
                 }
             });
 
