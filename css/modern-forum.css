@@ -5922,6 +5922,7 @@ body#topic .post .fastedit > :not(.modern-editor-container--fastedit) {
   padding-top: var(--space-sm);
   border-top-color: var(--border-color);
   visibility: visible;
+  text-align: left;
   transition:
     max-height    0.35s cubic-bezier(0.2, 0, 0, 1),
     margin-top    0.35s cubic-bezier(0.2, 0, 0, 1),
