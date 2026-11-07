@@ -2746,8 +2746,73 @@ function buildPollBuilder(legacyForm) {
     };
 }
 
-    async function buildEditorInto(host, opts) {
+        async function buildEditorInto(host, opts) {
         var editorRef = { current: null };
+
+        // ── Sticky Docked Editor Logic ──────────────────────────────────────
+        if (opts.mode === 'reply' || opts.mode === 'full') {
+            host.classList.add('modern-editor-dockable');
+
+            // Clean up previous DOM elements if this is a rebuild
+            var existingSentinel = host.querySelector('.modern-dock-sentinel');
+            if (existingSentinel) existingSentinel.remove();
+            var existingHeader = host.querySelector('.modern-dock-header');
+            if (existingHeader) existingHeader.remove();
+
+            // Disconnect previous observer if rebuilding
+            if (host.__dockObserver) {
+                host.__dockObserver.disconnect();
+                host.__dockObserver = null;
+            }
+
+            // The sentinel determines when we've scrolled past the editor
+            var sentinel = document.createElement('div');
+            sentinel.className = 'modern-dock-sentinel';
+            host.appendChild(sentinel);
+
+            // The mini bar shown when docked
+            var dockHeader = document.createElement('div');
+            dockHeader.className = 'modern-dock-header';
+            var dockLabel = opts.metaSection ? 'Write your topic…' : (opts.mode === 'full' ? 'Write your post…' : 'Write a reply…');
+            dockHeader.innerHTML = '<i class="fa-regular fa-pen-to-square" aria-hidden="true"></i> <span>' + escapeHtml(dockLabel) + '</span>';
+            host.appendChild(dockHeader);
+
+            var isDocked = false;
+            var dockObserver = new IntersectionObserver(function(entries) {
+                entries.forEach(function(entry) {
+                    // If sentinel is out of view and above the viewport, we are docked
+                    var docked = !entry.isIntersecting && entry.boundingClientRect.top < 0;
+                    if (docked !== isDocked) {
+                        isDocked = docked;
+                        host.classList.toggle('is-docked', isDocked);
+                    }
+                });
+            }, { threshold: 0 });
+            dockObserver.observe(sentinel);
+            host.__dockObserver = dockObserver;
+
+            // Click docked bar to expand and focus
+            dockHeader.addEventListener('click', function() {
+                host.classList.remove('is-docked');
+                isDocked = false;
+                host.scrollIntoView({ behavior: 'smooth', block: 'end' });
+                if (editorRef.current) {
+                    setTimeout(function() {
+                        if (editorRef.current) editorRef.current.commands.focus('end');
+                    }, 300);
+                }
+            });
+
+            // Fallback: expand on focus
+            host.addEventListener('focusin', function() {
+                if (isDocked) {
+                    host.classList.remove('is-docked');
+                    isDocked = false;
+                }
+            });
+        }
+        // ────────────────────────────────────────────────────────────────────
+
         var deps = await loadTipTapDeps();
         var {
             Editor, Node, Extension, Mark,
@@ -2956,14 +3021,14 @@ function buildPollBuilder(legacyForm) {
         }
 
         function exec(cmd) {
-    if (!editorRef.current) return;
-    try {
-        cmd();
-    } catch (err) {
-        console.error('[EditorModule] Editor command failed:', err);
-    }
-    editorRef.current.commands.focus();
-}
+            if (!editorRef.current) return;
+            try {
+                cmd();
+            } catch (err) {
+                console.error('[EditorModule] Editor command failed:', err);
+            }
+            editorRef.current.commands.focus();
+        }
 
         var _backdrop = null;
         var _mobileMode = window.matchMedia('(max-width: 680px)').matches;
@@ -3662,9 +3727,9 @@ function buildPollBuilder(legacyForm) {
         });
 
         const Emoji = Node.create({
-    name: 'emoji', inline: true, group: 'inline', atom: true, selectable: false,
-    addAttributes() { return { src: { default: null }, alt: { default: '' }, loading: { default: 'lazy' }, decoding: { default: 'async' }, width: { default: 24 }, height: { default: 24 } }; },
-    parseHTML() { return [{ tag: 'img[src*="twemoji"]' }]; },
+            name: 'emoji', inline: true, group: 'inline', atom: true, selectable: false,
+            addAttributes() { return { src: { default: null }, alt: { default: '' }, loading: { default: 'lazy' }, decoding: { default: 'async' }, width: { default: 24 }, height: { default: 24 } }; },
+            parseHTML() { return [{ tag: 'img[src*="twemoji"]' }]; },
             renderHTML({ node, HTMLAttributes }) {
                 return ['img', Object.assign({}, HTMLAttributes, {
                     src: node.attrs.src, alt: node.attrs.alt,
@@ -3741,30 +3806,30 @@ function buildPollBuilder(legacyForm) {
             }
         });
 
-       const UnicodeEmojiRule = Extension.create({
-    name: 'unicodeEmojiRule',
-    addInputRules() {
-        return [new InputRule({
-            find: /([\u{1F300}-\u{1F9FF}\u{2600}-\u{27BF}\u{1F000}-\u{1F02F}])$/u,
-            handler: function ({ state, range, match }) {
-                var emoji = match[1];
-                var cp = emojiToCodePoint(emoji);
-                state.tr.replaceWith(
-                    range.from + (range.to - range.from - emoji.length),
-                    range.to,
-                    state.schema.nodes.emoji.create({
-                        src: TWEMOJI_BASE + cp + '.svg',
-                        alt: emoji,
-                        loading: 'lazy',
-                        decoding: 'async',
-                        width: 24,
-                        height: 24
-                    })
-                );
+        const UnicodeEmojiRule = Extension.create({
+            name: 'unicodeEmojiRule',
+            addInputRules() {
+                return [new InputRule({
+                    find: /([\u{1F300}-\u{1F9FF}\u{2600}-\u{27BF}\u{1F000}-\u{1F02F}])$/u,
+                    handler: function ({ state, range, match }) {
+                        var emoji = match[1];
+                        var cp = emojiToCodePoint(emoji);
+                        state.tr.replaceWith(
+                            range.from + (range.to - range.from - emoji.length),
+                            range.to,
+                            state.schema.nodes.emoji.create({
+                                src: TWEMOJI_BASE + cp + '.svg',
+                                alt: emoji,
+                                loading: 'lazy',
+                                decoding: 'async',
+                                width: 24,
+                                height: 24
+                            })
+                        );
+                    }
+                })];
             }
-        })];
-    }
-});
+        });
 
         const LiteYouTube = Node.create({
             name: 'liteYouTube',
@@ -3915,45 +3980,45 @@ function buildPollBuilder(legacyForm) {
         });
 
         const LinkPreview = Node.create({
-    name: 'linkPreview',
-    inline: true, group: 'inline', atom: true, draggable: true, selectable: true,
-    addAttributes() {
-        return {
-            href: {
-                default: '',
-                parseHTML: el => el.getAttribute('data-href') || '',
-                renderHTML: attrs => attrs.href ? { 'data-href': attrs.href } : {},
+            name: 'linkPreview',
+            inline: true, group: 'inline', atom: true, draggable: true, selectable: true,
+            addAttributes() {
+                return {
+                    href: {
+                        default: '',
+                        parseHTML: el => el.getAttribute('data-href') || '',
+                        renderHTML: attrs => attrs.href ? { 'data-href': attrs.href } : {},
+                    },
+                    title: {
+                        default: '',
+                        parseHTML: el => el.getAttribute('data-title') || '',
+                        renderHTML: attrs => attrs.title ? { 'data-title': attrs.title } : {},
+                    },
+                    description: {
+                        default: '',
+                        parseHTML: el => el.getAttribute('data-description') || '',
+                        renderHTML: attrs => attrs.description ? { 'data-description': attrs.description } : {},
+                    },
+                    author: {
+                        default: '',
+                        parseHTML: el => el.getAttribute('data-author') || '',
+                        renderHTML: attrs => attrs.author ? { 'data-author': attrs.author } : {},
+                    },
+                    imageSrc: {
+                        default: '',
+                        parseHTML: el => el.getAttribute('data-image-src') || '',
+                        renderHTML: attrs => attrs.imageSrc ? { 'data-image-src': attrs.imageSrc } : {},
+                    },
+                    loading: {
+                        default: false,
+                        parseHTML: el => el.getAttribute('data-loading') === 'true',
+                        renderHTML: attrs => attrs.loading ? { 'data-loading': 'true' } : {},
+                    },
+                };
             },
-            title: {
-                default: '',
-                parseHTML: el => el.getAttribute('data-title') || '',
-                renderHTML: attrs => attrs.title ? { 'data-title': attrs.title } : {},
+            parseHTML() {
+                return [{ tag: 'span[data-type="link-preview"]' }];
             },
-            description: {
-                default: '',
-                parseHTML: el => el.getAttribute('data-description') || '',
-                renderHTML: attrs => attrs.description ? { 'data-description': attrs.description } : {},
-            },
-            author: {
-                default: '',
-                parseHTML: el => el.getAttribute('data-author') || '',
-                renderHTML: attrs => attrs.author ? { 'data-author': attrs.author } : {},
-            },
-            imageSrc: {
-                default: '',
-                parseHTML: el => el.getAttribute('data-image-src') || '',
-                renderHTML: attrs => attrs.imageSrc ? { 'data-image-src': attrs.imageSrc } : {},
-            },
-            loading: {
-                default: false,
-                parseHTML: el => el.getAttribute('data-loading') === 'true',
-                renderHTML: attrs => attrs.loading ? { 'data-loading': 'true' } : {},
-            },
-        };
-    },
-    parseHTML() {
-        return [{ tag: 'span[data-type="link-preview"]' }];
-    },
             renderHTML({ node, HTMLAttributes }) {
                 var href = node.attrs.href;
                 var title = node.attrs.title;
@@ -4070,17 +4135,17 @@ function buildPollBuilder(legacyForm) {
         });
 
         const NSFW = Mark.create({
-    name: 'nsfw', inclusive: true,
-    parseHTML() { return [{ tag: 'span', getAttrs: el => el.classList.contains('ff-nsfw') ? {} : false }]; },
-    renderHTML() { return ['span', { class: 'ff-nsfw' }, 0]; },
-    addCommands() {
-        return {
-            setNSFW:    () => ({ commands }) => commands.setMark(this.name),
-            toggleNSFW: () => ({ commands }) => commands.toggleMark(this.name),
-            unsetNSFW:  () => ({ commands }) => commands.unsetMark(this.name),
-        };
-    },
-});
+            name: 'nsfw', inclusive: true,
+            parseHTML() { return [{ tag: 'span', getAttrs: el => el.classList.contains('ff-nsfw') ? {} : false }]; },
+            renderHTML() { return ['span', { class: 'ff-nsfw' }, 0]; },
+            addCommands() {
+                return {
+                    setNSFW:    () => ({ commands }) => commands.setMark(this.name),
+                    toggleNSFW: () => ({ commands }) => commands.toggleMark(this.name),
+                    unsetNSFW:  () => ({ commands }) => commands.unsetMark(this.name),
+                };
+            },
+        });
 
         const CustomMention = Mention.extend({
             addAttributes() {
@@ -4459,10 +4524,6 @@ function buildPollBuilder(legacyForm) {
             }
         });
 
-        // -------------------------------------------------------------------
-        // InlineAtomSelectionHighlight — Safely highlights images and emojis
-        // when they are part of a text selection.
-        // -------------------------------------------------------------------
         const InlineAtomSelectionHighlight = Extension.create({
             name: 'inlineAtomSelectionHighlight',
             addProseMirrorPlugins() {
@@ -4488,11 +4549,7 @@ function buildPollBuilder(legacyForm) {
             }
         });
 
-        // -------------------------------------------------------------------
-        // ForceImageSelection — Bypasses the browser's native text-selection
-        // engine to allow right-to-left dragging across images.
-        // -------------------------------------------------------------------
-                const ForceImageSelection = Extension.create({
+        const ForceImageSelection = Extension.create({
             name: 'forceImageSelection',
             addProseMirrorPlugins() {
                 let isDragging = false;
@@ -4508,12 +4565,12 @@ function buildPollBuilder(legacyForm) {
                                     if (coords) {
                                         isDragging = true;
                                         anchorPos = coords.pos;
-                                        view.dom.classList.add('is-dragging-text'); // <--- Add class
+                                        view.dom.classList.add('is-dragging-text');
                                     }
                                 }
                                 return false;
                             },
-                                                                                    mousemove(view, event) {
+                            mousemove(view, event) {
                                 if (!isDragging || anchorPos === null) return false;
                                 if (event.buttons !== 1) {
                                     isDragging = false;
@@ -4532,15 +4589,12 @@ function buildPollBuilder(legacyForm) {
                                 let hasImage = false;
                                 view.state.doc.nodesBetween(start, end, (node, pos) => {
                                     if (node.type.name === 'image' || node.type.name === 'emoji') {
-                                        // Get the DOM node to check if it's the transparent separator or a twemoji
                                         const domNode = view.nodeDOM(pos);
                                         
                                         if (domNode && domNode.classList) {
-                                            // Skip the transparent ProseMirror separator
                                             if (domNode.classList.contains('ProseMirror-separator')) {
-                                                return true; // Continue to next node
+                                                return true;
                                             }
-                                            // Skip twemoji (if you want them excluded from the image drag trigger too)
                                             if (domNode.classList.contains('twemoji')) {
                                                 return true;
                                             }
@@ -4564,7 +4618,7 @@ function buildPollBuilder(legacyForm) {
                                                 view.dispatch(view.state.tr.setSelection(newSelection));
                                             }
                                         } catch (err) {
-                                            // Silently ignore if the positions are completely invalid
+                                            // Silently ignore
                                         }
                                     }
                                 }
@@ -4573,11 +4627,10 @@ function buildPollBuilder(legacyForm) {
                             mouseup(view) {
                                 isDragging = false;
                                 anchorPos = null;
-                                view.dom.classList.remove('is-dragging-text'); // <--- Remove class
+                                view.dom.classList.remove('is-dragging-text');
                                 return false;
                             },
                             mouseleave(view) {
-                                // Failsafe in case the mouse leaves the window while dragging
                                 isDragging = false;
                                 anchorPos = null;
                                 view.dom.classList.remove('is-dragging-text');
@@ -4769,23 +4822,20 @@ function buildPollBuilder(legacyForm) {
                 if (a && a !== document.body && a !== document.documentElement) return;
                 editor.commands.focus('end');
             },
-                        onUpdate: function ({ editor }) {
+            onUpdate: function ({ editor }) {
                 var html = editor.getHTML();
                 var legacy = editorContentIsEmpty(html) ? '' : htmlToLegacy(html);
                 if (opts.onSync) opts.onSync(legacy);
                 updateSendState();
                 scheduleLivePreviewRefresh();
-                // ── NEW ─────────────────────────────────────────────
                 if (opts.metaSection && typeof opts.metaSection.onEditorUpdate === 'function') {
                     opts.metaSection.onEditorUpdate();
                 }
-                // ────────────────────────────────────────────────────
             }
         });
 
         editorRef.current = editor;
 
-        // ── NEW ─────────────────────────────────────────────────────
         if (opts.metaSection) {
             if (typeof opts.metaSection.attachEditor === 'function') {
                 opts.metaSection.attachEditor(editor);
@@ -4794,32 +4844,17 @@ function buildPollBuilder(legacyForm) {
                 opts.metaSection.setSendStateUpdater(updateSendState);
             }
         }
-        // ────────────────────────────────────────────────────────────
 
-// ── Initial sync to legacy textarea ───────────────────────────────
-// Without this, the textarea keeps whatever the forum stored —
-// `<p>[IMG]url[/IMG]</p>` — until the user types. The rich `<img>`
-// with width/height/loading/decoding lives only inside TipTap's
-// state until onUpdate fires. A user who opens the edit form and
-// submits immediately (no keystroke) posts the thin BBCode form
-// and loses every attribute. Sync once, on the first frame, so the
-// textarea always reflects what legacyToHtmlAsync + htmlToLegacy
-// produce.
-//
-// Skipped for mode:'reply' — the fast-reply textarea is the compose
-// target, populated by onUpdate as the user types, and re-syncing
-// the initial state risks churning a localStorage draft. Fast edit
-// (mode:'fastedit') doesn't pass onSync at all, so no-ops there.
-if (opts.onSync && opts.mode !== 'reply') {
-    var _initHtml = editor.getHTML();
-    if (!editorContentIsEmpty(_initHtml)) {
-        try {
-            opts.onSync(htmlToLegacy(_initHtml));
-        } catch (e) {
-            console.warn('[EditorModule] Initial sync to legacy textarea failed:', e);
+        if (opts.onSync && opts.mode !== 'reply') {
+            var _initHtml = editor.getHTML();
+            if (!editorContentIsEmpty(_initHtml)) {
+                try {
+                    opts.onSync(htmlToLegacy(_initHtml));
+                } catch (e) {
+                    console.warn('[EditorModule] Initial sync to legacy textarea failed:', e);
+                }
+            }
         }
-    }
-}
 
         var _origViewUpdateState = editor.view.updateState.bind(editor.view);
         editor.view.updateState = function (state) {
@@ -4891,9 +4926,9 @@ if (opts.onSync && opts.mode !== 'reply') {
                     if (node.textContent.trim()) { stateHasContent = true; return; }
                     var nm = node.type.name;
                     if (nm === 'image' || nm === 'emoji' || nm === 'liteYouTube' || nm === 'liteVimeo' ||
-    nm === 'linkPreview' || nm === 'imageUploadPlaceholder' || nm === 'horizontalRule') {
-    hasContent = true;
-}
+                        nm === 'linkPreview' || nm === 'imageUploadPlaceholder' || nm === 'horizontalRule') {
+                        stateHasContent = true;
+                    }
                 });
                 if (!stateHasContent) return;
 
@@ -4970,18 +5005,18 @@ if (opts.onSync && opts.mode !== 'reply') {
             var hideTimer = null;
 
             function isEligible(img) {
-    if (!img) return false;
-    if (img.classList.contains('twemoji')) return false;
-    if (img.classList.contains('ProseMirror-separator')) return false;
-    var src = img.getAttribute('src') || '';
-    if (!src) return false;
-    if (src.indexOf('twemoji') !== -1) return false;
-    var alt = img.getAttribute('alt') || '';
-    if (alt.startsWith(':') && alt.endsWith(':')) return false;
-    if (img.closest('.link-preview-card, .simple-link, .modern-embedded-link')) return false;
-    if (img.closest('.ff-upload-placeholder')) return false;
-    return true;
-}
+                if (!img) return false;
+                if (img.classList.contains('twemoji')) return false;
+                if (img.classList.contains('ProseMirror-separator')) return false;
+                var src = img.getAttribute('src') || '';
+                if (!src) return false;
+                if (src.indexOf('twemoji') !== -1) return false;
+                var alt = img.getAttribute('alt') || '';
+                if (alt.startsWith(':') && alt.endsWith(':')) return false;
+                if (img.closest('.link-preview-card, .simple-link, .modern-embedded-link')) return false;
+                if (img.closest('.ff-upload-placeholder')) return false;
+                return true;
+            }
 
             function position(img) {
                 var r = img.getBoundingClientRect();
@@ -5203,7 +5238,7 @@ if (opts.onSync && opts.mode !== 'reply') {
             });
         }
 
-                function updateSendState() {
+        function updateSendState() {
             if (!submitBtn) return;
             if (submitBtn.hasAttribute('data-saving')) { submitBtn.disabled = true; return; }
 
@@ -5214,12 +5249,10 @@ if (opts.onSync && opts.mode !== 'reply') {
                 return true;
             });
 
-            // ── NEW: respect the meta section's readiness ──────────────
             var metaReady = true;
             if (opts.metaSection && typeof opts.metaSection.isReady === 'function') {
                 metaReady = opts.metaSection.isReady();
             }
-            // ────────────────────────────────────────────────────────────
 
             var sendReady = !empty && !hasPlaceholder && metaReady;
             submitBtn.disabled = !sendReady;
@@ -5242,14 +5275,10 @@ if (opts.onSync && opts.mode !== 'reply') {
                 else previewBtn.setAttribute('title', 'Write something to preview it');
             }
 
-            // Auto-hide the preview when the editor becomes empty — matches
-    // the messenger. Without this, a preview rendered from content
-    // that was subsequently deleted stays visible, showing text that
-    // no longer exists in the editor.
-    if (empty && previewArea && previewArea.style.display !== 'none') {
-        previewArea.style.display = 'none';
-    }
-}
+            if (empty && previewArea && previewArea.style.display !== 'none') {
+                previewArea.style.display = 'none';
+            }
+        }
 
         previewBtn.onclick = function () {
             if (!editorRef.current || editorContentIsEmpty(editorRef.current.getHTML())) return;
@@ -5291,9 +5320,14 @@ if (opts.onSync && opts.mode !== 'reply') {
                 if (opts.onSync) opts.onSync(legacy);
             }
         };
+        
         host.__editorDestroy = function () {
             if (editor) {
                 try { editor.destroy(); } catch (e) {}
+            }
+            if (host.__dockObserver) {
+                host.__dockObserver.disconnect();
+                host.__dockObserver = null;
             }
         };
     }
