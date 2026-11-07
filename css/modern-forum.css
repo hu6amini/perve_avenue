@@ -3744,17 +3744,8 @@ section.modern-stats { flex-direction: column; width: 100%; }
   z-index: 1;
 }
 .modern-thumbnail--placeholder-bg {
-  /* Override the 'cover' rule from the base .modern-thumbnail class */
-  background-size: 4rem 4rem; 
   background-position: center;
   background-repeat: no-repeat;
-  /* Smooth transition for the hover effect */
-  transition: background-size 0.3s ease;
-}
-
-/* Add a nice zoom effect on hover to match standard thumbnails */
-.modern-card:hover .modern-thumbnail--placeholder-bg {
-  background-size: 4.2rem 4.2rem;
 }
 
 .latest-post-avatar { flex-shrink: 0; }
