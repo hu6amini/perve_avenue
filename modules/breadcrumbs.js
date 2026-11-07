@@ -240,11 +240,81 @@ const BreadcrumbsModule = (function () {
     // =========================================================================
     // TOPIC HEADER
     // =========================================================================
-        function extractTopicHeaderData() {
+       function extractTopicHeaderSplit(titleEl) {
+        if (!titleEl) return { eyebrow: '', eyebrowHtml: '', title: '', titleHtml: '' };
+
+        // FF's "send" / "edit" markup wraps the verb phrase in
+        //   <span style="font-weight:normal">…</span>
+        // followed by the entity in  <b>…</b> / <strong>…</strong>.
+        // A bold *inside* a normal topic title must NOT be treated as the
+        // entity name, so we only split when that font-weight:normal span
+        // exists as a direct child.
+        var eyebrowSpan = null;
+        var directSpans = titleEl.querySelectorAll(':scope > span');
+        for (var s = 0; s < directSpans.length; s++) {
+            var styleAttr = (directSpans[s].getAttribute('style') || '').replace(/\s+/g, '');
+            if (styleAttr.indexOf('font-weight:normal') !== -1) {
+                eyebrowSpan = directSpans[s];
+                break;
+            }
+        }
+
+        // No eyebrow span → whole .mtitle is the title (topic view / normal case).
+        if (!eyebrowSpan) {
+            var whole = extractTitleContent(titleEl);
+            return {
+                eyebrow:     '',
+                eyebrowHtml: '',
+                title:       whole.text,
+                titleHtml:   whole.html
+            };
+        }
+
+        // Locate the entity: the next <b>/<strong> sibling after the eyebrow span.
+        var entityEl = null;
+        var walker = eyebrowSpan.nextSibling;
+        while (walker) {
+            if (walker.nodeType === Node.ELEMENT_NODE &&
+                (walker.tagName === 'B' || walker.tagName === 'STRONG')) {
+                entityEl = walker;
+                break;
+            }
+            walker = walker.nextSibling;
+        }
+
+        // Eyebrow present but no bold entity that follows it — treat eyebrow
+        // as the whole thing (rare; safer than losing text).
+        if (!entityEl) {
+            var eb = extractTitleContent(eyebrowSpan);
+            return {
+                eyebrow:     eb.text,
+                eyebrowHtml: eb.html,
+                title:       '',
+                titleHtml:   ''
+            };
+        }
+
+        // Eyebrow = everything before the entity element.
+        var temp = document.createElement('div');
+        var node = titleEl.firstChild;
+        while (node && node !== entityEl) {
+            temp.appendChild(node.cloneNode(true));
+            node = node.nextSibling;
+        }
+        var eyebrowContent = extractTitleContent(temp);
+        var titleContent   = extractTitleContent(entityEl);
+
+        return {
+            eyebrow:     eyebrowContent.text,
+            eyebrowHtml: eyebrowContent.html,
+            title:       titleContent.text,
+            titleHtml:   titleContent.html
+        };
+    }     
+   
+       function extractTopicHeaderData() {
         var titleEl = document.querySelector(CONFIG.LEGACY_TITLE_SELECTOR);
-        var titleContent = extractTitleContent(titleEl);
-        var topicTitle     = titleContent.text;
-        var topicTitleHtml = titleContent.html;
+        var split = extractTopicHeaderSplit(titleEl);
 
         var statsEl = document.querySelector(CONFIG.LEGACY_STATS_SELECTOR);
         var replyCount = '', viewCount = '';
@@ -262,16 +332,35 @@ const BreadcrumbsModule = (function () {
             }
         }
         var shareLink = statsEl ? statsEl.querySelector('a.a2a_dd') : null;
-        return { topicTitle, topicTitleHtml, replyCount, viewCount, shareLink };
+
+        return {
+            eyebrow:        split.eyebrow,
+            eyebrowHtml:    split.eyebrowHtml,
+            topicTitle:     split.title,
+            topicTitleHtml: split.titleHtml,
+            replyCount:     replyCount,
+            viewCount:      viewCount,
+            shareLink:      shareLink
+        };
     }
 
-        function buildTopicHeaderHtml(data) {
+            function buildTopicHeaderHtml(data) {
         if (!data.topicTitle) return '';
-        var titleHtml = data.topicTitleHtml || escapeHtml(data.topicTitle);
-        var html = '<div class="topic-header"><div class="topic-title-content"><h1 class="topic-title">' + titleHtml + '</h1>';
+
+        var titleHtml   = data.topicTitleHtml || escapeHtml(data.topicTitle);
+        var eyebrowHtml = data.eyebrowHtml   || (data.eyebrow ? escapeHtml(data.eyebrow) : '');
+        var eyebrowBlock = eyebrowHtml
+            ? '<p class="topic-eyebrow">' + eyebrowHtml + '</p>'
+            : '';
+
+        var html = '<div class="topic-header">'
+                 + '<div class="topic-title-content">'
+                 + eyebrowBlock
+                 + '<h1 class="topic-title">' + titleHtml + '</h1>';
+
         if (data.viewCount || data.replyCount) {
             html += '<div class="topic-meta">';
-            if (data.viewCount) html += '<span class="topic-stats"><i class="fa-regular fa-eye" aria-hidden="true"></i><span>Views: ' + escapeHtml(data.viewCount) + '</span></span>';
+            if (data.viewCount)  html += '<span class="topic-stats"><i class="fa-regular fa-eye" aria-hidden="true"></i><span>Views: '   + escapeHtml(data.viewCount)  + '</span></span>';
             if (data.replyCount) html += '<span class="topic-stats"><i class="fa-regular fa-comment" aria-hidden="true"></i><span>Replies: ' + escapeHtml(data.replyCount) + '</span></span>';
             html += '</div>';
         }
