@@ -3743,22 +3743,18 @@ section.modern-stats { flex-direction: column; width: 100%; }
   text-decoration: none;
   z-index: 1;
 }
-.modern-thumbnail--placeholder {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 3rem;
-  color: var(--text-muted);
-  background: var(--surface-light);
+.modern-thumbnail--placeholder-bg {
+  /* Override the 'cover' rule from the base .modern-thumbnail class */
+  background-size: 4rem 4rem; 
+  background-position: center;
+  background-repeat: no-repeat;
+  /* Smooth transition for the hover effect */
+  transition: background-size 0.3s ease;
 }
-.modern-thumbnail--placeholder a {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 100%;
-  height: 100%;
-  text-decoration: none;
-  color: inherit;
+
+/* Add a nice zoom effect on hover to match standard thumbnails */
+.modern-card:hover .modern-thumbnail--placeholder-bg {
+  background-size: 4.2rem 4.2rem;
 }
 
 .latest-post-avatar { flex-shrink: 0; }
