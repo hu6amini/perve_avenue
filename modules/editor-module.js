@@ -2769,10 +2769,10 @@ function buildPollBuilder(legacyForm) {
         host.classList.add('modern-editor-dockable');
 
         var prevSentinel = host.parentNode.querySelector('.modern-dock-sentinel');
-        if (prevSentinel && prevSentinel.nextSibling === host) prevSentinel.remove();
+if (prevSentinel) prevSentinel.remove();
 
-        var prevPlaceholder = host.parentNode.querySelector('.modern-dock-placeholder');
-        if (prevPlaceholder && prevPlaceholder.nextSibling === host) prevPlaceholder.remove();
+var prevPlaceholder = host.parentNode.querySelector('.modern-dock-placeholder');
+if (prevPlaceholder) prevPlaceholder.remove();
 
         var existingHeader = host.querySelector('.modern-dock-header');
         if (existingHeader) existingHeader.remove();
@@ -5420,16 +5420,64 @@ function buildPollBuilder(legacyForm) {
             updateDockHeader();
         }
 
-        dockObserver = new IntersectionObserver(function (entries) {
-            entries.forEach(function (entry) {
-                var docked = entry.boundingClientRect.top < 0;
-                if (docked !== isDocked) {
-                    applyDockState(docked);
-                }
-            });
-        }, { threshold: 0 });
-        dockObserver.observe(sentinel);
-        host.__dockObserver = dockObserver;
+        // ── Dock evaluation ─────────────────────────────────────────────
+// Primary trigger: sentinel above viewport top (classic "scrolled
+// past"). Fallback trigger: page can't scroll far enough to push the
+// sentinel above the viewport, but the user is at max scroll AND the
+// sentinel is in the upper half of the viewport — i.e., the editor
+// would be taking up real estate the user is actively scrolling
+// through.
+function evaluateDock() {
+    if (!sentinel) return;
+
+    var rect  = sentinel.getBoundingClientRect();
+    var vh    = window.innerHeight;
+    var sy    = window.pageYOffset || document.documentElement.scrollTop || 0;
+    var docH  = document.documentElement.scrollHeight;
+    var maxSc = Math.max(0, docH - vh);
+
+    var sentinelDocY  = rect.top + sy;
+    var canScrollPast = maxSc > sentinelDocY;
+    var atBottom      = sy >= maxSc - 4;
+
+    var docked = rect.top < 0;
+
+    if (!docked && !canScrollPast && atBottom && rect.top < vh * 0.5) {
+        docked = true;
+    }
+
+    if (docked !== isDocked) applyDockState(docked);
+}
+
+dockObserver = new IntersectionObserver(function () {
+    evaluateDock();
+}, { threshold: 0 });
+dockObserver.observe(sentinel);
+
+// Scroll listener drives the fallback trigger. rAF-throttled so it
+// fires at most once per frame regardless of scroll velocity.
+var scrollRaf = null;
+function onScrollForDock() {
+    if (scrollRaf) return;
+    scrollRaf = requestAnimationFrame(function () {
+        scrollRaf = null;
+        evaluateDock();
+    });
+}
+window.addEventListener('scroll', onScrollForDock, { passive: true });
+
+// Defer the initial evaluation to the next frame so layout has
+// settled (measurements are more reliable after the browser has laid
+// out the freshly-built editor).
+requestAnimationFrame(evaluateDock);
+
+// ── Cleanup ──────────────────────────────────────────────────────
+var _prevCleanup = host.__dockCleanup;
+host.__dockCleanup = function () {
+    window.removeEventListener('scroll', onScrollForDock);
+    if (scrollRaf) { cancelAnimationFrame(scrollRaf); scrollRaf = null; }
+    if (typeof _prevCleanup === 'function') _prevCleanup();
+};
 
         dockHeader.addEventListener('click', function () {
             if (!isDocked) return;
