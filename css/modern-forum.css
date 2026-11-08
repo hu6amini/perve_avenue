@@ -5834,18 +5834,19 @@ body#topic .post .fastedit > :not(.modern-editor-container--fastedit) {
 .modern-dock-placeholder {
     width: 100%;
     height: 0;
+    transition: height 0.3s cubic-bezier(0.4, 0, 0.2, 1);
     pointer-events: none;
 }
 
 .modern-dock-sentinel {
-    display: block;
-    position: relative;
+    position: absolute;
+    top: -10px;
+    left: 0;
     width: 100%;
     height: 1px;
     pointer-events: none;
     visibility: hidden;
-    margin: 0;
-    padding: 0;
+    outline: none;
 }
 
 /* When docked (scrolled past the editor) */
@@ -5905,20 +5906,8 @@ body#topic .post .fastedit > :not(.modern-editor-container--fastedit) {
     max-height: none;
 }
 
-.modern-dock-body {
-    display: flex;
-    flex-direction: column;
-    min-height: 0;
-}
-
-/* Preserve rounded corners after wrapping */
-.modern-editor-dockable > .modern-dock-body > :first-child {
-    border-top-left-radius: var(--radius);
-    border-top-right-radius: var(--radius);
-}
-.modern-editor-dockable > .modern-dock-body > :last-child {
-    border-bottom-left-radius: var(--radius);
-    border-bottom-right-radius: var(--radius);
+.modern-editor-dockable.is-docked.is-minified > *:not(.modern-dock-header) {
+    display: none !important;
 }
 
 .modern-editor-dockable.is-docked.is-minified .modern-dock-header {
