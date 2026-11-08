@@ -2791,7 +2791,7 @@ function buildPollBuilder(legacyForm) {
 
             function updateDockHeader() {
                 if (isExpanded) {
-                    dockHeader.innerHTML = '<i class="fa-regular fa-chevron-down" aria-hidden="true"></i> <span>Minimize</span>';
+                    dockHeader.innerHTML = '<i class="fa-regular fa-angle-down" aria-hidden="true"></i> <span>Minimize</span>';
                 } else {
                     var dockLabel = opts.metaSection ? 'Write your topic…' : (opts.mode === 'full' ? 'Write your post…' : 'Write a reply…');
                     dockHeader.innerHTML = '<i class="fa-regular fa-pen-to-square" aria-hidden="true"></i> <span>' + escapeHtml(dockLabel) + '</span>';
