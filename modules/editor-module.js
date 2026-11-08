@@ -2749,7 +2749,7 @@ function buildPollBuilder(legacyForm) {
                 async function buildEditorInto(host, opts) {
         var editorRef = { current: null };
 
-                // ── Sticky Docked Editor Logic ──────────────────────────────────────
+        // ── Sticky Docked Editor Logic ──────────────────────────────────────
         if (opts.mode === 'reply' || opts.mode === 'full') {
             host.classList.add('modern-editor-dockable');
 
@@ -2781,10 +2781,11 @@ function buildPollBuilder(legacyForm) {
             // Move the editor inside the placeholder
             placeholder.appendChild(host);
 
-            // The sentinel determines when we've scrolled past the editor
+            // The sentinel determines when we've scrolled past the editor's natural position
             var sentinel = document.createElement('div');
             sentinel.className = 'modern-dock-sentinel';
-            placeholder.insertBefore(sentinel, host);
+            // Place the sentinel AFTER the placeholder
+            placeholder.parentNode.insertBefore(sentinel, placeholder.nextSibling);
 
             // The mini bar shown when docked
             var dockHeader = document.createElement('div');
@@ -2806,13 +2807,15 @@ function buildPollBuilder(legacyForm) {
 
             var dockObserver = new IntersectionObserver(function(entries) {
                 entries.forEach(function(entry) {
-                    var docked = entry.boundingClientRect.top < 0;
+                    // If the sentinel (placed after the placeholder) is NOT intersecting, 
+                    // it means the placeholder is stuck to the bottom of the screen.
+                    var docked = !entry.isIntersecting;
                     
                     if (docked !== isDocked) {
                         isDocked = docked;
                         
                         if (isDocked) {
-                            // Apply sticky positioning styles via class
+                            // Apply sticky styles via class
                             host.classList.add('is-docked');
                             
                             // By default, open minified unless already expanded
@@ -2822,7 +2825,7 @@ function buildPollBuilder(legacyForm) {
                             
                             document.body.classList.add('has-docked-editor');
                         } else {
-                            // Remove fixed positioning and restore flow
+                            // Reached the natural position in the document flow
                             host.classList.remove('is-docked');
                             host.classList.remove('is-minified');
                             isExpanded = false;
@@ -2861,6 +2864,9 @@ function buildPollBuilder(legacyForm) {
                     placeholder.parentNode.insertBefore(host, placeholder);
                     placeholder.parentNode.removeChild(placeholder);
                 }
+                if (sentinel && sentinel.parentNode) {
+                    sentinel.parentNode.removeChild(sentinel);
+                }
                 host.classList.remove('is-docked');
                 host.classList.remove('is-minified');
                 if (!document.querySelector('.modern-editor-dockable.is-docked')) {
@@ -2869,7 +2875,6 @@ function buildPollBuilder(legacyForm) {
             };
         }
         // ────────────────────────────────────────────────────────────────────
-           
         var deps = await loadTipTapDeps();
         var {
             Editor, Node, Extension, Mark,
