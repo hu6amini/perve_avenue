@@ -2781,10 +2781,11 @@ function buildPollBuilder(legacyForm) {
             // Move the editor inside the placeholder
             placeholder.appendChild(host);
 
-            // The sentinel determines when we've scrolled past the editor's natural position
+            // The sentinel sits right before the placeholder.
+            // When it leaves the viewport (top > window.innerHeight), we know 
+            // the user is scrolled up and the editor should float at the bottom.
             var sentinel = document.createElement('div');
             sentinel.className = 'modern-dock-sentinel';
-            // Place the sentinel BEFORE the placeholder
             placeholder.parentNode.insertBefore(sentinel, placeholder);
 
             // The mini bar shown when docked
@@ -2807,8 +2808,7 @@ function buildPollBuilder(legacyForm) {
 
             var dockObserver = new IntersectionObserver(function(entries) {
                 entries.forEach(function(entry) {
-                    // Dock if the sentinel is below the viewport.
-                    // This means the placeholder is off-screen and we should show the fixed bar.
+                    // Dock if the sentinel is out of view and below the viewport.
                     var docked = !entry.isIntersecting && entry.boundingClientRect.top > window.innerHeight;
                     
                     if (docked !== isDocked) {
