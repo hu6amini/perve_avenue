@@ -4629,7 +4629,6 @@ section.modern-stats { flex-direction: column; width: 100%; }
   box-shadow: none !important;
 }
 .modern-wysiwyg .ProseMirror img.ProseMirror-separator {
-  background-color: var(--bg-color) !important;
   height: 1.5em !important;
   vertical-align: middle !important;
   user-select: none !important;
