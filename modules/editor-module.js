@@ -2746,7 +2746,7 @@ function buildPollBuilder(legacyForm) {
     };
 }
 
-   async function buildEditorInto(host, opts) {
+        async function buildEditorInto(host, opts) {
         var editorRef = { current: null };
 
         // ── Sticky Docked Editor Logic ──────────────────────────────────────
@@ -2807,9 +2807,9 @@ function buildPollBuilder(legacyForm) {
 
             var dockObserver = new IntersectionObserver(function(entries) {
                 entries.forEach(function(entry) {
-                    // Dock if the sentinel is out of view and below the viewport top.
-                    // This means we are scrolled above the editor.
-                    var docked = !entry.isIntersecting && entry.boundingClientRect.top > 0;
+                    // Dock if the sentinel is below the viewport.
+                    // This means the placeholder is off-screen and we should show the fixed bar.
+                    var docked = !entry.isIntersecting && entry.boundingClientRect.top > window.innerHeight;
                     
                     if (docked !== isDocked) {
                         isDocked = docked;
@@ -2880,6 +2880,7 @@ function buildPollBuilder(legacyForm) {
             };
         }
         // ────────────────────────────────────────────────────────────────────
+        
         var deps = await loadTipTapDeps();
         var {
             Editor, Node, Extension, Mark,
@@ -5388,7 +5389,7 @@ function buildPollBuilder(legacyForm) {
             }
         };
         
-                host.__editorDestroy = function () {
+        host.__editorDestroy = function () {
             if (editor) {
                 try { editor.destroy(); } catch (e) {}
             }
