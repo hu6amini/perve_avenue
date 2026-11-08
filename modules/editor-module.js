@@ -2746,7 +2746,7 @@ function buildPollBuilder(legacyForm) {
     };
 }
 
-        async function buildEditorInto(host, opts) {
+                async function buildEditorInto(host, opts) {
         var editorRef = { current: null };
 
                 // ── Sticky Docked Editor Logic ──────────────────────────────────────
@@ -2754,11 +2754,6 @@ function buildPollBuilder(legacyForm) {
             host.classList.add('modern-editor-dockable');
 
             // Clean up previous DOM elements if this is a rebuild
-            var prevSentinel = host.parentNode.querySelector('.modern-dock-sentinel');
-            if (prevSentinel && prevSentinel.nextSibling === host) prevSentinel.remove();
-            var prevPlaceholder = host.parentNode.querySelector('.modern-dock-placeholder');
-            if (prevPlaceholder && prevPlaceholder.nextSibling === host) prevPlaceholder.remove();
-            
             var existingHeader = host.querySelector('.modern-dock-header');
             if (existingHeader) existingHeader.remove();
 
@@ -2771,15 +2766,25 @@ function buildPollBuilder(legacyForm) {
             // Clean up body class
             document.body.classList.remove('has-docked-editor');
 
-            // Create placeholder to keep document height stable when we switch to fixed positioning
+            // Detach host if it's currently inside an old placeholder
+            var oldPlaceholder = host.closest('.modern-dock-placeholder');
+            if (oldPlaceholder) {
+                oldPlaceholder.parentNode.insertBefore(host, oldPlaceholder);
+                oldPlaceholder.remove();
+            }
+
+            // Create placeholder to wrap the editor and keep document height stable
             var placeholder = document.createElement('div');
             placeholder.className = 'modern-dock-placeholder';
             host.parentNode.insertBefore(placeholder, host);
+            
+            // Move the editor inside the placeholder
+            placeholder.appendChild(host);
 
             // The sentinel determines when we've scrolled past the editor
             var sentinel = document.createElement('div');
             sentinel.className = 'modern-dock-sentinel';
-            host.parentNode.insertBefore(sentinel, host);
+            placeholder.insertBefore(sentinel, host);
 
             // The mini bar shown when docked
             var dockHeader = document.createElement('div');
@@ -2807,11 +2812,7 @@ function buildPollBuilder(legacyForm) {
                         isDocked = docked;
                         
                         if (isDocked) {
-                            // Measure height BEFORE changing to fixed
-                            var h = host.offsetHeight;
-                            placeholder.style.height = h + 'px';
-                            
-                            // Apply fixed positioning
+                            // Apply sticky positioning styles via class
                             host.classList.add('is-docked');
                             
                             // By default, open minified unless already expanded
@@ -2830,7 +2831,6 @@ function buildPollBuilder(legacyForm) {
                             if (!document.querySelector('.modern-editor-dockable.is-docked')) {
                                 document.body.classList.remove('has-docked-editor');
                             }
-                            placeholder.style.height = '0px';
                         }
                     }
                 });
@@ -2857,8 +2857,10 @@ function buildPollBuilder(legacyForm) {
 
             // Clean up on destroy
             host.__dockCleanup = function() {
-                if (placeholder && placeholder.parentNode) placeholder.parentNode.removeChild(placeholder);
-                if (sentinel && sentinel.parentNode) sentinel.parentNode.removeChild(sentinel);
+                if (placeholder && placeholder.parentNode) {
+                    placeholder.parentNode.insertBefore(host, placeholder);
+                    placeholder.parentNode.removeChild(placeholder);
+                }
                 host.classList.remove('is-docked');
                 host.classList.remove('is-minified');
                 if (!document.querySelector('.modern-editor-dockable.is-docked')) {
