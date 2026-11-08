@@ -2790,7 +2790,7 @@ function buildPollBuilder(legacyForm) {
 
         sentinel = document.createElement('div');
         sentinel.className = 'modern-dock-sentinel';
-        host.parentNode.insertBefore(sentinel, host);
+        host.parentNode.insertBefore(sentinel, placeholder);
     }
     // ─────────────────────────────────────────────────────────────────
 
