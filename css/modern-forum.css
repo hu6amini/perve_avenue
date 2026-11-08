@@ -5846,6 +5846,7 @@ body#topic .post .fastedit > :not(.modern-editor-container--fastedit) {
     height: 1px;
     pointer-events: none;
     visibility: hidden;
+    outline: none;
 }
 
 /* When docked (scrolled past the editor) */
