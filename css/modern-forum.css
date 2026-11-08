@@ -5827,7 +5827,8 @@ body#topic .post .fastedit > :not(.modern-editor-container--fastedit) {
 
 /* ── Sticky Docked Editor ────────────────────────────────────────── */
 .modern-editor-dockable {
-    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    transition: opacity 0.3s ease, transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    outline: none !important;
 }
 
 .modern-dock-placeholder {
