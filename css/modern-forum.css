@@ -5855,7 +5855,6 @@ body#topic .post .fastedit > :not(.modern-editor-container--fastedit) {
     z-index: 1000;
     max-width: 1200px;
     margin: auto;
-    background: var(--bg-color) !important;
     border-top: 1px solid var(--border-color) !important;
     box-shadow: 0 -4px 24px rgba(0, 0, 0, 0.15) !important;
     border-radius: var(--radius-lg) var(--radius-lg) 0 0 !important;
@@ -5928,7 +5927,7 @@ body#topic .post .fastedit > :not(.modern-editor-container--fastedit) {
 }
 
 .modern-editor-dockable.is-docked.is-minified .modern-dock-header:hover {
-    background: var(--hover-color);
+    background: var(--surface-light);
     color: var(--text-primary);
     border-color: var(--primary-color);
 }
