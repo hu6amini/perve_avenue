@@ -5827,30 +5827,34 @@ body#topic .post .fastedit > :not(.modern-editor-container--fastedit) {
 
 /* ── Sticky Docked Editor ────────────────────────────────────────── */
 .modern-editor-dockable {
-    position: relative;
     transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 .modern-dock-placeholder {
-    position: sticky;
-    bottom: 0;
-    z-index: 1000;
     width: 100%;
+    /* Height is dynamically set by JS to prevent layout jumps */
 }
 
 .modern-dock-sentinel {
     position: absolute;
-    bottom: -1px;
+    top: -10px;
     left: 0;
     width: 100%;
     height: 1px;
     pointer-events: none;
     visibility: hidden;
+    outline: none;
 }
 
 /* When docked (scrolled past the editor) */
 .modern-editor-dockable.is-docked {
-    /* No longer fixed, just visual chrome */
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    z-index: 1000;
+    max-width: 1200px;
+    margin: auto;
     background: var(--bg-color) !important;
     border-top: 1px solid var(--border-color) !important;
     box-shadow: 0 -4px 24px rgba(0, 0, 0, 0.15) !important;
@@ -5860,7 +5864,7 @@ body#topic .post .fastedit > :not(.modern-editor-container--fastedit) {
     flex-direction: column;
 }
 
-/* Nuke ALL transitions on the container while docked to prevent mid-state flashes */
+/* Nuke transitions while docked to prevent flashing */
 .modern-editor-dockable.is-docked,
 .modern-editor-dockable.is-docked *,
 .modern-editor-dockable.is-docked *::before,
