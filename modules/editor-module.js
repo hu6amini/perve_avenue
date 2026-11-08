@@ -2771,15 +2771,18 @@ function buildPollBuilder(legacyForm) {
             // Clean up body class
             document.body.classList.remove('has-docked-editor');
 
-            // Create placeholder to keep document height stable when we switch to fixed positioning
-            var placeholder = document.createElement('div');
-            placeholder.className = 'modern-dock-placeholder';
-            host.parentNode.insertBefore(placeholder, host);
+            // Sentinel first — it must be ABOVE the placeholder, so that growing
+// the placeholder never shifts the sentinel's viewport position. If the
+// sentinel ended up below the placeholder, growing the placeholder on
+// dock would push the sentinel back into view, un-dock, shrink the
+// placeholder, re-dock, and loop once per frame.
+var sentinel = document.createElement('div');
+sentinel.className = 'modern-dock-sentinel';
+host.parentNode.insertBefore(sentinel, host);
 
-            // The sentinel determines when we've scrolled past the editor
-            var sentinel = document.createElement('div');
-            sentinel.className = 'modern-dock-sentinel';
-            host.parentNode.insertBefore(sentinel, host);
+var placeholder = document.createElement('div');
+placeholder.className = 'modern-dock-placeholder';
+host.parentNode.insertBefore(placeholder, host);
 
             // The mini bar shown when docked
             var dockHeader = document.createElement('div');
