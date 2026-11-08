@@ -5867,12 +5867,24 @@ body#topic .post .fastedit > :not(.modern-editor-container--fastedit) {
     flex-direction: column;
 }
 
-.modern-editor-dockable,
+/* Nuke ALL transitions on the container while docked to prevent mid-state flashes */
+.modern-editor-dockable.is-docked,
+.modern-editor-dockable.is-docked *,
+.modern-editor-dockable.is-docked *::before,
+.modern-editor-dockable.is-docked *::after {
+    transition: none !important;
+    animation: none !important;
+}
+
+/* Nuke ANY focus ring, outline, or shadow mid-states */
+.modern-editor-dockable:focus,
+.modern-editor-dockable:focus-visible,
+.modern-editor-dockable:focus-within,
+.modern-editor-dockable *:focus,
 .modern-editor-dockable *:focus-visible,
-.modern-editor-container *:focus-visible,
-#modern-editor-fastreply,
-#modern-editor-fastreply *:focus-visible {
+.modern-editor-dockable *:focus-within {
     outline: none !important;
+    -webkit-tap-highlight-color: transparent !important;
 }
 
 .modern-editor-dockable.is-docked .modern-wysiwyg {
