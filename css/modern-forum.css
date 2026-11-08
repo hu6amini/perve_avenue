@@ -5733,7 +5733,10 @@ body.dropdown-sheet-open { overflow: hidden; }
 body#topic #fastreply     { scroll-margin-top: var(--space-lg); }
 #modern-editor-full       { margin-bottom: var(--space-xl); }
 
-.modern-editor-container .modern-replying-as { background: var(--surface-color); }
+.modern-editor-container .modern-replying-as { 
+ background: var(--surface-color); 
+ border-radius: 0;
+}
 .modern-editor-container .modern-actions     { background: var(--bg-color); }
 .modern-editor-container .modern-wysiwyg     { max-height: 60vh; }
 .modern-editor-container .modern-preview     { margin: var(--space-md) var(--pad-6); }
