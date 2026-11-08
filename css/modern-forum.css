@@ -5867,6 +5867,10 @@ body#topic .post .fastedit > :not(.modern-editor-container--fastedit) {
     flex-direction: column;
 }
 
+.modern-editor-dockable.is-docked:focus-visible {
+   outline: none;
+}
+
 .modern-editor-dockable.is-docked .modern-wysiwyg {
     max-height: 40vh;
 }
