@@ -2647,94 +2647,155 @@ function setupTooltipObserver() {
         ];
     }
 
-    function createCustomReactionPopup(buttonElement, postId) {
-        if (activePopup) {
-            activePopup.remove();
-            activePopup = null;
-            document.removeEventListener('click', activePopupClickHandler);
-        }
-        const buttonRect = buttonElement.getBoundingClientRect();
-        const originalPost = document.getElementById(CONFIG.POST_ID_PREFIX + postId);
-        if (originalPost) {
-            const emojiContainer = originalPost.querySelector('.st-emoji-container');
-            if (emojiContainer) {
-                const previewTrigger = emojiContainer.querySelector('.st-emoji-preview');
-                if (previewTrigger) {
-                    previewTrigger.style.display = 'block';
-                    previewTrigger.click();
-                    previewTrigger.style.display = '';
-                }
-            }
-        }
-        let loadingPopup = document.createElement('div');
-        loadingPopup.className = 'custom-reaction-popup loading';
-        loadingPopup.style.cssText = 'position:fixed;z-index:100000;background:#1a1a1a;border-radius:12px;box-shadow:0 4px 20px rgba(0,0,0,0.3);padding:20px;border:1px solid #333;left:' + (buttonRect.left - 50) + 'px;top:' + (buttonRect.bottom + 10) + 'px;color:white;font-size:14px;';
-        loadingPopup.textContent = 'Loading reactions...';
-        document.body.appendChild(loadingPopup);
-        setTimeout(() => {
-            const originalPopup = document.querySelector('.st-emoji-pop');
-            let emojis = [];
-            if (originalPopup) {
-                originalPopup.querySelectorAll('.st-emoji-content').forEach(el => {
-                    const dataFui = el.getAttribute('data-fui');
-                    const img = el.querySelector('img');
-                    const imgSrc = img ? img.getAttribute('src') : '';
-                    const imgAlt = img ? img.getAttribute('alt') : '';
-                    let name = dataFui ? dataFui.replace(/:/g, '') : '';
-                    if (!name && imgAlt) name = imgAlt.replace(/:/g, '');
-                    emojis.push({ name, alt: dataFui || imgAlt, src: imgSrc, rid: el.getAttribute('data-rid') });
-                });
-            }
-            loadingPopup.remove();
-            if (emojis.length === 0) emojis = getDefaultEmojis();
-            const popup = document.createElement('div');
-            popup.className = 'custom-reaction-popup';
-            popup.style.cssText = 'position:fixed;z-index:100001;background:#1a1a1a;border-radius:12px;box-shadow:0 4px 20px rgba(0,0,0,0.3);padding:12px;border:1px solid #333;left:' + (buttonRect.left - 100) + 'px;top:' + (buttonRect.bottom + 10) + 'px;';
-            const emojiGrid = document.createElement('div');
-            emojiGrid.style.cssText = 'display:grid;grid-template-columns:repeat(4,1fr);gap:8px;';
-            emojis.forEach(emoji => {
-                const emojiItem = document.createElement('div');
-                emojiItem.className = 'custom-emoji-item';
-                emojiItem.style.cssText = 'cursor:pointer;padding:8px;text-align:center;border-radius:8px;transition:background 0.2s;';
-                const img = document.createElement('img');
-                img.src = emoji.src || 'https://images.weserv.nl/?url=https://upload.forumfree.net/i/fc11517378/emojis/' + encodeURIComponent(emoji.name) + '.png&output=webp&maxage=1y&q=90&il&af&l=9';
-                img.alt = emoji.alt || ':' + emoji.name + ':';
-                img.style.cssText = 'width:32px;height:32px;object-fit:contain;';
-                img.loading = 'lazy';
-                img.onerror = function () { if (!this.src.includes('twemoji')) this.src = 'https://twemoji.maxcdn.com/v/latest/svg/1f606.svg'; };
-                emojiItem.appendChild(img);
-                emojiItem.addEventListener('mouseenter', function () { this.style.backgroundColor = '#333'; });
-                emojiItem.addEventListener('mouseleave', function () { this.style.backgroundColor = 'transparent'; });
-                emojiItem.addEventListener('click', function () {
-                    const originalPopup = document.querySelector('.st-emoji-pop');
-                    if (originalPopup) {
-                        const reactionElements = originalPopup.querySelectorAll('.st-emoji-content');
-                        let found = false;
-                        for (const el of reactionElements) {
-                            const dataFui = el.getAttribute('data-fui');
-                            const imgEl = el.querySelector('img');
-                            const imgAlt = imgEl ? imgEl.getAttribute('alt') : '';
-                            if (dataFui === emoji.alt || imgAlt === emoji.alt || dataFui === ':' + emoji.name + ':' || (emoji.rid && el.getAttribute('data-rid') === emoji.rid)) {
-                                el.click();
-                                found = true;
-                                break;
-                            }
-                        }
-                        if (!found && reactionElements.length > 0) reactionElements[0].click();
-                    }
-                    popup.remove();
-                    activePopup = null;
-                    setTimeout(() => refreshReactionDisplay(postId), CONFIG.REACTION_DELAY);
-                });
-                emojiGrid.appendChild(emojiItem);
-            });
-            popup.appendChild(emojiGrid);
-            document.body.appendChild(popup);
-            activePopup = popup;
-            document.addEventListener('click', activePopupClickHandler);
-        }, 200);
+    // Anchors the popup to the button and clamps to the viewport.
+// Must be called AFTER the popup is in the DOM — getBoundingClientRect
+// returns zeros for detached nodes.
+function positionReactionPopup(popup, anchorEl) {
+    const anchorRect = anchorEl.getBoundingClientRect();
+    const popupRect = popup.getBoundingClientRect();
+    const vw = window.innerWidth;
+    const vh = window.innerHeight;
+    const margin = 8;
+    const gap = 6;
+
+    // Preferred: below the anchor, left-aligned
+    let left = anchorRect.left;
+    let top = anchorRect.bottom + gap;
+
+    // Horizontal clamp
+    if (left + popupRect.width > vw - margin) {
+        left = vw - popupRect.width - margin;
+    }
+    if (left < margin) left = margin;
+
+    // Vertical: below if it fits; flip above if it doesn't; clamp as last resort
+    if (top + popupRect.height > vh - margin) {
+        const above = anchorRect.top - popupRect.height - gap;
+        top = (above >= margin) ? above : Math.max(margin, vh - popupRect.height - margin);
     }
 
+    popup.style.left = left + 'px';
+    popup.style.top = top + 'px';
+}
+    
+    function createCustomReactionPopup(buttonElement, postId) {
+    if (activePopup) {
+        activePopup.remove();
+        activePopup = null;
+        document.removeEventListener('click', activePopupClickHandler);
+    }
+
+    // Trigger the legacy widget so it reveals its emoji list for us to read
+    const originalPost = document.getElementById(CONFIG.POST_ID_PREFIX + postId);
+    if (originalPost) {
+        const emojiContainer = originalPost.querySelector('.st-emoji-container');
+        if (emojiContainer) {
+            const previewTrigger = emojiContainer.querySelector('.st-emoji-preview');
+            if (previewTrigger) {
+                previewTrigger.style.display = 'block';
+                previewTrigger.click();
+                previewTrigger.style.display = '';
+            }
+        }
+    }
+
+    // Loading state — CSS provides the visuals, JS only sets position
+    const loadingPopup = document.createElement('div');
+    loadingPopup.className = 'custom-reaction-popup loading';
+    loadingPopup.textContent = 'Loading reactions…';
+    document.body.appendChild(loadingPopup);
+    positionReactionPopup(loadingPopup, buttonElement);
+
+    setTimeout(() => {
+        const originalPopup = document.querySelector('.st-emoji-pop');
+        let emojis = [];
+        if (originalPopup) {
+            originalPopup.querySelectorAll('.st-emoji-content').forEach(el => {
+                const dataFui = el.getAttribute('data-fui');
+                const img = el.querySelector('img');
+                const imgSrc = img ? img.getAttribute('src') : '';
+                const imgAlt = img ? img.getAttribute('alt') : '';
+                let name = dataFui ? dataFui.replace(/:/g, '') : '';
+                if (!name && imgAlt) name = imgAlt.replace(/:/g, '');
+                emojis.push({ name, alt: dataFui || imgAlt, src: imgSrc, rid: el.getAttribute('data-rid') });
+            });
+        }
+        loadingPopup.remove();
+        if (emojis.length === 0) emojis = getDefaultEmojis();
+
+        const popup = document.createElement('div');
+        popup.className = 'custom-reaction-popup';
+        popup.setAttribute('role', 'menu');
+        popup.setAttribute('aria-label', 'Reactions');
+
+        const emojiGrid = document.createElement('div');
+        emojiGrid.className = 'custom-emoji-grid';
+
+        emojis.forEach(emoji => {
+            const emojiItem = document.createElement('div');
+            emojiItem.className = 'custom-emoji-item';
+            emojiItem.setAttribute('role', 'menuitem');
+            emojiItem.setAttribute('tabindex', '0');
+            emojiItem.setAttribute('title', emoji.alt || ':' + emoji.name + ':');
+            emojiItem.setAttribute('aria-label', emoji.alt || emoji.name);
+
+            const img = document.createElement('img');
+            img.src = emoji.src || ('https://images.weserv.nl/?url=https://upload.forumfree.net/i/fc11517378/emojis/' + encodeURIComponent(emoji.name) + '.png&output=webp&maxage=1y&q=90&il&af&l=9');
+            img.alt = emoji.alt || ':' + emoji.name + ':';
+            img.loading = 'lazy';
+            img.width = 32;
+            img.height = 32;
+            img.onerror = function () {
+                if (!this.src.includes('twemoji')) {
+                    this.src = 'https://twemoji.maxcdn.com/v/latest/svg/1f606.svg';
+                }
+            };
+            emojiItem.appendChild(img);
+
+            const activate = function (e) {
+                if (e) { e.preventDefault(); e.stopPropagation(); }
+                const livePopup = document.querySelector('.st-emoji-pop');
+                if (livePopup) {
+                    const reactionElements = livePopup.querySelectorAll('.st-emoji-content');
+                    let found = false;
+                    for (const el of reactionElements) {
+                        const dataFui = el.getAttribute('data-fui');
+                        const imgEl = el.querySelector('img');
+                        const imgAlt = imgEl ? imgEl.getAttribute('alt') : '';
+                        if (dataFui === emoji.alt || imgAlt === emoji.alt ||
+                            dataFui === ':' + emoji.name + ':' ||
+                            (emoji.rid && el.getAttribute('data-rid') === emoji.rid)) {
+                            el.click();
+                            found = true;
+                            break;
+                        }
+                    }
+                    if (!found && reactionElements.length > 0) reactionElements[0].click();
+                }
+                popup.remove();
+                activePopup = null;
+                document.removeEventListener('click', activePopupClickHandler);
+                setTimeout(() => refreshReactionDisplay(postId), CONFIG.REACTION_DELAY);
+            };
+
+            emojiItem.addEventListener('click', activate);
+            emojiItem.addEventListener('keydown', function (e) {
+                if (e.key === 'Enter' || e.key === ' ' || e.key === 'Spacebar') {
+                    activate(e);
+                }
+            });
+
+            emojiGrid.appendChild(emojiItem);
+        });
+
+        popup.appendChild(emojiGrid);
+        document.body.appendChild(popup);
+        positionReactionPopup(popup, buttonElement);
+        activePopup = popup;
+        document.addEventListener('click', activePopupClickHandler);
+    }, 200);
+}
+    
     function activePopupClickHandler(e) {
         if (activePopup && !activePopup.contains(e.target) && !e.target.closest('.reaction-btn')) {
             activePopup.remove();
@@ -3628,11 +3689,12 @@ document.addEventListener('keydown', function (e) {
             if (btn) { e.preventDefault(); handleCodeCopy(btn); }
         });
         document.addEventListener('keydown', function (e) {
-            if (e.key === 'Escape' && activePopup) {
-                activePopup.remove();
-                activePopup = null;
-            }
-        });
+    if (e.key === 'Escape' && activePopup) {
+        activePopup.remove();
+        activePopup = null;
+        document.removeEventListener('click', activePopupClickHandler);
+    }
+});
     }
 
     // ============================================================================
