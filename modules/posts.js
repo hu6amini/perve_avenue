@@ -1866,14 +1866,30 @@ function wrapImagesWithDimensions(container) {
     images.forEach(img => attemptWrapImage(img));
 }
 
+function isTwemojiLike(img) {
+    if (!img || img.tagName !== 'IMG') return false;
+
+    if (img.classList.contains('twemoji')) return true;
+
+    const alt = img.getAttribute('alt') || '';
+    if (alt.startsWith(':') && alt.endsWith(':')) return true;
+
+    // src may be weserv-proxied (encoded) — data-original is the real URL.
+    // Check both, lowercased, so host/path matching is uniform.
+    const urls = [
+        img.getAttribute('src') || '',
+        img.getAttribute('data-original') || ''
+    ].join(' ').toLowerCase();
+
+    return /twemoji\.maxcdn\.com|twemoji\.jsdelivr\.net|twemoji\.jdecked\.com|cdn\.jsdelivr\.net\/(?:gh\/jdecked\/twemoji|emojione)|forumfree\.net\/i\/[^/]*\/emojis\//.test(urls);
+}
+
 function attemptWrapImage(img) {
     if (!img || !img.parentNode) return;
 
     // Skip if already wrapped or inside an embed / wrapper
     if (img.closest('.modern-embedded-link, .image-wrapper, .nsfw-image')) return;
-    if (img.classList.contains('twemoji')) return;
-    const alt = img.getAttribute('alt');
-    if (alt && alt.startsWith(':') && alt.endsWith(':')) return;
+    if (isTwemojiLike(img)) return;
 
     const isNSFW = img.getAttribute('data-nsfw') === 'true';
     const dataSize = img.getAttribute('data-size');
