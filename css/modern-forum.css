@@ -438,6 +438,13 @@
   box-shadow: 0 0 0 2px var(--group-global-moderator), 0 4px 12px rgba(0, 0, 0, 0.2);
 }
 
+.post-card.group-moderator .avatar-circle,
+.post-card.group-moderator .initial-avatar { border-color: var(--group-moderator) !important; }
+.post-card.group-moderator .avatar-circle:hover,
+.post-card.group-moderator .initial-avatar:hover {
+  box-shadow: 0 0 0 2px var(--group-moderator), 0 4px 12px rgba(0, 0, 0, 0.2);
+}
+
 .post-card.group-game-dev .avatar-circle,
 .post-card.group-game-dev .initial-avatar { border-color: var(--group-game-dev) !important; }
 .post-card.group-game-dev .avatar-circle:hover,
@@ -2508,6 +2515,11 @@ body.modal-open {
 .modern-like-item.group-global-moderator .modal-initial-avatar { border-color: var(--group-global-moderator) !important; }
 .modern-like-item.group-global-moderator .modern-like-avatar:hover,
 .modern-like-item.group-global-moderator .modal-initial-avatar:hover { box-shadow: 0 0 0 2px var(--group-global-moderator), 0 4px 12px rgba(0,0,0,0.2); }
+
+.modern-like-item.group-moderator .modern-like-avatar,
+.modern-like-item.group-moderator .modal-initial-avatar { border-color: var(--group-moderator) !important; }
+.modern-like-item.group-moderator .modern-like-avatar:hover,
+.modern-like-item.group-moderator .modal-initial-avatar:hover { box-shadow: 0 0 0 2px var(--group-moderator), 0 4px 12px rgba(0,0,0,0.2); }
 
 .modern-like-item.group-game-dev .modern-like-avatar,
 .modern-like-item.group-game-dev .modal-initial-avatar { border-color: var(--group-game-dev) !important; }
@@ -4983,6 +4995,7 @@ lite-vimeo.lite-activated > .lite-embed-playbtn { display: none; }
 .msg-sender-avatar.group-founder          { border-color: var(--group-founder); }
 .msg-sender-avatar.group-administrator    { border-color: var(--group-administrator); }
 .msg-sender-avatar.group-global-moderator { border-color: var(--group-global-moderator); }
+.msg-sender-avatar.group-moderator        { border-color: var(--group-moderator); }
 .msg-sender-avatar.group-game-dev         { border-color: var(--group-game-dev); }
 .msg-sender-avatar.group-fan              { border-color: var(--group-fan); }
 .msg-sender-avatar.group-member           { border-color: var(--group-member); }
