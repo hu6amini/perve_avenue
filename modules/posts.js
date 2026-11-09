@@ -2607,38 +2607,14 @@ function setupTooltipObserver() {
     }
 
     // ============================================================================
-    // REACTION POPUP (unchanged)
+    // REACTION POPUP — legacy trigger + modern popup
+    //   CSS-driven visuals (see .custom-reaction-popup in modern-forum.css)
+    //   Anchored to the clicked button via positionReactionPopup; popup
+    //   is absolute-positioned, coordinates converted from viewport to
+    //   document space so it scrolls with the button.
+    //   The picked reaction carries .is-picked (from the legacy
+    //   st-emoji-on class) and renders with an accent ring + dot.
     // ============================================================================
-    function getAvailableReactions(postId) {
-        const originalPost = document.getElementById(CONFIG.POST_ID_PREFIX + postId);
-        if (!originalPost) return Promise.resolve([]);
-        const emojiContainer = originalPost.querySelector('.st-emoji-container');
-        if (!emojiContainer) return Promise.resolve([]);
-        const previewTrigger = emojiContainer.querySelector('.st-emoji-preview');
-        if (!previewTrigger) return Promise.resolve([]);
-        previewTrigger.style.display = 'block';
-        previewTrigger.click();
-        previewTrigger.style.display = '';
-        return new Promise(resolve => {
-            setTimeout(() => {
-                const originalPopup = document.querySelector('.st-emoji-pop');
-                const emojis = [];
-                if (originalPopup) {
-                    originalPopup.querySelectorAll('.st-emoji-content').forEach(el => {
-                        const dataFui = el.getAttribute('data-fui');
-                        const img = el.querySelector('img');
-                        const imgSrc = img ? img.getAttribute('src') : '';
-                        const imgAlt = img ? img.getAttribute('alt') : '';
-                        let name = dataFui ? dataFui.replace(/:/g, '') : '';
-                        if (!name && imgAlt) name = imgAlt.replace(/:/g, '');
-                        emojis.push({ name, alt: dataFui || imgAlt, src: imgSrc, rid: el.getAttribute('data-rid') });
-                    });
-                }
-                if (originalPopup) originalPopup.remove();
-                resolve(emojis);
-            }, 150);
-        });
-    }
 
     function getDefaultEmojis() {
         return [
@@ -2720,8 +2696,13 @@ function positionReactionPopup(popup, anchorEl) {
                 const imgAlt = img ? img.getAttribute('alt') : '';
                 let name = dataFui ? dataFui.replace(/:/g, '') : '';
                 if (!name && imgAlt) name = imgAlt.replace(/:/g, '');
-                emojis.push({ name, alt: dataFui || imgAlt, src: imgSrc, rid: el.getAttribute('data-rid') });
-            });
+                emojis.push({
+    name,
+    alt: dataFui || imgAlt,
+    src: imgSrc,
+    rid: el.getAttribute('data-rid'),
+    isOn: el.classList.contains('st-emoji-on')
+});
         }
         loadingPopup.remove();
         if (emojis.length === 0) emojis = getDefaultEmojis();
@@ -2736,11 +2717,12 @@ function positionReactionPopup(popup, anchorEl) {
 
         emojis.forEach(emoji => {
             const emojiItem = document.createElement('div');
-            emojiItem.className = 'custom-emoji-item';
-            emojiItem.setAttribute('role', 'menuitem');
-            emojiItem.setAttribute('tabindex', '0');
-            emojiItem.setAttribute('title', emoji.alt || ':' + emoji.name + ':');
-            emojiItem.setAttribute('aria-label', emoji.alt || emoji.name);
+emojiItem.className = 'custom-emoji-item' + (emoji.isOn ? ' is-picked' : '');
+emojiItem.setAttribute('role', 'menuitemcheckbox');
+emojiItem.setAttribute('aria-checked', emoji.isOn ? 'true' : 'false');
+emojiItem.setAttribute('tabindex', '0');
+emojiItem.setAttribute('title', emoji.alt || ':' + emoji.name + ':');
+emojiItem.setAttribute('aria-label', emoji.alt || emoji.name);
 
             const img = document.createElement('img');
             img.src = emoji.src || ('https://images.weserv.nl/?url=https://upload.forumfree.net/i/fc11517378/emojis/' + encodeURIComponent(emoji.name) + '.png&output=webp&maxage=1y&q=90&il&af&l=9');
