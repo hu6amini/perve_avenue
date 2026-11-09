@@ -2657,25 +2657,28 @@ function positionReactionPopup(popup, anchorEl) {
     const vh = window.innerHeight;
     const margin = 8;
     const gap = 6;
+    const sx = window.scrollX || window.pageXOffset;
+    const sy = window.scrollY || window.pageYOffset;
 
-    // Preferred: below the anchor, left-aligned
-    let left = anchorRect.left;
-    let top = anchorRect.bottom + gap;
+    // Preferred: below the anchor, left-aligned — all in viewport coords
+    let vLeft = anchorRect.left;
+    let vTop = anchorRect.bottom + gap;
 
     // Horizontal clamp
-    if (left + popupRect.width > vw - margin) {
-        left = vw - popupRect.width - margin;
+    if (vLeft + popupRect.width > vw - margin) {
+        vLeft = vw - popupRect.width - margin;
     }
-    if (left < margin) left = margin;
+    if (vLeft < margin) vLeft = margin;
 
     // Vertical: below if it fits; flip above if it doesn't; clamp as last resort
-    if (top + popupRect.height > vh - margin) {
+    if (vTop + popupRect.height > vh - margin) {
         const above = anchorRect.top - popupRect.height - gap;
-        top = (above >= margin) ? above : Math.max(margin, vh - popupRect.height - margin);
+        vTop = (above >= margin) ? above : Math.max(margin, vh - popupRect.height - margin);
     }
 
-    popup.style.left = left + 'px';
-    popup.style.top = top + 'px';
+    // Convert viewport coords to document coords before assigning
+    popup.style.left = (vLeft + sx) + 'px';
+    popup.style.top = (vTop + sy) + 'px';
 }
     
     function createCustomReactionPopup(buttonElement, postId) {
