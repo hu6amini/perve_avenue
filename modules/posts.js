@@ -313,7 +313,7 @@ const highlightCode = (codeText) => {
                 // inside a <p> that later gets a div wrapper inside it.
                 if (child.nodeType === 1 &&
                     child.tagName === 'IMG' &&
-                    !child.classList.contains('twemoji') &&
+                    !isTwemojiLike(child) &&
                     !hasVisibleContent(inlineBuffer)) {
                     inlineBuffer = [];
                     newChildren.push(child);
