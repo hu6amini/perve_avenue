@@ -6168,7 +6168,7 @@ body.has-docked-editor {
    everything comes from the theme tokens.
    ------------------------------------------------------------ */
 .custom-reaction-popup {
-  position: fixed;
+  position: absolute;
   z-index: 100001;
   background: var(--surface-color);
   border: 1px solid var(--border-color);
