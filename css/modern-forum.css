@@ -284,6 +284,33 @@
   height: auto;
 }
 
+/* Twemoji by URL — catches class-less body twemojis that the
+   .twemoji class rule above can't match. Scoped inside .post-message
+   so it outranks `.image-wrapper img` (both (0,1,1)) by source
+   order and specificity. */
+.post-message img[src*="twemoji"],
+.post-signature img[src*="twemoji"] {
+  display: inline-block;
+  width: 1.25em;
+  height: 1.25em;
+  vertical-align: -0.1em;
+  max-width: none;   /* override img { max-width: 100% } — emoji are tiny */
+}
+
+/* Forumfree custom emojis — served via the weserv proxy, so the
+   src is https://images.weserv.nl/?url=https%3A%2F%2Fupload.forumfree.net%2F...%2Femojis%2F...
+   The encoded src still contains the "forumfree.net" and "emojis"
+   substrings, so the compound attribute selector matches both
+   direct and proxied URLs. The alt fallback catches any emoji that
+   kept its :shortcode: alt. */
+.post-message img[src*="forumfree.net"][src*="emojis"],
+.post-message img[alt^=":"][alt$=":"],
+.post-signature img[src*="forumfree.net"][src*="emojis"],
+.post-signature img[alt^=":"][alt$=":"] {
+  display: inline;
+  vertical-align: -0.1em;
+}
+
 /* Reader-side image sizes (matches editor + preview) */
 .post-message img[data-size="small"]  { max-width: 25%; height: auto; }
 .post-message img[data-size="medium"] { max-width: 50%; height: auto; }
