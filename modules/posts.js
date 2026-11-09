@@ -1284,12 +1284,16 @@ function postProcessPreviewContent(el) {
         }
 
         let groupName = user?.group?.name || 'Member';
-        let roleClass = 'role-badge';
+                let roleClass = 'role-badge';
         const isFounder = user?.group && ((user.group.class?.includes('founder')) || (user.group.bodyclass?.includes('founder')));
+        const groupKey = groupName.toLowerCase();
         if (isFounder) { roleClass += ' founder'; groupName = 'Founder'; }
-        else if (groupName.toLowerCase() === 'administrator') roleClass += ' admin';
-        else if (groupName.toLowerCase() === 'moderator') roleClass += ' moderator';
-        else if (groupName.toLowerCase() === 'developer') roleClass += ' developer';
+        else if (groupKey === 'administrator') roleClass += ' admin';
+        else if (groupKey === 'global moderator') roleClass += ' global-moderator';
+        else if (groupKey === 'moderator') roleClass += ' moderator';
+        else if (groupKey === 'developer') roleClass += ' developer';
+        else if (groupKey === 'game dev') roleClass += ' game-dev';
+        else if (groupKey === 'fan') roleClass += ' fan';
         else roleClass += ' member';
         const groupCssClass = 'group-' + sanitizeGroupName(groupName);
 
@@ -2838,6 +2842,30 @@ emojiItem.setAttribute('aria-label', emoji.alt || emoji.name);
         return (num || 0).toString().replace(/\B(?=(\d{3})+(?!\d))/g, ',');
     }
 
+    function resolveGroupBadge(user, fallbackName) {
+    const groupNameRaw = user?.group?.name || fallbackName || 'Member';
+    const isFounder = user?.group && (
+        user.group.class?.includes('founder') ||
+        user.group.bodyclass?.includes('founder')
+    );
+    if (isFounder) {
+        return { roleClass: 'role-badge founder', groupName: 'Founder' };
+    }
+    const key = groupNameRaw.toLowerCase();
+    const classMap = {
+        'administrator':    'admin',
+        'global moderator': 'global-moderator',
+        'moderator':        'moderator',
+        'developer':        'developer',
+        'game dev':         'game-dev',
+        'fan':              'fan',
+    };
+    return {
+        roleClass: 'role-badge ' + (classMap[key] || 'member'),
+        groupName: isFounder ? 'Founder' : groupNameRaw,
+    };
+}
+
     // ============================================================================
     // GENERATE MODERN CARD
     //
@@ -2873,10 +2901,14 @@ emojiItem.setAttribute('aria-label', emoji.alt || emoji.name);
         let groupName = user?.group?.name || data.groupText || 'Member';
         let roleClass = 'role-badge';
         const isFounder = user?.group && ((user.group.class?.includes('founder')) || (user.group.bodyclass?.includes('founder')));
+        const groupKey = groupName.toLowerCase();
         if (isFounder) { roleClass += ' founder'; groupName = 'Founder'; }
-        else if (groupName.toLowerCase() === 'administrator') roleClass += ' admin';
-        else if (groupName.toLowerCase() === 'moderator') roleClass += ' moderator';
-        else if (groupName.toLowerCase() === 'developer') roleClass += ' developer';
+        else if (groupKey === 'administrator') roleClass += ' admin';
+        else if (groupKey === 'global moderator') roleClass += ' global-moderator';
+        else if (groupKey === 'moderator') roleClass += ' moderator';
+        else if (groupKey === 'developer') roleClass += ' developer';
+        else if (groupKey === 'game dev') roleClass += ' game-dev';
+        else if (groupKey === 'fan') roleClass += ' fan';
         else roleClass += ' member';
         const groupCssClass = 'group-' + sanitizeGroupName(groupName);
 
