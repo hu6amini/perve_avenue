@@ -6160,3 +6160,71 @@ body.has-docked-editor {
     padding-top: var(--space-xs);
   }
 }
+
+/* ------------------------------------------------------------
+   29. CUSTOM REACTION POPUP
+   Visuals only — all positioning is left/top set inline by JS
+   (createCustomReactionPopup in posts.js). No hardcoded colours:
+   everything comes from the theme tokens.
+   ------------------------------------------------------------ */
+.custom-reaction-popup {
+  position: fixed;
+  z-index: 100001;
+  background: var(--surface-color);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-xl);
+  padding: var(--space-sm);
+  animation: reactionPopupIn 0.15s cubic-bezier(0.2, 0.9, 0.4, 1.1);
+}
+
+@keyframes reactionPopupIn {
+  from { opacity: 0; transform: scale(0.94); }
+  to   { opacity: 1; transform: scale(1); }
+}
+
+.custom-reaction-popup.loading {
+  display: flex;
+  align-items: center;
+  gap: var(--space-xs);
+  padding: var(--space-md) var(--space-lg);
+  color: var(--text-secondary);
+  font-family: var(--font-primary);
+  font-size: var(--text-sm);
+  white-space: nowrap;
+}
+
+.custom-reaction-popup .custom-emoji-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: var(--space-xs);
+  max-height: 260px;
+  overflow-y: auto;
+}
+
+.custom-reaction-popup .custom-emoji-item {
+  cursor: pointer;
+  padding: var(--space-xs);
+  border-radius: var(--radius);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.15s ease, transform 0.15s ease;
+  outline: none;
+}
+.custom-reaction-popup .custom-emoji-item:hover,
+.custom-reaction-popup .custom-emoji-item:focus-visible {
+  background: var(--hover-color);
+  transform: scale(1.08);
+}
+.custom-reaction-popup .custom-emoji-item:focus-visible {
+  outline: 2px solid var(--primary-color);
+  outline-offset: 2px;
+}
+.custom-reaction-popup .custom-emoji-item img {
+  width: 32px;
+  height: 32px;
+  object-fit: contain;
+  display: block;
+  pointer-events: none;
+}
