@@ -6209,12 +6209,57 @@ body.has-docked-editor {
   display: flex;
   align-items: center;
   justify-content: center;
-  transition: background 0.15s ease, transform 0.15s ease;
+  transition:
+    background 0.15s ease,
+    transform 0.15s ease,
+    opacity 0.15s ease,
+    border-color 0.15s ease,
+    box-shadow 0.15s ease;
   outline: none;
+  position: relative;
+  border: 1px solid transparent;
 }
-.custom-reaction-popup .custom-emoji-item:hover,
-.custom-reaction-popup .custom-emoji-item:focus-visible {
+
+/* Unpicked — dimmed so the user's active reaction pops. */
+.custom-reaction-popup .custom-emoji-item:not(.is-picked) img {
+  opacity: 0.5;
+  transition: opacity 0.15s ease;
+}
+.custom-reaction-popup .custom-emoji-item:not(.is-picked):hover img,
+.custom-reaction-popup .custom-emoji-item:not(.is-picked):focus-visible img {
+  opacity: 1;
+}
+
+/* Picked — accent ring + soft fill + a tiny status dot. */
+.custom-reaction-popup .custom-emoji-item.is-picked {
+  background: rgba(5, 150, 105, 0.12);
+  border-color: var(--primary-color);
+  box-shadow: 0 0 0 1px rgba(5, 150, 105, 0.2);
+}
+.custom-reaction-popup .custom-emoji-item.is-picked::after {
+  content: '';
+  position: absolute;
+  top: 2px;
+  right: 2px;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--primary-color);
+  box-shadow: 0 0 0 1.5px var(--surface-color);
+}
+.custom-reaction-popup .custom-emoji-item.is-picked img {
+  opacity: 1;
+}
+
+/* Hover/focus — pick and non-pick get distinct end states. */
+.custom-reaction-popup .custom-emoji-item:not(.is-picked):hover,
+.custom-reaction-popup .custom-emoji-item:not(.is-picked):focus-visible {
   background: var(--hover-color);
+  transform: scale(1.08);
+}
+.custom-reaction-popup .custom-emoji-item.is-picked:hover,
+.custom-reaction-popup .custom-emoji-item.is-picked:focus-visible {
+  background: rgba(5, 150, 105, 0.2);
   transform: scale(1.08);
 }
 .custom-reaction-popup .custom-emoji-item:focus-visible {
