@@ -2472,7 +2472,9 @@ function setupTooltipObserver() {
         const validPages = ['topic', 'send', 'blog', 'search'];
         if (!validPages.includes(document.body.id)) return;
 
-        const cards = document.querySelectorAll('#posts-container .post-card, #modern-summary-container .post-card');
+        const cards = document.querySelectorAll(
+    '#' + CONFIG.CONTAINER_ID + ' .post-card, #modern-summary-container .post-card'
+);
 
         cards.forEach(card => {
             if (card.dataset.lgInit === 'true') return;
