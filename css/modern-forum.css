@@ -289,7 +289,9 @@
    so it outranks `.image-wrapper img` (both (0,1,1)) by source
    order and specificity. */
 .post-message img[src*="twemoji"],
-.post-signature img[src*="twemoji"], .post-message img[src*="forumfree.net"][src*="emojis"] {
+.post-signature img[src*="twemoji"], 
+.post-message img[src*="forumfree.net"][src*="emojis"],
+.post-signature img[src*="forumfree.net"][src*="emojis"] {
   display: inline-block;
   width: 1.25em;
   height: 1.25em;
