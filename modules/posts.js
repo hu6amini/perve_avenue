@@ -2696,13 +2696,14 @@ function positionReactionPopup(popup, anchorEl) {
                 const imgAlt = img ? img.getAttribute('alt') : '';
                 let name = dataFui ? dataFui.replace(/:/g, '') : '';
                 if (!name && imgAlt) name = imgAlt.replace(/:/g, '');
-                emojis.push({
-    name,
-    alt: dataFui || imgAlt,
-    src: imgSrc,
-    rid: el.getAttribute('data-rid'),
-    isOn: el.classList.contains('st-emoji-on')
-});
+                    emojis.push({
+                    name,
+                    alt: dataFui || imgAlt,
+                    src: imgSrc,
+                    rid: el.getAttribute('data-rid'),
+                    isOn: el.classList.contains('st-emoji-on')
+                });
+            });
         }
         loadingPopup.remove();
         if (emojis.length === 0) emojis = getDefaultEmojis();
