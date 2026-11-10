@@ -667,14 +667,49 @@ var SimilarTopicsModule = (function () {
     );
 }
 
+    function attachTopicTips(card, thread, user) {
+    if (!card || !thread) return;
+
+    var start = (thread.info && thread.info.start) ? thread.info.start : {};
+    var mid = start.id || null;
+    if (!mid) return;
+    var username = decodeHtmlEntities(start.name || '') || 'Unknown';
+
+    var tipData = {
+        mid:        mid,
+        username:   username,
+        apiUser:    user || null,
+        groupText:  (user && user.group && user.group.name) || 'Member',
+        postCount:  (user && user.messages   != null) ? user.messages   : 0,
+        reputation: (user && user.reputation != null) ? user.reputation : 0,
+        isOnline:   !!(user && user.status === 'online')
+    };
+
+    // posts.js may not have finished evaluating yet — it exposes
+    // attachProfileTip in its public API object. Retry at 200ms
+    // intervals up to 5s, then give up silently (no tip is better
+    // than a broken tooltip).
+    var attempts = 0;
+    function tryAttach() {
+        var PM = window.ForumPostsModule;
+        if (PM && typeof PM.attachProfileTip === 'function') {
+            var avatarLink = card.querySelector('.latest-post-avatar a');
+            if (avatarLink) PM.attachProfileTip(avatarLink, tipData);
+
+            var authorLink = card.querySelector('.latest-post-author');
+            if (authorLink) PM.attachProfileTip(authorLink, tipData);
+            return;
+        }
+        if (++attempts < 25) setTimeout(tryAttach, 200);
+    }
+    tryAttach();
+}
+
     function renderList(threads) {
     var listEl = document.querySelector('#' + CONFIG.containerId + ' .similar-topics-list');
     if (!listEl) return;
 
-    if (threads.length === 0) {
-        renderEmpty(false);
-        return;
-    }
+    if (threads.length === 0) { renderEmpty(false); return; }
 
     var html = '';
     for (var i = 0; i < threads.length; i++) {
@@ -686,13 +721,26 @@ var SimilarTopicsModule = (function () {
         window.emojiReplacer.replaceSync(listEl);
     } else if (window.twemoji && typeof window.twemoji.parse === 'function') {
         window.twemoji.parse(listEl, {
-            folder: 'svg',
-            ext: '.svg',
+            folder: 'svg', ext: '.svg',
             base: 'https://twemoji.maxcdn.com/v/latest/',
-            className: 'twemoji',
-            size: 'svg'
+            className: 'twemoji', size: 'svg'
         });
     }
+
+    // NEW: attach profile hovercards to every card's avatar and
+    // username link. userDataCache is populated by prefetchStarterUsers
+    // before this function is called, so the tip carries real stats
+    // from the first paint.
+    threads.forEach(function (thread) {
+        var card = listEl.querySelector(
+            '.similar-topic-card[data-topic-id="' + thread.id + '"]'
+        );
+        if (!card) return;
+        var start = (thread.info && thread.info.start) ? thread.info.start : {};
+        var starterId = start.id || 0;
+        var user = starterId ? userDataCache.get(starterId) : null;
+        attachTopicTips(card, thread, user);
+    });
 
     attachPreviewHandlers(listEl);
 }
