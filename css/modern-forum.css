@@ -2236,6 +2236,26 @@
 .tip-profile-stat-value { color: var(--text-primary); font-weight: 600; font-size: var(--text-xs); white-space: nowrap; }
 .tip-profile-stat-label { color: var(--text-tertiary); font-size: 0.65rem; text-transform: capitalize; letter-spacing: 0.5px; }
 
+/* Group tinting for the hovercard — driven by .group-* on .tip-profile,
+   consumed via a local --tip-group-color custom property so each group
+   only needs one line, not three selectors per role. */
+.tip-profile.group-founder           { --tip-group-color: var(--group-founder); }
+.tip-profile.group-administrator     { --tip-group-color: var(--group-administrator); }
+.tip-profile.group-global-moderator  { --tip-group-color: var(--group-global-moderator); }
+.tip-profile.group-moderator         { --tip-group-color: var(--group-moderator); }
+.tip-profile.group-game-dev          { --tip-group-color: var(--group-game-dev); }
+.tip-profile.group-fan               { --tip-group-color: var(--group-fan); }
+.tip-profile.group-member            { --tip-group-color: var(--group-member); }
+
+.tip-profile .tip-avatar-img,
+.tip-profile .tip-avatar-initial {
+  border-color: var(--tip-group-color, var(--primary-color));
+}
+
+.tip-profile .tip-profile-group {
+  background: var(--tip-group-color, var(--primary-color));
+}
+
 .tip-profile-footer {
   border-top: 1px solid var(--border-color);
   padding: var(--pad-2) var(--pad-4);
