@@ -278,7 +278,7 @@
   height: 100%;
   object-fit: contain;
 }
-.post-message img:not(.embedded-link-image img, .post-message img[src*="forumfree.net"][src*="emojis"]) {
+.post-message img:not(.embedded-link-image img, .post-message img[src*="forumfree.net"][src*="emojis"], .post-message img[src*="twemoji"], .post-signature img[src*="twemoji"]) {
   max-width: 100%;
   border-radius: var(--radius);
   height: auto;
