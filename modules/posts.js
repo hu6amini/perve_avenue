@@ -2330,8 +2330,9 @@ function setupTooltipObserver() {
         }
 
         const isOnline = (user?.status === 'online') || data.isOnline;
+        const groupClass = 'group-' + sanitizeGroupName(groupName);
 
-        return '<div class="tip-profile">' +
+        return '<div class="tip-profile ' + groupClass + '">' +
             '<div class="tip-profile-header">' +
                 '<div class="tip-profile-avatar">' + avatarHtml + '</div>' +
                 '<div class="tip-profile-names">' +
