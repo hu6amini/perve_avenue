@@ -337,34 +337,36 @@ var MessengerModule = (function(Utils, EventBus) {
     }
 
     function getGroupClass(user) {
-        if (!user || !user.group) return 'group-member';
-        var groupName  = (user.group.name || '').toLowerCase();
-        var groupClass = (user.group.class || '').toLowerCase();
-        var groupBody  = (user.group.bodyclass || '').toLowerCase();
-        var groupId    = user.group.id;
+    if (!user || !user.group) return 'group-member';
 
-        if (groupClass.indexOf('founder') !== -1 || groupBody.indexOf('founder') !== -1 || groupName === 'founder') {
-            return 'group-founder';
-        }
-        if (groupName === 'administrator' || groupClass.indexOf('admin') !== -1 || groupId === 1) {
-            return 'group-administrator';
-        }
-        if (groupName === 'global moderator' || groupClass.indexOf('global_mod') !== -1) {
-            return 'group-global-moderator';
-        }
-        if (groupName === 'moderator' || groupClass.indexOf('mod') !== -1) {
-            return 'group-moderator';
-        }
-        if (groupName === 'developer' || groupClass.indexOf('developer') !== -1) {
-            return 'group-developer';
-        }
-        if (groupName === 'game dev' || groupClass.indexOf('game_dev') !== -1) {
-            return 'group-game-dev';
-        }
-        if (groupName === 'fan') return 'group-fan';
-        return 'group-' + sanitizeGroupName(user.group.name || 'member');
+    var name = (user.group.name       || '').toLowerCase();
+    var cls  = (user.group.class      || '').toLowerCase();
+    var body = (user.group.bodyclass  || '').toLowerCase();
+    var all  = name + ' ' + cls + ' ' + body;
+
+    if (all.indexOf('founder') !== -1) return 'group-founder';
+
+    var isGlobal = /\bglobal\b/.test(all)
+                || all.indexOf('globalmod') !== -1
+                || /\bgmod\b/.test(all);
+    var isMod    = /\bmod(erator)?s?\b/.test(all)
+                || /\bmoderat/.test(all)
+                || all.indexOf('globalmod') !== -1;
+    if (isGlobal && isMod) return 'group-global-moderator';
+
+    if (/\badmin(istrator)?s?\b/.test(all)
+        || all.indexOf('amministrat') !== -1) {
+        return 'group-administrator';
     }
 
+    if (isMod) return 'group-moderator';
+
+    if (all.indexOf('developer') !== -1) return 'group-developer';
+    if (all.indexOf('game dev') !== -1 || all.indexOf('game_dev') !== -1) return 'group-game-dev';
+    if (/\bfan(s)?\b/.test(all)) return 'group-fan';
+
+    return 'group-member';
+}
     // ------------------------------------------------------------------------
     // HELPERS
     // ------------------------------------------------------------------------
