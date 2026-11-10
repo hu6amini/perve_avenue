@@ -377,6 +377,124 @@ const ForumBoardsModule = (function () {
         }
     }
 
+   // -----------------------------------------------------------------------
+// PROFILE TIP
+// -----------------------------------------------------------------------
+// Hovercard on user avatars / author names, mirroring the tip posts.js
+// already attaches on post cards and editor-module.js attaches on the
+// "Replying as:" header. The card markup carries the MID (from the
+// profile href) and the username; the user object comes from the
+// module's own userDataCache, which is populated before the cards are
+// rendered.
+//
+// ForumPostsModule.attachProfileTip is the single implementation of the
+// hovercard — reusing it keeps the markup, group-colour logic, and
+// online-dot rendering identical across post cards, reply headers,
+// similar-topic cards, and now boards cards.
+function attachBoardProfileTip(el, user, username, mid) {
+    if (!el || !username || !mid) return;
+
+    var tipData = {
+        mid:        String(mid),
+        username:   username,
+        apiUser:    user || null,
+        groupText:  (user && user.group && user.group.name) || 'Member',
+        postCount:  (user && user.messages   != null) ? user.messages   : 0,
+        reputation: (user && user.reputation != null) ? user.reputation : 0,
+        isOnline:   !!(user && user.status === 'online')
+    };
+
+    // Guests don't get hovercards — applyTip falls back to a title-only
+    // tooltip. Leave any existing title alone in that case; only strip
+    // it when we know tippy is going to take over, otherwise we'd lose
+    // the native tooltip and gain nothing.
+    var isGuest = document.body.classList.contains('guest');
+
+    var attempts = 0;
+    function tryAttach() {
+        var PM = window.ForumPostsModule;
+        if (PM && typeof PM.attachProfileTip === 'function') {
+            if (!isGuest && el.hasAttribute('title')) el.removeAttribute('title');
+            PM.attachProfileTip(el, tipData);
+            return;
+        }
+        if (++attempts < 25) setTimeout(tryAttach, 200);
+    }
+    tryAttach();
+}
+
+   // Walk every user-bearing element in a freshly-rendered boards container
+// and attach the profile hovercard. Scoped to the container so it can be
+// called once per convert* function without touching unrelated markup
+// already on the page.
+function attachProfileTipsToCards(container) {
+    if (!container) return;
+
+    // Forum cards + topic cards: .last-post-author contains
+    // [bare avatar][<a>username</a>]. Attach to the container so hovering
+    // either element shows the card; the inner link stays clickable.
+    container.querySelectorAll('.last-post-author').forEach(function (el) {
+        var link = el.querySelector('a');
+        if (!link) return;
+        var mid = extractMidFromUrl(link.getAttribute('href') || '');
+        if (!mid) return;
+        var username = link.textContent.trim();
+        if (!username) return;
+        attachBoardProfileTip(el, userDataCache.get(mid), username, mid);
+    });
+
+    // Topic cards: .topic-starter is "by <a>username</a>" — target just
+    // the anchor so the "by " prefix doesn't become part of the tooltip.
+    container.querySelectorAll('.topic-starter a').forEach(function (el) {
+        var mid = extractMidFromUrl(el.getAttribute('href') || '');
+        if (!mid) return;
+        var username = el.textContent.trim();
+        if (!username) return;
+        attachBoardProfileTip(el, userDataCache.get(mid), username, mid);
+    });
+
+    // Latest posts: .latest-post-avatar (bare avatar) and
+    // .latest-post-author (link). Attach to both.
+    container.querySelectorAll('.latest-post-card').forEach(function (card) {
+        var authorLink = card.querySelector('.latest-post-author');
+        if (!authorLink) return;
+        var mid = extractMidFromUrl(authorLink.getAttribute('href') || '');
+        if (!mid) return;
+        var username = authorLink.textContent.trim();
+        if (!username) return;
+
+        var avatarCol = card.querySelector('.latest-post-avatar');
+        if (avatarCol) attachBoardProfileTip(avatarCol, userDataCache.get(mid), username, mid);
+        attachBoardProfileTip(authorLink, userDataCache.get(mid), username, mid);
+    });
+
+    // Online page + member list cards: .online-user-avatar-col (bare
+    // avatar) and .online-user-name (link). Attach to both.
+    container.querySelectorAll('.online-user-card').forEach(function (card) {
+        var nameLink = card.querySelector('.online-user-name');
+        if (!nameLink) return;
+        var mid = extractMidFromUrl(nameLink.getAttribute('href') || '');
+        if (!mid) return;
+        var username = nameLink.textContent.trim();
+        if (!username) return;
+
+        var avatarCol = card.querySelector('.online-user-avatar-col');
+        if (avatarCol) attachBoardProfileTip(avatarCol, userDataCache.get(mid), username, mid);
+        attachBoardProfileTip(nameLink, userDataCache.get(mid), username, mid);
+    });
+
+    // Stats section: each anchor has class .online-user-avatar, carries
+    // title="username", and already wraps the avatar image. The helper
+    // strips the title (for non-guests) before handing over to tippy.
+    container.querySelectorAll('.online-user-avatar').forEach(function (el) {
+        var mid = extractMidFromUrl(el.getAttribute('href') || '');
+        if (!mid) return;
+        var username = (el.getAttribute('title') || '').trim();
+        if (!username) return;
+        attachBoardProfileTip(el, userDataCache.get(mid), username, mid);
+    });
+}
+
     // =========================================================================
     // CONTAINER HELPERS
     // =========================================================================
@@ -1315,10 +1433,11 @@ const ForumBoardsModule = (function () {
             }
 
             const membersContainer = getOrCreateContainer(CONFIG.GROUP_MEMBERS_CONTAINER_ID);
-            if (membersContainer) {
-                const membersHtml = buildModernGroupMembers(groupWrapper);
-                membersContainer.innerHTML = membersHtml;
-            }
+if (membersContainer) {
+    const membersHtml = buildModernGroupMembers(groupWrapper);
+    membersContainer.innerHTML = membersHtml;
+    attachProfileTipsToCards(membersContainer);
+}
 
             console.log('[BoardsModule] Group page modernized');
         } catch (err) {
@@ -1708,7 +1827,8 @@ const ForumBoardsModule = (function () {
 
             const modernHtml = buildModernTopicList(forumWrapper);
             container.innerHTML = modernHtml || '';
-            console.log('[BoardsModule] Topic list modernized (' + topicRows.length + ' topics)');
+attachProfileTipsToCards(container);
+console.log('[BoardsModule] Topic list modernized (' + topicRows.length + ' topics)');
         } catch (err) {
             console.error('[BoardsModule] Topic conversion error:', err);
         } finally {
