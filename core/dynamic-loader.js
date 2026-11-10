@@ -220,7 +220,7 @@ async function bootSystem() {
                 loadScript("https://cdn.jsdelivr.net/gh/hu6amini/perve_avenue@403484e8351e4fd2b9f757b5c340979cf7d452b8/modules/modals.min.js"),
                 loadScript("https://cdn.jsdelivr.net/gh/hu6amini/perve_avenue@c1e896b901457a6b981aa14c1c2ad9df8b3d8972/modules/editor-module.min.js"),
                 loadScript("https://cdn.jsdelivr.net/gh/hu6amini/perve_avenue@4b6c36ab3cde44f79c3ddb4f7dfbeed8b98a83b6/modules/quote-queue.min.js"),
-                loadScript("https://cdn.jsdelivr.net/gh/hu6amini/perve_avenue@2618ed130f4d80096fa5f98166827ab47ca04000/modules/similar-topics.min.js")
+                loadScript("https://cdn.jsdelivr.net/gh/hu6amini/perve_avenue@36278771d312b9ffe470dc2db33a784b5df0bca7/modules/similar-topics.min.js")
             ]);
 
             const failed = results.filter(r => r.status === 'rejected');
