@@ -985,9 +985,9 @@ return Promise.resolve();
 
 if (typeof window !== 'undefined') {
     window.addEventListener('pageshow', function (e) {
-        if (!e.persisted) return;                    // not a bfcache restore
-        if (document.body.id !== 'topic') return;    // not relevant here
-        reset();
-        initialize();
+        if (!e.persisted) return;
+        if (document.body.id !== 'topic') return;
+        SimilarTopicsModule.reset();
+        SimilarTopicsModule.initialize();
     });
 }
