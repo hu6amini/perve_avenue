@@ -377,123 +377,125 @@ const ForumBoardsModule = (function () {
         }
     }
 
-   // -----------------------------------------------------------------------
-// PROFILE TIP
-// -----------------------------------------------------------------------
-// Hovercard on user avatars / author names, mirroring the tip posts.js
-// already attaches on post cards and editor-module.js attaches on the
-// "Replying as:" header. The card markup carries the MID (from the
-// profile href) and the username; the user object comes from the
-// module's own userDataCache, which is populated before the cards are
-// rendered.
-//
-// ForumPostsModule.attachProfileTip is the single implementation of the
-// hovercard — reusing it keeps the markup, group-colour logic, and
-// online-dot rendering identical across post cards, reply headers,
-// similar-topic cards, and now boards cards.
-function attachBoardProfileTip(el, user, username, mid) {
-    if (!el || !username || !mid) return;
+    // -----------------------------------------------------------------------
+    // PROFILE TIP
+    // -----------------------------------------------------------------------
+    // Hovercard on user avatars / author names, mirroring the tip posts.js
+    // already attaches on post cards and editor-module.js attaches on the
+    // "Replying as:" header. The card markup carries the MID (from the
+    // profile href) and the username; the user object comes from the
+    // module's own userDataCache, which is populated before the cards are
+    // rendered.
+    //
+    // ForumPostsModule.attachProfileTip is the single implementation of the
+    // hovercard — reusing it keeps the markup, group-colour logic, and
+    // online-dot rendering identical across post cards, reply headers,
+    // similar-topic cards, and now boards cards.
+    function attachBoardProfileTip(el, user, username, mid) {
+        if (!el || !username || !mid) return;
 
-    var tipData = {
-        mid:        String(mid),
-        username:   username,
-        apiUser:    user || null,
-        groupText:  (user && user.group && user.group.name) || 'Member',
-        postCount:  (user && user.messages   != null) ? user.messages   : 0,
-        reputation: (user && user.reputation != null) ? user.reputation : 0,
-        isOnline:   !!(user && user.status === 'online')
-    };
+        var tipData = {
+            mid:        String(mid),
+            username:   username,
+            apiUser:    user || null,
+            groupText:  (user && user.group && user.group.name) || 'Member',
+            postCount:  (user && user.messages   != null) ? user.messages   : 0,
+            reputation: (user && user.reputation != null) ? user.reputation : 0,
+            isOnline:   !!(user && user.status === 'online')
+        };
 
-    // Guests don't get hovercards — applyTip falls back to a title-only
-    // tooltip. Leave any existing title alone in that case; only strip
-    // it when we know tippy is going to take over, otherwise we'd lose
-    // the native tooltip and gain nothing.
-    var isGuest = document.body.classList.contains('guest');
+        // Guests don't get hovercards — applyTip falls back to a title-only
+        // tooltip. Leave any existing title alone in that case; only strip
+        // it when we know tippy is going to take over, otherwise we'd lose
+        // the native tooltip and gain nothing.
+        var isGuest = document.body.classList.contains('guest');
 
-    var attempts = 0;
-    function tryAttach() {
-        var PM = window.ForumPostsModule;
-        if (PM && typeof PM.attachProfileTip === 'function') {
-            if (!isGuest && el.hasAttribute('title')) el.removeAttribute('title');
-            PM.attachProfileTip(el, tipData);
-            return;
+        var attempts = 0;
+        function tryAttach() {
+            var PM = window.ForumPostsModule;
+            if (PM && typeof PM.attachProfileTip === 'function') {
+                if (!isGuest && el.hasAttribute('title')) el.removeAttribute('title');
+                PM.attachProfileTip(el, tipData);
+                return;
+            }
+            if (++attempts < 25) setTimeout(tryAttach, 200);
         }
-        if (++attempts < 25) setTimeout(tryAttach, 200);
+        tryAttach();
     }
-    tryAttach();
-}
 
-   // Walk every user-bearing element in a freshly-rendered boards container
-// and attach the profile hovercard. Scoped to the container so it can be
-// called once per convert* function without touching unrelated markup
-// already on the page.
-function attachProfileTipsToCards(container) {
-    if (!container) return;
+    // Walk every user-bearing element in a freshly-rendered boards container
+    // and attach the profile hovercard. Scoped to the container so it can be
+    // called once per convert* function without touching unrelated markup
+    // already on the page.
+    function attachProfileTipsToCards(container) {
+        if (!container) return;
 
-    // Forum cards + topic cards: .last-post-author contains
-    // [bare avatar][<a>username</a>]. Attach to the container so hovering
-    // either element shows the card; the inner link stays clickable.
-    container.querySelectorAll('.last-post-author').forEach(function (el) {
-        var link = el.querySelector('a');
-        if (!link) return;
-        var mid = extractMidFromUrl(link.getAttribute('href') || '');
-        if (!mid) return;
-        var username = link.textContent.trim();
-        if (!username) return;
-        attachBoardProfileTip(el, userDataCache.get(mid), username, mid);
-    });
+        // Forum cards + topic cards: .last-post-author contains
+        // [<a class="avatar-link">avatar</a>][<a>username</a>]. The name
+        // link is what carries the username, so exclude .avatar-link here —
+        // otherwise querySelector('a') returns the avatar anchor first and
+        // textContent is empty, killing the tip.
+        container.querySelectorAll('.last-post-author').forEach(function (el) {
+            var link = el.querySelector('a:not(.avatar-link)');
+            if (!link) return;
+            var mid = extractMidFromUrl(link.getAttribute('href') || '');
+            if (!mid) return;
+            var username = link.textContent.trim();
+            if (!username) return;
+            attachBoardProfileTip(el, userDataCache.get(mid), username, mid);
+        });
 
-    // Topic cards: .topic-starter is "by <a>username</a>" — target just
-    // the anchor so the "by " prefix doesn't become part of the tooltip.
-    container.querySelectorAll('.topic-starter a').forEach(function (el) {
-        var mid = extractMidFromUrl(el.getAttribute('href') || '');
-        if (!mid) return;
-        var username = el.textContent.trim();
-        if (!username) return;
-        attachBoardProfileTip(el, userDataCache.get(mid), username, mid);
-    });
+        // Topic cards: .topic-starter is "by <a>username</a>" — target just
+        // the anchor so the "by " prefix doesn't become part of the tooltip.
+        container.querySelectorAll('.topic-starter a').forEach(function (el) {
+            var mid = extractMidFromUrl(el.getAttribute('href') || '');
+            if (!mid) return;
+            var username = el.textContent.trim();
+            if (!username) return;
+            attachBoardProfileTip(el, userDataCache.get(mid), username, mid);
+        });
 
-    // Latest posts: .latest-post-avatar (bare avatar) and
-    // .latest-post-author (link). Attach to both.
-    container.querySelectorAll('.latest-post-card').forEach(function (card) {
-        var authorLink = card.querySelector('.latest-post-author');
-        if (!authorLink) return;
-        var mid = extractMidFromUrl(authorLink.getAttribute('href') || '');
-        if (!mid) return;
-        var username = authorLink.textContent.trim();
-        if (!username) return;
+        // Latest posts: .latest-post-avatar (bare avatar, may wrap an
+        // anchor) and .latest-post-author (link). Attach to both.
+        container.querySelectorAll('.latest-post-card').forEach(function (card) {
+            var authorLink = card.querySelector('.latest-post-author');
+            if (!authorLink) return;
+            var mid = extractMidFromUrl(authorLink.getAttribute('href') || '');
+            if (!mid) return;
+            var username = authorLink.textContent.trim();
+            if (!username) return;
 
-        var avatarCol = card.querySelector('.latest-post-avatar');
-        if (avatarCol) attachBoardProfileTip(avatarCol, userDataCache.get(mid), username, mid);
-        attachBoardProfileTip(authorLink, userDataCache.get(mid), username, mid);
-    });
+            var avatarCol = card.querySelector('.latest-post-avatar');
+            if (avatarCol) attachBoardProfileTip(avatarCol, userDataCache.get(mid), username, mid);
+            attachBoardProfileTip(authorLink, userDataCache.get(mid), username, mid);
+        });
 
-    // Online page + member list cards: .online-user-avatar-col (bare
-    // avatar) and .online-user-name (link). Attach to both.
-    container.querySelectorAll('.online-user-card').forEach(function (card) {
-        var nameLink = card.querySelector('.online-user-name');
-        if (!nameLink) return;
-        var mid = extractMidFromUrl(nameLink.getAttribute('href') || '');
-        if (!mid) return;
-        var username = nameLink.textContent.trim();
-        if (!username) return;
+        // Online page + member list cards: .online-user-avatar-col (bare
+        // avatar, may wrap an anchor) and .online-user-name (link).
+        container.querySelectorAll('.online-user-card').forEach(function (card) {
+            var nameLink = card.querySelector('.online-user-name');
+            if (!nameLink) return;
+            var mid = extractMidFromUrl(nameLink.getAttribute('href') || '');
+            if (!mid) return;
+            var username = nameLink.textContent.trim();
+            if (!username) return;
 
-        var avatarCol = card.querySelector('.online-user-avatar-col');
-        if (avatarCol) attachBoardProfileTip(avatarCol, userDataCache.get(mid), username, mid);
-        attachBoardProfileTip(nameLink, userDataCache.get(mid), username, mid);
-    });
+            var avatarCol = card.querySelector('.online-user-avatar-col');
+            if (avatarCol) attachBoardProfileTip(avatarCol, userDataCache.get(mid), username, mid);
+            attachBoardProfileTip(nameLink, userDataCache.get(mid), username, mid);
+        });
 
-    // Stats section: each anchor has class .online-user-avatar, carries
-    // title="username", and already wraps the avatar image. The helper
-    // strips the title (for non-guests) before handing over to tippy.
-    container.querySelectorAll('.online-user-avatar').forEach(function (el) {
-        var mid = extractMidFromUrl(el.getAttribute('href') || '');
-        if (!mid) return;
-        var username = (el.getAttribute('title') || '').trim();
-        if (!username) return;
-        attachBoardProfileTip(el, userDataCache.get(mid), username, mid);
-    });
-}
+        // Stats section: each anchor has class .online-user-avatar, carries
+        // title="username", and already wraps the avatar image. The helper
+        // strips the title (for non-guests) before handing over to tippy.
+        container.querySelectorAll('.online-user-avatar').forEach(function (el) {
+            var mid = extractMidFromUrl(el.getAttribute('href') || '');
+            if (!mid) return;
+            var username = (el.getAttribute('title') || '').trim();
+            if (!username) return;
+            attachBoardProfileTip(el, userDataCache.get(mid), username, mid);
+        });
+    }
 
     // =========================================================================
     // CONTAINER HELPERS
@@ -652,7 +654,16 @@ function attachProfileTipsToCards(container) {
             var avatarHtml = '';
             if (data.lastPostAuthorMid && data.lastPostAuthor) {
                 const user = userDataCache.get(data.lastPostAuthorMid);
-                avatarHtml = generateAvatarHtml(user, data.lastPostAuthor, data.lastPostAuthorMid, CONFIG.AVATAR_SIZE_MINI);
+                var innerAvatar = generateAvatarHtml(user, data.lastPostAuthor, data.lastPostAuthorMid, CONFIG.AVATAR_SIZE_MINI);
+                if (data.lastPostAuthorUrl && data.lastPostAuthorUrl !== '#') {
+                    avatarHtml =
+                        '<a href="' + escapeHtml(data.lastPostAuthorUrl) + '" ' +
+                        'class="avatar-link" aria-label="Profile of ' + escapeHtml(data.lastPostAuthor) + '" rel="nofollow">' +
+                        innerAvatar +
+                        '</a>';
+                } else {
+                    avatarHtml = innerAvatar;
+                }
             }
             var authorHtml = data.lastPostAuthor
                 ? '<span class="last-post-author">' + avatarHtml +
@@ -789,7 +800,16 @@ function attachProfileTipsToCards(container) {
         var lastPosterAvatarHtml = '';
         if (data.lastPosterMid && data.lastPosterName) {
             const user = userDataCache.get(data.lastPosterMid);
-            lastPosterAvatarHtml = generateAvatarHtml(user, data.lastPosterName, data.lastPosterMid, CONFIG.AVATAR_SIZE_MINI);
+            var innerAvatar = generateAvatarHtml(user, data.lastPosterName, data.lastPosterMid, CONFIG.AVATAR_SIZE_MINI);
+            if (data.lastPosterUrl && data.lastPosterUrl !== '#') {
+                lastPosterAvatarHtml =
+                    '<a href="' + escapeHtml(data.lastPosterUrl) + '" ' +
+                    'class="avatar-link" aria-label="Profile of ' + escapeHtml(data.lastPosterName) + '" rel="nofollow">' +
+                    innerAvatar +
+                    '</a>';
+            } else {
+                lastPosterAvatarHtml = innerAvatar;
+            }
         }
         var lastPosterHtml =
             '<span class="last-post-author">' + lastPosterAvatarHtml +
@@ -868,17 +888,26 @@ function attachProfileTipsToCards(container) {
     }
 
     function generateLatestPostCard(data) {
-        var avatarHtml = '';
+        var innerAvatar = '';
         if (data.authorMid) {
             const user = userDataCache.get(data.authorMid);
-            avatarHtml = generateAvatarHtml(user, data.authorName, data.authorMid, CONFIG.AVATAR_SIZE_SMALL);
+            innerAvatar = generateAvatarHtml(user, data.authorName, data.authorMid, CONFIG.AVATAR_SIZE_SMALL);
         } else if (data.avatarSrc) {
-            avatarHtml = '<img class="mini-avatar group-member" src="' + escapeHtml(data.avatarSrc) +
+            innerAvatar = '<img class="mini-avatar group-member" src="' + escapeHtml(data.avatarSrc) +
                 '" alt="' + escapeHtml(data.authorName) + '" width="' + CONFIG.AVATAR_SIZE_SMALL +
                 '" height="' + CONFIG.AVATAR_SIZE_SMALL + '" loading="lazy">';
         } else {
-            avatarHtml = '<span class="mini-avatar mini-avatar--initial group-member" style="background-color:#059669;width:' +
+            innerAvatar = '<span class="mini-avatar mini-avatar--initial group-member" style="background-color:#059669;width:' +
                 CONFIG.AVATAR_SIZE_SMALL + 'px;height:' + CONFIG.AVATAR_SIZE_SMALL + 'px;font-size:' + (CONFIG.AVATAR_SIZE_SMALL * 0.618) + 'px;line-height:' + CONFIG.AVATAR_SIZE_SMALL + 'px;">?</span>';
+        }
+
+        var avatarHtml = innerAvatar;
+        if (data.authorProfileUrl && data.authorProfileUrl !== '#') {
+            avatarHtml =
+                '<a href="' + escapeHtml(data.authorProfileUrl) + '" ' +
+                'class="avatar-link" aria-label="Profile of ' + escapeHtml(data.authorName) + '" rel="nofollow">' +
+                innerAvatar +
+                '</a>';
         }
 
         var titlePrefix = '';
@@ -1150,17 +1179,26 @@ function attachProfileTipsToCards(container) {
     }
 
     function generateOnlineUserCard(data) {
-        var avatarHtml = '';
+        var innerAvatar = '';
         if (data.mid) {
             const user = userDataCache.get(data.mid);
-            avatarHtml = generateAvatarHtml(user, data.username, data.mid, CONFIG.AVATAR_SIZE_ONLINE);
+            innerAvatar = generateAvatarHtml(user, data.username, data.mid, CONFIG.AVATAR_SIZE_ONLINE);
         } else if (data.avatarSrc) {
-            avatarHtml = '<img class="mini-avatar ' + data.groupClass + '" src="' + escapeHtml(data.avatarSrc) +
+            innerAvatar = '<img class="mini-avatar ' + data.groupClass + '" src="' + escapeHtml(data.avatarSrc) +
                 '" alt="' + escapeHtml(data.username) + '" width="' + CONFIG.AVATAR_SIZE_ONLINE +
                 '" height="' + CONFIG.AVATAR_SIZE_ONLINE + '" loading="lazy">';
         } else {
-            avatarHtml = '<span class="mini-avatar mini-avatar--initial ' + data.groupClass + '" style="background-color:#059669;width:' +
+            innerAvatar = '<span class="mini-avatar mini-avatar--initial ' + data.groupClass + '" style="background-color:#059669;width:' +
                 CONFIG.AVATAR_SIZE_ONLINE + 'px;height:' + CONFIG.AVATAR_SIZE_ONLINE + 'px;font-size:' + (CONFIG.AVATAR_SIZE_ONLINE * 0.618) + 'px;line-height:' + CONFIG.AVATAR_SIZE_ONLINE + 'px;">?</span>';
+        }
+
+        var avatarHtml = innerAvatar;
+        if (data.profileUrl && data.profileUrl !== '#') {
+            avatarHtml =
+                '<a href="' + escapeHtml(data.profileUrl) + '" ' +
+                'class="avatar-link" aria-label="Profile of ' + escapeHtml(data.username) + '" rel="nofollow">' +
+                innerAvatar +
+                '</a>';
         }
 
         return '<article class="online-user-card">' +
@@ -1310,19 +1348,28 @@ function attachProfileTipsToCards(container) {
     // GENERATE MEMBER CARD – no friends, rep as link
     // =========================================================================
     function generateMemberCard(data) {
-        let avatarHtml;
+        var innerAvatar;
         if (data.mid) {
             const user = userDataCache.get(data.mid);
-            avatarHtml = generateAvatarHtml(user, data.username, data.mid, CONFIG.AVATAR_SIZE_ONLINE);
+            innerAvatar = generateAvatarHtml(user, data.username, data.mid, CONFIG.AVATAR_SIZE_ONLINE);
         } else if (data.avatarSrc) {
-            avatarHtml = '<img class="mini-avatar ' + data.groupClass + '" src="' + escapeHtml(data.avatarSrc) +
+            innerAvatar = '<img class="mini-avatar ' + data.groupClass + '" src="' + escapeHtml(data.avatarSrc) +
                 '" alt="' + escapeHtml(data.username) + '" width="' + CONFIG.AVATAR_SIZE_ONLINE +
                 '" height="' + CONFIG.AVATAR_SIZE_ONLINE + '" loading="lazy">';
         } else {
             const initial = data.username ? data.username.charAt(0).toUpperCase() : '?';
-            avatarHtml = '<span class="mini-avatar mini-avatar--initial ' + data.groupClass + '" style="background-color:#059669;width:' +
+            innerAvatar = '<span class="mini-avatar mini-avatar--initial ' + data.groupClass + '" style="background-color:#059669;width:' +
                 CONFIG.AVATAR_SIZE_ONLINE + 'px;height:' + CONFIG.AVATAR_SIZE_ONLINE + 'px;font-size:' + (CONFIG.AVATAR_SIZE_ONLINE * 0.618) + 'px;line-height:' + CONFIG.AVATAR_SIZE_ONLINE + 'px;">' +
                 escapeHtml(initial) + '</span>';
+        }
+
+        var avatarHtml = innerAvatar;
+        if (data.profileUrl && data.profileUrl !== '#') {
+            avatarHtml =
+                '<a href="' + escapeHtml(data.profileUrl) + '" ' +
+                'class="avatar-link" aria-label="Profile of ' + escapeHtml(data.username) + '" rel="nofollow">' +
+                innerAvatar +
+                '</a>';
         }
 
         let contactHtml = '';
@@ -1434,11 +1481,11 @@ function attachProfileTipsToCards(container) {
             }
 
             const membersContainer = getOrCreateContainer(CONFIG.GROUP_MEMBERS_CONTAINER_ID);
-if (membersContainer) {
-    const membersHtml = buildModernGroupMembers(groupWrapper);
-    membersContainer.innerHTML = membersHtml;
-    attachProfileTipsToCards(membersContainer);
-}
+            if (membersContainer) {
+                const membersHtml = buildModernGroupMembers(groupWrapper);
+                membersContainer.innerHTML = membersHtml;
+                attachProfileTipsToCards(membersContainer);
+            }
 
             console.log('[BoardsModule] Group page modernized');
         } catch (err) {
@@ -1829,8 +1876,8 @@ if (membersContainer) {
 
             const modernHtml = buildModernTopicList(forumWrapper);
             container.innerHTML = modernHtml || '';
-attachProfileTipsToCards(container);
-console.log('[BoardsModule] Topic list modernized (' + topicRows.length + ' topics)');
+            attachProfileTipsToCards(container);
+            console.log('[BoardsModule] Topic list modernized (' + topicRows.length + ' topics)');
         } catch (err) {
             console.error('[BoardsModule] Topic conversion error:', err);
         } finally {
