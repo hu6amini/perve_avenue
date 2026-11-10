@@ -30,6 +30,7 @@
     safeList: [
       "jq.js",
       "plugin_v3.js",
+      "script-loader",
       "boot-loader.min.js",
       "dynamic-loader.min.js",
       "media-optimizer.min.js",
