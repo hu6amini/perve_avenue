@@ -1406,6 +1406,7 @@ function attachProfileTipsToCards(container) {
 
             html += '</div></section>';
             container.innerHTML = html;
+            attachProfileTipsToCards(container);
             console.log('[BoardsModule] Members page modernized (' + rows.length + ' members)');
         } catch (err) {
             console.error('[BoardsModule] Members conversion error:', err);
@@ -1798,6 +1799,7 @@ if (membersContainer) {
 
             attachCategoryToggleEvents();
             restoreCategoryStates();
+            attachProfileTipsToCards(container);
 
             console.log('[BoardsModule] Board list modernized');
         } catch (err) {
@@ -1855,6 +1857,7 @@ console.log('[BoardsModule] Topic list modernized (' + topicRows.length + ' topi
 
             const modernHtml = buildLatestPostsList(limitedDivs);
             container.innerHTML = modernHtml || '';
+            attachProfileTipsToCards(container);
             console.log('[BoardsModule] Latest posts modernized (' + limitedDivs.length + ' shown)');
         } catch (err) {
             console.error('[BoardsModule] Latest posts error:', err);
@@ -1880,6 +1883,7 @@ console.log('[BoardsModule] Topic list modernized (' + topicRows.length + ' topi
 
             var modernHtml = buildModernStats(onlineData, statsData);
             container.innerHTML = modernHtml || '';
+            attachProfileTipsToCards(container);
 
             setTimeout(function () {
                 var legacyForm = document.querySelector('#legacy-topbutton form.topbutton');
@@ -1939,6 +1943,7 @@ console.log('[BoardsModule] Topic list modernized (' + topicRows.length + ' topi
 
             var modernHtml = buildModernOnlineList(legacyOnline);
             container.innerHTML = modernHtml || '';
+            attachProfileTipsToCards(container);
             console.log('[BoardsModule] Online page modernized');
         } catch (err) {
             console.error('[BoardsModule] Online page error:', err);
