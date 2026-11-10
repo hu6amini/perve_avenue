@@ -192,34 +192,50 @@ var SimilarTopicsModule = (function () {
     }
 
     function getGroupClass(user) {
-        if (!user || !user.group) return 'group-member';
-        var groupName  = (user.group.name  || '').toLowerCase();
-        var groupClass = (user.group.class || '').toLowerCase();
-        var groupBody  = (user.group.bodyclass || '').toLowerCase();
-        var groupId    = user.group.id;
+    if (!user || !user.group) return 'group-member';
 
-        if (groupClass.indexOf('founder') !== -1 || groupBody.indexOf('founder') !== -1 || groupName === 'founder') {
-            return 'group-founder';
-        }
-        if (groupName === 'administrator' || groupClass.indexOf('admin') !== -1 || groupId === 1) {
-            return 'group-administrator';
-        }
-        if (groupName === 'global moderator' || groupClass.indexOf('global_mod') !== -1) {
-            return 'group-global-moderator';
-        }
-        if (groupName === 'moderator' || groupClass.indexOf('mod') !== -1) {
-            return 'group-moderator';
-        }
-        if (groupName === 'developer' || groupClass.indexOf('developer') !== -1) {
-            return 'group-developer';
-        }
-        if (groupName === 'game dev' || groupClass.indexOf('game_dev') !== -1) {
-            return 'group-game-dev';
-        }
-        if (groupName === 'fan') return 'group-fan';
-        return 'group-member';
+    var name = (user.group.name       || '').toLowerCase();
+    var cls  = (user.group.class      || '').toLowerCase();
+    var body = (user.group.bodyclass  || '').toLowerCase();
+    var all  = name + ' ' + cls + ' ' + body;
+
+    // Founder — most specific, check first
+    if (all.indexOf('founder') !== -1) return 'group-founder';
+
+    // Global Moderator — must run BEFORE Administrator because:
+    //   (a) some forums assign groupId 1 to a non-admin group (this
+    //       forum: id 1 = "Global Moderator")
+    //   (b) some forums include "admin" tokens in a global mod's
+    //       bodyclass (admin_sez = section admin, admin_user)
+    // A global-mod signal is more specific than an admin signal, so
+    // let it win.
+    var isGlobal = /\bglobal\b/.test(all)
+                || all.indexOf('globalmod') !== -1
+                || /\bgmod\b/.test(all);
+    var isMod    = /\bmod(erator)?s?\b/.test(all)
+                || /\bmoderat/.test(all)      // Italian "moderatore"
+                || all.indexOf('globalmod') !== -1;
+    if (isGlobal && isMod) return 'group-global-moderator';
+
+    // Administrator — explicit name/class/body match. `id === 1` is
+    // deliberately NOT a signal here: it caused this exact bug and
+    // group 1 is not universally the admin group.
+    if (/\badmin(istrator)?s?\b/.test(all)
+        || all.indexOf('amministrat') !== -1) {
+        return 'group-administrator';
     }
 
+    // Moderator — plain "moderator" / "moderatori" / "moderating"
+    if (isMod) return 'group-moderator';
+
+    // Developer, game dev, fan — unchanged
+    if (all.indexOf('developer') !== -1) return 'group-developer';
+    if (all.indexOf('game dev') !== -1 || all.indexOf('game_dev') !== -1) return 'group-game-dev';
+    if (/\bfan(s)?\b/.test(all)) return 'group-fan';
+
+    return 'group-member';
+}
+    
     function generateAvatarHtml(user, username, userId, size) {
         size = size || CONFIG.avatarSize;
         var avatarUrl = null;
@@ -618,13 +634,14 @@ var SimilarTopicsModule = (function () {
     var titleText   = decodeHtmlEntities(thread.title  || '') || '(untitled)';
     var topicId     = thread.id;
 
-    var user       = starterId ? userDataCache.get(starterId) : null;
-    var avatarHtml = generateAvatarHtml(user, starterName, starterId, CONFIG.avatarSize);
-    var profileUrl = starterId ? '/?act=Profile&MID=' + starterId : '#';
-    var topicUrl   = '?t=' + topicId;
+    var user        = starterId ? userDataCache.get(starterId) : null;
+    var groupClass  = getGroupClass(user);                            // ← new
+    var avatarHtml  = generateAvatarHtml(user, starterName, starterId, CONFIG.avatarSize);
+    var profileUrl  = starterId ? '/?act=Profile&MID=' + starterId : '#';
+    var topicUrl    = '?t=' + topicId;
 
     return (
-        '<article class="latest-post-card similar-topic-card" data-topic-id="' + topicId + '" role="listitem">' +
+        '<article class="latest-post-card similar-topic-card ' + groupClass + '" data-topic-id="' + topicId + '" role="listitem">' +
             '<div class="latest-post-avatar">' +
                 '<a href="' + escapeHtml(profileUrl) + '" aria-label="View ' + escapeHtml(starterName) + '\'s profile" rel="nofollow">' +
                     avatarHtml +
@@ -649,24 +666,6 @@ var SimilarTopicsModule = (function () {
         '</article>'
     );
 }
-
-    function renderList(threads) {
-        var listEl = document.querySelector('#' + CONFIG.containerId + ' .similar-topics-list');
-        if (!listEl) return;
-
-        if (threads.length === 0) {
-            renderEmpty(false);
-            return;
-        }
-
-        var html = '';
-        for (var i = 0; i < threads.length; i++) {
-            html += buildTopicCard(threads[i]);
-        }
-        listEl.innerHTML = html;
-
-        attachPreviewHandlers(listEl);
-    }
 
     function renderList(threads) {
     var listEl = document.querySelector('#' + CONFIG.containerId + ' .similar-topics-list');
