@@ -257,23 +257,25 @@ var SimilarTopicsModule = (function () {
     }
 
     async function fetchUserData(mid) {
-        if (!mid) return null;
-        if (userDataCache.has(mid)) return userDataCache.get(mid);
-        try {
-            var response = await fetch('/api.php?mid=' + encodeURIComponent(mid));
-            if (!response.ok) throw new Error('HTTP ' + response.status);
-            var data = await response.json();
-            var user = data['m' + mid] || data.info;
-            if (user && user.id) {
-                userDataCache.set(mid, user);
-                return user;
-            }
-            return null;
-        } catch (e) {
-            if (CONFIG.debug) console.warn('[SimilarTopics] API error for MID ' + mid, e);
-            return null;
+    if (!mid) return null;
+    if (userDataCache.has(mid)) return userDataCache.get(mid);
+    try {
+        var response = await fetch('/api.php?mid=' + encodeURIComponent(mid), {
+            cache: 'no-store'
+        });
+        if (!response.ok) throw new Error('HTTP ' + response.status);
+        var data = await response.json();
+        var user = data['m' + mid] || data.info;
+        if (user && user.id) {
+            userDataCache.set(mid, user);
+            return user;
         }
+        return null;
+    } catch (e) {
+        if (CONFIG.debug) console.warn('[SimilarTopics] API error for MID ' + mid, e);
+        return null;
     }
+}
 
     async function mapWithConcurrencyLimit(items, worker, limit) {
         limit = limit || 6;
@@ -982,6 +984,10 @@ return Promise.resolve();
 })();
 
 if (typeof window !== 'undefined') {
-    window.SimilarTopicsModule = SimilarTopicsModule;
-    window.dispatchEvent(new CustomEvent('similar-topics-module-ready'));
+    window.addEventListener('pageshow', function (e) {
+        if (!e.persisted) return;                    // not a bfcache restore
+        if (document.body.id !== 'topic') return;    // not relevant here
+        reset();
+        initialize();
+    });
 }
