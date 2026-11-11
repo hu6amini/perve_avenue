@@ -587,35 +587,13 @@ function parseDateFromTitle(title) {
         document.body.appendChild(wrapper);
     }
 
-        function placeAfterTopicHeader(container) {
-        // The enhancer pre-creates #modern-posts-container as the
-        // wrapper's first child. That puts posts above breadcrumbs,
-        // the topic header, and pagination — wrong. Reposition the
-        // container to just after #modern-topic-header (breadcrumbs'
-        // output) so the natural order becomes:
-        //   breadcrumbs → topic-header → posts → pagination → editor.
-        // No-op when the topic header doesn't exist yet (board view),
-        // in which case the container keeps its current position.
-        var topicHeader = document.getElementById('modern-topic-header');
-        if (topicHeader &&
-            topicHeader.parentNode === wrapper &&
-            container.parentNode === wrapper &&
-            container.previousElementSibling !== topicHeader) {
-            wrapper.insertBefore(container, topicHeader.nextSibling);
-        }
-    }
-
     let container = document.getElementById(CONFIG.CONTAINER_ID);
-    if (container) {
-        placeAfterTopicHeader(container);
-        return container;
-    }
+    if (container) return container;
 
     container = document.createElement('div');
     container.id = CONFIG.CONTAINER_ID;
     container.className = 'modern-posts-container';
     wrapper.appendChild(container);
-    placeAfterTopicHeader(container);
     return container;
 }
 
