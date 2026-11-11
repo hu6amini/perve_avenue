@@ -136,6 +136,7 @@ const ForumPostsModule = (function () {
     let conversionPending = false;
     const userDataCache = new Map();
     let currentAbortController = null;
+    let _relativeTimeTicker = null; 
 
     // ============================================================================
     // BASIC HTML ESCAPE
@@ -5427,10 +5428,25 @@ const postStartOffset = (() => {
             // (creating it if needed) — the previous getElementById call
             // looked for an id getPostsContainer never creates, so in-page
             // hash changes were a silent no-op.
-            window.addEventListener('hashchange', function () {
+                        window.addEventListener('hashchange', function () {
                 var container = getPostsContainer();
                 if (container) scrollToHashAfterBuild(container);
             });
+
+            // Keep relative timestamps fresh ("2 minutes ago" stays honest
+            // as time passes). 60s tick is imperceptible for anything older
+            // than an hour; newest posts stay accurate.
+            if (!_relativeTimeTicker) {
+                _relativeTimeTicker = setInterval(function () {
+                    if (document.hidden) return;
+                    document.querySelectorAll('.post-time time[datetime]').forEach(function (t) {
+                        const d = new Date(t.getAttribute('datetime'));
+                        if (isNaN(d.getTime())) return;
+                        const fresh = getRelativeTimeString(d);
+                        if (t.textContent !== fresh) t.textContent = fresh;
+                    });
+                }, 60 * 1000);
+            }
         }).catch(err => console.error('[PostsModule] Dependency wait failed:', err));
     }
 
@@ -5457,7 +5473,7 @@ const postStartOffset = (() => {
                 hideOnClick: false
             });
         },
-        reset: function () {
+                reset: function () {
             convertedPostIds.clear();
             postReactions.clear();
             userDataCache.clear();
@@ -5466,6 +5482,10 @@ const postStartOffset = (() => {
                 activePopup.remove();
                 activePopup = null;
                 document.removeEventListener('click', activePopupClickHandler);
+            }
+            if (_relativeTimeTicker) {                       // ← add this block
+                clearInterval(_relativeTimeTicker);
+                _relativeTimeTicker = null;
             }
         },
         CONFIG
