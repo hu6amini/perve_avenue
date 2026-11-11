@@ -228,6 +228,158 @@ const BreadcrumbsModule = (function () {
     return html;
 }
 
+    // ============================================================================
+// API-SOURCED BREADCRUMBS
+// ============================================================================
+// Builds the trail from /api.php instead of the legacy <ul class="nav">.
+// Each handler returns an array of items in the same shape
+// extractBreadcrumbItems produces ({ text, html, url }), or null to
+// signal "not my page, fall back to the DOM scraper".
+//
+// Responses are cached per page load so pagination and topic header
+// (when later migrated) can reuse the same ?t= payload.
+// ============================================================================
+const _apiCache = new Map();
+
+function apiFetch(qs) {
+    if (_apiCache.has(qs)) return _apiCache.get(qs);
+    const p = (async () => {
+        try {
+            const r = await fetch('/api.php?' + qs, { credentials: 'same-origin' });
+            if (!r.ok) return null;
+            return await r.json();
+        } catch (e) {
+            return null;
+        }
+    })();
+    _apiCache.set(qs, p);
+    return p;
+}
+
+function _crumb(text, url) {
+    return {
+        text: text || '',
+        html: escapeHtml(text || ''),
+        url: url || null
+    };
+}
+
+async function tryBuildBreadcrumbFromApi() {
+    const params = new URLSearchParams(window.location.search);
+    const bodyId = document.body.id;
+
+    const topicId   = params.get('t');
+    const sectionId = params.get('f');
+    const postId    = params.get('p');
+    const userId    = params.get('MID');
+
+    // ── Topic page: ?t= ──────────────────────────────────────────
+    if (topicId && (bodyId === 'topic' || bodyId === 'send')) {
+        const data = await apiFetch('t=' + encodeURIComponent(topicId));
+        if (data && data.info) {
+            const trail = [
+                _crumb('Home', '/'),
+                _crumb(data.info.section_name, '?f=' + data.info.section_id),
+                _crumb(data.info.title, bodyId === 'send'
+                    ? '?t=' + data.info.id
+                    : null)
+            ];
+            if (bodyId === 'send' && postId) {
+                trail.push(_crumb('Editing a post', null));
+            }
+            return trail;
+        }
+    }
+
+    // ── Forum / section page: ?f= (no ?t=) ───────────────────────
+    if (sectionId && !topicId &&
+        (bodyId === 'forum' || bodyId === 'index' || bodyId === 'send')) {
+        const data = await apiFetch('f=' + encodeURIComponent(sectionId));
+        if (data && data.info) {
+            const trail = [
+                _crumb('Home', '/'),
+                _crumb(data.info.name,
+                    bodyId === 'send' ? '?f=' + data.info.id : null)
+            ];
+            if (bodyId === 'send') trail.push(_crumb('New topic', null));
+            return trail;
+        }
+    }
+
+    // ── Post page: ?p= (some forums link directly to a post) ─────
+    if (postId && !topicId) {
+        const data = await apiFetch('p=' + encodeURIComponent(postId));
+        const post = data && data['p' + postId];
+        if (post && post.info && post.info.topic_id) {
+            return [
+                _crumb('Home', '/'),
+                _crumb(post.info.section_name, '?f=' + post.info.section_id),
+                _crumb(post.info.topic_title, '?t=' + post.info.topic_id)
+            ];
+        }
+    }
+
+    // ── Member posts / search results: ?MID= ─────────────────────
+    if (userId && bodyId === 'search') {
+        const data = await apiFetch('mid=' + encodeURIComponent(userId));
+        const user = data && (data['m' + userId] || data.info);
+        if (user && user.nickname) {
+            return [
+                _crumb('Home', '/'),
+                _crumb('Posts by ' + user.nickname, null)
+            ];
+        }
+    }
+
+    // ── Index / home: no params, no topic context ────────────────
+    if (bodyId === 'index' && !topicId && !sectionId) {
+        return [_crumb('Home', null)];
+    }
+
+    return null;   // no API handler matched → caller falls back
+}
+
+// Replaces the old DOM-only convertBreadcrumb.
+async function convertBreadcrumb() {
+    const container = getOrCreateContainer(
+        CONFIG.MODERN_BREADCRUMB_ID,
+        'nav',
+        'modern-breadcrumbs',
+        CONFIG.INSERT_AFTER_SELECTOR
+    );
+    if (!container) return;
+
+    // ── 1. Try the API first ─────────────────────────────────────
+    let items = null;
+    try {
+        items = await tryBuildBreadcrumbFromApi();
+    } catch (e) {
+        console.warn('[BreadcrumbsModule] API breadcrumb failed:', e);
+    }
+
+    if (items && items.length > 0) {
+        container.innerHTML = buildBreadcrumbHtml(items);
+        applyEmojiReplacer(container, 50);
+        console.log('[BreadcrumbsModule] Breadcrumb modernised via API (' +
+            items.length + ' items)');
+        return;
+    }
+
+    // ── 2. Fall back to the legacy DOM ───────────────────────────
+    const legacyNav = document.querySelector(CONFIG.LEGACY_NAV_SELECTOR);
+    if (!legacyNav) {
+        // Neither API nor legacy yielded a trail. Leave the container
+        // empty — CSS :empty hides it. Do NOT remove the container;
+        // a later observer fire (or a retry) may still fill it.
+        container.innerHTML = '';
+        return;
+    }
+
+    container.innerHTML = buildBreadcrumbHtml(extractBreadcrumbItems(legacyNav));
+    applyEmojiReplacer(container, 50);
+    console.log('[BreadcrumbsModule] Breadcrumb modernised via DOM');
+}
+   
     function convertBreadcrumb() {
     var legacyNav = document.querySelector(CONFIG.LEGACY_NAV_SELECTOR);
     if (!legacyNav) return;
@@ -765,7 +917,7 @@ function extractPaginationData(legacyBar) {
     // INITIALIZATION
     // =========================================================================
     function initialize() {
-    if (document.querySelector(CONFIG.LEGACY_NAV_SELECTOR))      convertBreadcrumb();
+    convertBreadcrumb();                                          // ← always try — API or legacy
     if (document.querySelector(CONFIG.LEGACY_TITLE_SELECTOR))    convertTopicHeader();
     if (document.querySelector(CONFIG.MEMBER_POSTS_SELECTOR))    convertMemberPostsHeader();
     convertAllPagination();
