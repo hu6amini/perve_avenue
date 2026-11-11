@@ -233,21 +233,45 @@
     // WRAPPER CREATION
     // ============================================================================
     function createModernWrapper() {
-        var existingWrapper = document.getElementById(ENHANCER_CONFIG.wrapperId);
-        if (existingWrapper) {
-            return existingWrapper;
-        }
-        var wrapper = document.createElement('div');
-        wrapper.id = ENHANCER_CONFIG.wrapperId;
-        wrapper.className = 'modern-forum-wrapper';
-        document.body.insertBefore(wrapper, document.body.firstChild);
-        var postsContainer = document.createElement('div');
-        postsContainer.id = 'modern-posts-container';
-        postsContainer.className = 'modern-posts-container';
-        wrapper.appendChild(postsContainer);
-        log('Created modern wrapper: ' + ENHANCER_CONFIG.wrapperId);
-        return wrapper;
+    var existingWrapper = document.getElementById(ENHANCER_CONFIG.wrapperId);
+    if (existingWrapper) {
+        return existingWrapper;
     }
+
+    var wrapper = document.createElement('div');
+    wrapper.id = ENHANCER_CONFIG.wrapperId;
+    wrapper.className = 'modern-forum-wrapper';
+
+    // ── CANONICAL SLOT LAYOUT ────────────────────────────────────
+    // The wrapper's structure is the contract. Every module fills
+    // one of these slots with getElementById, regardless of init
+    // order. Slots are created empty here and either filled by a
+    // module or collapsed by CSS (:empty { display: none }).
+    // To add a new top-level section, insert it here — every
+    // module continues to work.
+    var slots = [
+        ['modern-breadcrumbs',     'modern-breadcrumbs'],
+        ['modern-topic-header',    'modern-topic-header'],
+        ['modern-posts-container', 'modern-posts-container'],
+        ['modern-pagination',      'modern-pagination']
+    ];
+    slots.forEach(function (pair) {
+        var slot = document.createElement('div');
+        slot.id = pair[0];
+        slot.className = pair[1];
+        wrapper.appendChild(slot);
+    });
+
+    var carousel = document.querySelector('.carousel-wrapper');
+    if (carousel && carousel.parentNode) {
+        carousel.parentNode.insertBefore(wrapper, carousel.nextSibling);
+    } else {
+        document.body.insertBefore(wrapper, document.body.firstChild);
+    }
+
+    log('Created modern wrapper with slots: ' + ENHANCER_CONFIG.wrapperId);
+    return wrapper;
+}
     
     // ============================================================================
     // REGISTER MODULES (with boards added)
