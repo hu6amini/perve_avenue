@@ -568,32 +568,37 @@ function parseDateFromTitle(title) {
     // HELPERS
     // ============================================================================
     function getPostsContainer() {
-    let wrapper = document.getElementById('modern-forum-wrapper');
-    const carouselWrapper = document.querySelector('.carousel-wrapper');
-
-    if (wrapper && carouselWrapper && !wrapper.contains(carouselWrapper)) {
-        if (wrapper.compareDocumentPosition(carouselWrapper) & Node.DOCUMENT_POSITION_FOLLOWING) {
-            carouselWrapper.parentNode.insertBefore(wrapper, carouselWrapper.nextSibling);
+    // The enhancer pre-creates the wrapper and its slots. If we're
+    // somehow running outside that flow (defensive), fall back to
+    // a minimal wrapper so the module doesn't crash.
+    var wrapper = document.getElementById('modern-forum-wrapper');
+    if (!wrapper) {
+        wrapper = document.createElement('div');
+        wrapper.id = 'modern-forum-wrapper';
+        wrapper.className = 'modern-forum-wrapper';
+        var carousel = document.querySelector('.carousel-wrapper');
+        if (carousel && carousel.parentNode) {
+            carousel.parentNode.insertBefore(wrapper, carousel.nextSibling);
+        } else {
+            document.body.insertBefore(wrapper, document.body.firstChild);
         }
-    } else if (!wrapper && carouselWrapper) {
-        wrapper = document.createElement('div');
-        wrapper.id = 'modern-forum-wrapper';
-        wrapper.className = 'modern-forum-wrapper';
-        carouselWrapper.parentNode.insertBefore(wrapper, carouselWrapper.nextSibling);
-    } else if (!wrapper) {
-        wrapper = document.createElement('div');
-        wrapper.id = 'modern-forum-wrapper';
-        wrapper.className = 'modern-forum-wrapper';
-        document.body.appendChild(wrapper);
     }
 
-    let container = document.getElementById(CONFIG.CONTAINER_ID);
+    var container = document.getElementById(CONFIG.CONTAINER_ID);
     if (container) return container;
 
+    // Slot missing (older enhancer build) — create it at the correct
+    // position within the wrapper: after topic-header if present,
+    // else at the top.
     container = document.createElement('div');
     container.id = CONFIG.CONTAINER_ID;
     container.className = 'modern-posts-container';
-    wrapper.appendChild(container);
+    var header = wrapper.querySelector('#modern-topic-header');
+    if (header) {
+        header.parentNode.insertBefore(container, header.nextSibling);
+    } else {
+        wrapper.appendChild(container);
+    }
     return container;
 }
 
