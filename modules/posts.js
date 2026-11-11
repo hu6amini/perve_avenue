@@ -468,22 +468,24 @@ function parseDateFromTitle(title) {
     // API USER DATA FETCHING
     // ============================================================================
     async function fetchUserData(mid, signal) {
-        if (userDataCache.has(mid)) return userDataCache.get(mid);
-        try {
-            const response = await fetch('/api.php?mid=' + mid, { signal });
-            if (!response.ok) throw new Error('HTTP ' + response.status);
-            const data = await response.json();
-            const user = data['m' + mid] || data.info;
-            if (user && user.id) {
-                userDataCache.set(mid, user);
-                return user;
-            }
-            return null;
-        } catch (e) {
-            if (e.name !== 'AbortError') console.error('[PostsModule] API error for MID', mid, e);
-            return null;
+    if (mid == null) return null;
+    const key = String(mid);                                  // ← normalize
+    if (userDataCache.has(key)) return userDataCache.get(key);
+    try {
+        const response = await fetch('/api.php?mid=' + key, { signal });
+        if (!response.ok) throw new Error('HTTP ' + response.status);
+        const data = await response.json();
+        const user = data['m' + key] || data.info;
+        if (user && user.id) {
+            userDataCache.set(key, user);                     // ← normalized
+            return user;
         }
+        return null;
+    } catch (e) {
+        if (e.name !== 'AbortError') console.error('[PostsModule] API error for MID', mid, e);
+        return null;
     }
+}
 
     async function fetchMultipleUsers(midList) {
         const uniqueMids = [...new Set(midList.filter(Boolean))];
@@ -5020,7 +5022,12 @@ async function convertAllPostsViaApi() {
 
     const viewerContext = await resolveViewerContext();
 
-    const mids = [...new Set(topicData.messages.map(m => m.user?.id).filter(Boolean))];
+    const mids = [...new Set(
+    topicData.messages
+        .map(m => m.user?.id)
+        .filter(id => id != null)
+        .map(String)
+)];
     await fetchMultipleUsers(mids);
 
     const container = getPostsContainer();
