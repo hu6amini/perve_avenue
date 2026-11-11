@@ -5237,9 +5237,10 @@ const postStartOffset = (() => {
             setTimeout(fixBrokenWeservImages, 300);
             stripLegacyEntryAnchors();
             setTimeout(function () { scrollToHashAfterBuild(container); }, 100);
-            console.log('[PostsModule] Ready - ' + (postsData.length + blogCount) + ' posts converted');
-        } catch (err) { console.error('[PostsModule] Conversion error:', err); }
-        finally { conversionInProgress = false; if (conversionPending) convertAllPosts(); }
+                        console.log('[PostsModule] Ready - ' + (postsData.length + blogCount) + ' posts converted');
+        } catch (err) {
+            console.error('[PostsModule] Legacy conversion error:', err);
+        }
     }
 
     async function convertSummaryPosts() {
