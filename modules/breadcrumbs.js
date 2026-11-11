@@ -928,6 +928,7 @@ function extractPaginationData(legacyBar) {
     return {
         initialize: initialize,
         refresh: function () {
+    _apiCache.clear();
     convertBreadcrumb();
     convertTopicHeader();
     convertMemberPostsHeader();
