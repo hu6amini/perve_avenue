@@ -4,6 +4,12 @@
    h2.mtitle and .title.bottom.Item.Justify
    into accessible breadcrumb, pagination and topic header.
    Also handles member-posts pages on body#search.
+
+   API-first as of this revision: breadcrumb, topic header, and
+   pagination are built from /api.php?t= / ?f= / ?p= / ?mid= when
+   possible. DOM scraping remains as fallback for blog / msg /
+   search-results / member-posts pages (no API equivalent), and
+   for cases where the API request fails.
    ============================================= */
 'use strict';
 
@@ -30,8 +36,21 @@ const BreadcrumbsModule = (function () {
         LEGACY_STATS_SELECTOR: '.title.bottom.Item.Justify',
         MODERN_TOPIC_HEADER_ID: 'modern-topic-header',
         MEMBER_POSTS_SELECTOR: '.topic.member_posts',
-        SKIP_TOPIC_HEADER_BODY_IDS: ['board', 'forum']
+        SKIP_TOPIC_HEADER_BODY_IDS: ['board', 'forum'],
+
+        // Page size for API-driven pagination. TOPIC_PAGE_SIZE matches
+        // the 15 messages per page the API returns on ?t=; SECTION_PAGE_SIZE
+        // is the section-view default (30 topics per page).
+        TOPIC_PAGE_SIZE: 15,
+        SECTION_PAGE_SIZE: 30
     });
+
+    // =========================================================================
+    // MODULE STATE (API layer)
+    // =========================================================================
+    const _apiCache     = new Map();
+    let _contextPromise = null;
+    let _renderedUrl    = { breadcrumb: null, topicHeader: null, pagination: null };
 
     // =========================================================================
     // UTILITIES
@@ -42,6 +61,14 @@ const BreadcrumbsModule = (function () {
         div.textContent = str;
         return div.innerHTML;
     };
+
+    function decodeHtmlEntities(str) {
+        if (!str || typeof str !== 'string') return str || '';
+        if (str.indexOf('&') === -1) return str;
+        const ta = document.createElement('textarea');
+        ta.innerHTML = str;
+        return ta.value;
+    }
 
    function applyEmojiReplacer(container, retries) {
     if (!container) return;
@@ -179,6 +206,74 @@ const BreadcrumbsModule = (function () {
         return container;
     }
 
+    // ============================================================================
+    // API INFRASTRUCTURE
+    // ============================================================================
+    // Shared by breadcrumb, topic header and pagination.
+    //
+    //   apiFetch(qs)     — cached fetch for one api.php query string
+    //   getPageContext() — resolves every API call the current URL
+    //                      warrants, once, and caches the promise
+    //   _crumb(...)      — build one breadcrumb item in the same shape
+    //                      extractBreadcrumbItems produces
+    //
+    // _renderedUrl tracks the last URL each component rendered for, so
+    // observer re-fires and manual re-invocations don't rebuild markup.
+    // ============================================================================
+    function apiFetch(qs) {
+        if (_apiCache.has(qs)) return _apiCache.get(qs);
+        const p = (async () => {
+            try {
+                const r = await fetch('/api.php?' + qs, { credentials: 'same-origin' });
+                if (!r.ok) return null;
+                return await r.json();
+            } catch (e) {
+                return null;
+            }
+        })();
+        _apiCache.set(qs, p);
+        return p;
+    }
+
+    function getPageContext() {
+        if (_contextPromise) return _contextPromise;
+        _contextPromise = (async () => {
+            const params    = new URLSearchParams(window.location.search);
+            const topicId   = params.get('t');
+            const sectionId = params.get('f');
+            const postId    = params.get('p');
+            const userId    = params.get('MID');
+            const st        = params.get('st') || '0';
+
+            const topicData   = topicId
+                ? await apiFetch('t='   + encodeURIComponent(topicId)   + '&st=' + st)
+                : null;
+            const sectionData = sectionId
+                ? await apiFetch('f='   + encodeURIComponent(sectionId) + '&st=' + st)
+                : null;
+            const postData    = postId
+                ? await apiFetch('p='   + encodeURIComponent(postId))
+                : null;
+            const userData    = userId
+                ? await apiFetch('mid=' + encodeURIComponent(userId))
+                : null;
+
+            return {
+                topicId, sectionId, postId, userId, st,
+                topicData, sectionData, postData, userData
+            };
+        })();
+        return _contextPromise;
+    }
+
+    function _crumb(text, url) {
+        return {
+            text: text || '',
+            html: escapeHtml(text || ''),
+            url: url || null
+        };
+    }
+
     // =========================================================================
     // BREADCRUMB
     // =========================================================================
@@ -228,167 +323,114 @@ const BreadcrumbsModule = (function () {
     return html;
 }
 
-    // ============================================================================
-// API-SOURCED BREADCRUMBS
-// ============================================================================
-// Builds the trail from /api.php instead of the legacy <ul class="nav">.
-// Each handler returns an array of items in the same shape
-// extractBreadcrumbItems produces ({ text, html, url }), or null to
-// signal "not my page, fall back to the DOM scraper".
-//
-// Responses are cached per page load so pagination and topic header
-// (when later migrated) can reuse the same ?t= payload.
-// ============================================================================
-const _apiCache = new Map();
+    async function tryBuildBreadcrumbFromApi() {
+        const ctx = await getPageContext();
+        const bodyId = document.body.id;
 
-function apiFetch(qs) {
-    if (_apiCache.has(qs)) return _apiCache.get(qs);
-    const p = (async () => {
-        try {
-            const r = await fetch('/api.php?' + qs, { credentials: 'same-origin' });
-            if (!r.ok) return null;
-            return await r.json();
-        } catch (e) {
-            return null;
-        }
-    })();
-    _apiCache.set(qs, p);
-    return p;
-}
-
-function _crumb(text, url) {
-    return {
-        text: text || '',
-        html: escapeHtml(text || ''),
-        url: url || null
-    };
-}
-
-async function tryBuildBreadcrumbFromApi() {
-    const params = new URLSearchParams(window.location.search);
-    const bodyId = document.body.id;
-
-    const topicId   = params.get('t');
-    const sectionId = params.get('f');
-    const postId    = params.get('p');
-    const userId    = params.get('MID');
-
-    // ── Topic page: ?t= ──────────────────────────────────────────
-    if (topicId && (bodyId === 'topic' || bodyId === 'send')) {
-        const data = await apiFetch('t=' + encodeURIComponent(topicId));
-        if (data && data.info) {
+        // ── Topic page: ?t= ──────────────────────────────────────
+        if (ctx.topicData && ctx.topicData.info) {
+            const info = ctx.topicData.info;
             const trail = [
                 _crumb('Home', '/'),
-                _crumb(data.info.section_name, '?f=' + data.info.section_id),
-                _crumb(data.info.title, bodyId === 'send'
-                    ? '?t=' + data.info.id
-                    : null)
+                _crumb(decodeHtmlEntities(info.section_name), '?f=' + info.section_id),
+                _crumb(decodeHtmlEntities(info.title),
+                    bodyId === 'send' ? '?t=' + info.id : null)
             ];
-            if (bodyId === 'send' && postId) {
+            if (bodyId === 'send' && ctx.postId) {
                 trail.push(_crumb('Editing a post', null));
             }
             return trail;
         }
-    }
 
-    // ── Forum / section page: ?f= (no ?t=) ───────────────────────
-    if (sectionId && !topicId &&
-        (bodyId === 'forum' || bodyId === 'index' || bodyId === 'send')) {
-        const data = await apiFetch('f=' + encodeURIComponent(sectionId));
-        if (data && data.info) {
+        // ── Forum / section page: ?f= (no ?t=) ───────────────────
+        if (ctx.sectionData && ctx.sectionData.info && !ctx.topicId) {
+            const info = ctx.sectionData.info;
             const trail = [
                 _crumb('Home', '/'),
-                _crumb(data.info.name,
-                    bodyId === 'send' ? '?f=' + data.info.id : null)
+                _crumb(decodeHtmlEntities(info.name),
+                    bodyId === 'send' ? '?f=' + info.id : null)
             ];
             if (bodyId === 'send') trail.push(_crumb('New topic', null));
             return trail;
         }
-    }
 
-    // ── Post page: ?p= (some forums link directly to a post) ─────
-    if (postId && !topicId) {
-        const data = await apiFetch('p=' + encodeURIComponent(postId));
-        const post = data && data['p' + postId];
-        if (post && post.info && post.info.topic_id) {
-            return [
-                _crumb('Home', '/'),
-                _crumb(post.info.section_name, '?f=' + post.info.section_id),
-                _crumb(post.info.topic_title, '?t=' + post.info.topic_id)
-            ];
+        // ── Post page: ?p= (some forums link directly to a post) ─
+        if (ctx.postData && ctx.postId) {
+            const post = ctx.postData['p' + ctx.postId];
+            if (post && post.info && post.info.topic_id) {
+                return [
+                    _crumb('Home', '/'),
+                    _crumb(decodeHtmlEntities(post.info.section_name),
+                        '?f=' + post.info.section_id),
+                    _crumb(decodeHtmlEntities(post.info.topic_title),
+                        '?t=' + post.info.topic_id)
+                ];
+            }
         }
-    }
 
-    // ── Member posts / search results: ?MID= ─────────────────────
-    if (userId && bodyId === 'search') {
-        const data = await apiFetch('mid=' + encodeURIComponent(userId));
-        const user = data && (data['m' + userId] || data.info);
-        if (user && user.nickname) {
-            return [
-                _crumb('Home', '/'),
-                _crumb('Posts by ' + user.nickname, null)
-            ];
+        // ── Member posts / search results: ?MID= ─────────────────
+        if (ctx.userData && ctx.userId) {
+            const user = ctx.userData['m' + ctx.userId] || ctx.userData.info;
+            if (user && user.nickname) {
+                return [
+                    _crumb('Home', '/'),
+                    _crumb('Posts by ' + decodeHtmlEntities(user.nickname), null)
+                ];
+            }
         }
+
+        // ── Index / home: no params, no topic context ────────────
+        if (bodyId === 'index' && !ctx.topicId && !ctx.sectionId) {
+            return [_crumb('Home', null)];
+        }
+
+        return null;
     }
 
-    // ── Index / home: no params, no topic context ────────────────
-    if (bodyId === 'index' && !topicId && !sectionId) {
-        return [_crumb('Home', null)];
-    }
+    async function convertBreadcrumb() {
+        const currentUrl = location.pathname + location.search + location.hash;
+        if (_renderedUrl.breadcrumb === currentUrl) return;
 
-    return null;   // no API handler matched → caller falls back
-}
+        const container = getOrCreateContainer(
+            CONFIG.MODERN_BREADCRUMB_ID,
+            'nav',
+            'modern-breadcrumbs',
+            CONFIG.INSERT_AFTER_SELECTOR
+        );
+        if (!container) return;
 
-// Replaces the old DOM-only convertBreadcrumb.
-async function convertBreadcrumb() {
-    const container = getOrCreateContainer(
-        CONFIG.MODERN_BREADCRUMB_ID,
-        'nav',
-        'modern-breadcrumbs',
-        CONFIG.INSERT_AFTER_SELECTOR
-    );
-    if (!container) return;
+        // ── 1. Try the API first ─────────────────────────────────
+        let items = null;
+        try {
+            items = await tryBuildBreadcrumbFromApi();
+        } catch (e) {
+            console.warn('[BreadcrumbsModule] API breadcrumb failed:', e);
+        }
 
-    // ── 1. Try the API first ─────────────────────────────────────
-    let items = null;
-    try {
-        items = await tryBuildBreadcrumbFromApi();
-    } catch (e) {
-        console.warn('[BreadcrumbsModule] API breadcrumb failed:', e);
-    }
+        if (items && items.length > 0) {
+            container.innerHTML = buildBreadcrumbHtml(items);
+            applyEmojiReplacer(container, 50);
+            _renderedUrl.breadcrumb = currentUrl;
+            console.log('[BreadcrumbsModule] Breadcrumb modernised via API (' +
+                items.length + ' items)');
+            return;
+        }
 
-    if (items && items.length > 0) {
-        container.innerHTML = buildBreadcrumbHtml(items);
+        // ── 2. Fall back to the legacy DOM ───────────────────────
+        const legacyNav = document.querySelector(CONFIG.LEGACY_NAV_SELECTOR);
+        if (!legacyNav) {
+            // Neither API nor legacy yielded a trail. Leave the container
+            // empty so CSS :empty hides it. Don't set the render guard —
+            // a later observer fire (or a retry) may still succeed.
+            container.innerHTML = '';
+            return;
+        }
+
+        container.innerHTML = buildBreadcrumbHtml(extractBreadcrumbItems(legacyNav));
         applyEmojiReplacer(container, 50);
-        console.log('[BreadcrumbsModule] Breadcrumb modernised via API (' +
-            items.length + ' items)');
-        return;
+        _renderedUrl.breadcrumb = currentUrl;
+        console.log('[BreadcrumbsModule] Breadcrumb modernised via DOM');
     }
-
-    // ── 2. Fall back to the legacy DOM ───────────────────────────
-    const legacyNav = document.querySelector(CONFIG.LEGACY_NAV_SELECTOR);
-    if (!legacyNav) {
-        // Neither API nor legacy yielded a trail. Leave the container
-        // empty — CSS :empty hides it. Do NOT remove the container;
-        // a later observer fire (or a retry) may still fill it.
-        container.innerHTML = '';
-        return;
-    }
-
-    container.innerHTML = buildBreadcrumbHtml(extractBreadcrumbItems(legacyNav));
-    applyEmojiReplacer(container, 50);
-    console.log('[BreadcrumbsModule] Breadcrumb modernised via DOM');
-}
-   
-    function convertBreadcrumb() {
-    var legacyNav = document.querySelector(CONFIG.LEGACY_NAV_SELECTOR);
-    if (!legacyNav) return;
-    var container = getOrCreateContainer(CONFIG.MODERN_BREADCRUMB_ID, 'nav', 'modern-breadcrumbs', CONFIG.INSERT_AFTER_SELECTOR);
-    if (!container) return;
-    container.innerHTML = buildBreadcrumbHtml(extractBreadcrumbItems(legacyNav));
-    applyEmojiReplacer(container, 50);            // <— NEW
-    console.log('[BreadcrumbsModule] Breadcrumb modernised');
-}
 
     // =========================================================================
     // TOPIC HEADER
@@ -631,37 +673,133 @@ async function convertBreadcrumb() {
         return html;
     }
 
-        function convertTopicHeader() {
-    if (CONFIG.SKIP_TOPIC_HEADER_BODY_IDS.indexOf(document.body.id) !== -1) return;
+    async function tryBuildTopicHeaderFromApi() {
+        const bodyId = document.body.id;
+        if (CONFIG.SKIP_TOPIC_HEADER_BODY_IDS.indexOf(bodyId) !== -1) return null;
 
-    var titleEl = document.querySelector(CONFIG.LEGACY_TITLE_SELECTOR);
-    if (!titleEl) return;
+        const ctx = await getPageContext();
 
-    var data = extractTopicHeaderData();
-    if (!data.topicTitle) {
-        setTimeout(function () {
-            if (CONFIG.SKIP_TOPIC_HEADER_BODY_IDS.indexOf(document.body.id) !== -1) return;
-            var retryEl = document.querySelector(CONFIG.LEGACY_TITLE_SELECTOR);
-            if (!retryEl) return;
-            var retryData = extractTopicHeaderData();
-            if (!retryData.topicTitle) {
-                var breadcrumb = document.getElementById(CONFIG.MODERN_BREADCRUMB_ID);
-                if (breadcrumb) {
-                    var currentEl = breadcrumb.querySelector(
-                        '.modern-breadcrumb-item--current .modern-breadcrumb-text'
-                    );
-                    if (currentEl) {
-                        retryData.topicTitle     = currentEl.textContent.trim();
-                        retryData.topicTitleHtml = currentEl.innerHTML;
-                    }
+        // ── Topic view / edit-OP send page: title comes from ?t= ──
+        if (ctx.topicData && ctx.topicData.info) {
+            const info = ctx.topicData.info;
+            const titleText = decodeHtmlEntities(info.title || '').trim();
+            if (!titleText) return null;
+
+            let eyebrow = '';
+            let eyebrowHtml = '';
+            if (bodyId === 'send') {
+                const mode = detectSendMode();
+                const english = englishEyebrowForMode(mode);
+                if (english) {
+                    eyebrow = english;
+                    eyebrowHtml = escapeHtml(english);
                 }
             }
-            if (retryData.topicTitle) renderTopicHeader(retryData);
-        }, 100);
-        return;
+
+            let shareLink = null;
+            if (bodyId === 'topic') {
+                const pageUrl    = window.location.origin + window.location.pathname + window.location.search;
+                const shareTitle = titleText +
+                    (info.section_name ? ' - ' + decodeHtmlEntities(info.section_name) : '');
+                const shareHref  = 'https://www.addtoany.com/share#url=' +
+                    encodeURIComponent(pageUrl) + '&title=' + encodeURIComponent(shareTitle);
+                shareLink = {
+                    click: function () {
+                        window.open(shareHref, '_blank', 'noopener,noreferrer');
+                    }
+                };
+            }
+
+            return {
+                eyebrow:        eyebrow,
+                eyebrowHtml:    eyebrowHtml,
+                topicTitle:     titleText,
+                topicTitleHtml: escapeHtml(titleText),
+                replyCount:     info.replies || '',
+                viewCount:      info.views || '',
+                shareLink:      shareLink
+            };
+        }
+
+        // ── New-topic send page: title is the section name from ?f= ──
+        if (bodyId === 'send' && ctx.sectionData && ctx.sectionData.info) {
+            const info = ctx.sectionData.info;
+            const sectionName = decodeHtmlEntities(info.name || '').trim();
+            if (!sectionName) return null;
+
+            const mode = detectSendMode() || 'newtopic';
+            const english = englishEyebrowForMode(mode);
+            if (!english) return null;
+
+            return {
+                eyebrow:        english,
+                eyebrowHtml:    escapeHtml(english),
+                topicTitle:     sectionName,
+                topicTitleHtml: escapeHtml(sectionName),
+                replyCount:     '',
+                viewCount:      '',
+                shareLink:      null
+            };
+        }
+
+        return null;
     }
-    renderTopicHeader(data);
-}
+
+    async function convertTopicHeader() {
+        if (CONFIG.SKIP_TOPIC_HEADER_BODY_IDS.indexOf(document.body.id) !== -1) return;
+
+        const currentUrl = location.pathname + location.search + location.hash;
+        if (_renderedUrl.topicHeader === currentUrl) return;
+
+        // ── 1. API path ──────────────────────────────────────────
+        let apiData = null;
+        try {
+            apiData = await tryBuildTopicHeaderFromApi();
+        } catch (e) {
+            console.warn('[BreadcrumbsModule] API topic header failed:', e);
+        }
+
+        if (apiData && apiData.topicTitle) {
+            renderTopicHeader(apiData);
+            _renderedUrl.topicHeader = currentUrl;
+            console.log('[BreadcrumbsModule] Topic header rendered via API');
+            return;
+        }
+
+        // ── 2. DOM fallback (blog / msg / member-posts / unresolved) ──
+        var titleEl = document.querySelector(CONFIG.LEGACY_TITLE_SELECTOR);
+        if (!titleEl) return;
+
+        var data = extractTopicHeaderData();
+        if (!data.topicTitle) {
+            setTimeout(function () {
+                if (CONFIG.SKIP_TOPIC_HEADER_BODY_IDS.indexOf(document.body.id) !== -1) return;
+                if (_renderedUrl.topicHeader === currentUrl) return;
+                var retryEl = document.querySelector(CONFIG.LEGACY_TITLE_SELECTOR);
+                if (!retryEl) return;
+                var retryData = extractTopicHeaderData();
+                if (!retryData.topicTitle) {
+                    var breadcrumb = document.getElementById(CONFIG.MODERN_BREADCRUMB_ID);
+                    if (breadcrumb) {
+                        var currentEl = breadcrumb.querySelector(
+                            '.modern-breadcrumb-item--current .modern-breadcrumb-text'
+                        );
+                        if (currentEl) {
+                            retryData.topicTitle     = currentEl.textContent.trim();
+                            retryData.topicTitleHtml = currentEl.innerHTML;
+                        }
+                    }
+                }
+                if (retryData.topicTitle) {
+                    renderTopicHeader(retryData);
+                    _renderedUrl.topicHeader = currentUrl;
+                }
+            }, 100);
+            return;
+        }
+        renderTopicHeader(data);
+        _renderedUrl.topicHeader = currentUrl;
+    }
 
     function renderTopicHeader(data) {
     if (!data.topicTitle) return;
@@ -839,46 +977,154 @@ function extractPaginationData(legacyBar) {
         return html;
     }
 
+    function pickPaginationInsertTarget() {
+        if (document.getElementById(CONFIG.POSTS_CONTAINER_ID)) return '#' + CONFIG.POSTS_CONTAINER_ID;
+        if (document.getElementById(CONFIG.TOPIC_LIST_ID))      return '#' + CONFIG.TOPIC_LIST_ID;
+        if (document.getElementById(CONFIG.BOARD_LIST_ID))      return '#' + CONFIG.BOARD_LIST_ID;
+        return CONFIG.INSERT_AFTER_SELECTOR;
+    }
+
+    function wireJumpForm(container, data) {
+        const jumpForm = container.querySelector('.modern-jump-form');
+        if (!jumpForm) return;
+        const jumpInput = jumpForm.querySelector('.modern-jump-input');
+        const jumpBtn   = jumpForm.querySelector('.modern-jump-btn');
+        let jumpParams = null;
+        data.pageItems.forEach(function (item) { if (item.type === 'jump') jumpParams = item; });
+        if (!jumpParams) return;
+        jumpBtn.addEventListener('click', function () {
+            let page = parseInt(jumpInput.value, 10);
+            if (isNaN(page) || page < 1) page = 1;
+            if (page > jumpParams.totalPages) page = jumpParams.totalPages;
+            window.location.href = jumpParams.baseUrl + '&st=' +
+                ((page - 1) * jumpParams.entriesPerPage);
+        });
+    }
+
     function convertPagination(legacyBar) {
         if (!legacyBar) return;
-        var insertAfter = null;
-        var postsContainer = document.getElementById(CONFIG.POSTS_CONTAINER_ID);
-        if (postsContainer) insertAfter = '#' + CONFIG.POSTS_CONTAINER_ID;
-        else {
-            var topicList = document.getElementById(CONFIG.TOPIC_LIST_ID);
-            var boardList = document.getElementById(CONFIG.BOARD_LIST_ID);
-            if (topicList) insertAfter = '#' + CONFIG.TOPIC_LIST_ID;
-            else if (boardList) insertAfter = '#' + CONFIG.BOARD_LIST_ID;
-            else insertAfter = CONFIG.INSERT_AFTER_SELECTOR;
-        }
-        var container = getOrCreateContainer(CONFIG.MODERN_PAGINATION_ID, 'div', 'modern-pagination', insertAfter);
+        var container = getOrCreateContainer(
+            CONFIG.MODERN_PAGINATION_ID, 'div', 'modern-pagination',
+            pickPaginationInsertTarget()
+        );
         if (!container) return;
         var data = extractPaginationData(legacyBar);
         container.innerHTML = buildPaginationHtml(data);
-        var jumpForm = container.querySelector('.modern-jump-form');
-        if (jumpForm) {
-            var jumpInput = jumpForm.querySelector('.modern-jump-input');
-            var jumpBtn = jumpForm.querySelector('.modern-jump-btn');
-            var jumpParams = null;
-            data.pageItems.forEach(function (item) { if (item.type === 'jump') jumpParams = item; });
-            if (jumpParams) {
-                jumpBtn.addEventListener('click', function () {
-                    var page = parseInt(jumpInput.value, 10);
-                    if (isNaN(page) || page < 1) page = 1;
-                    if (page > jumpParams.totalPages) page = jumpParams.totalPages;
-                    window.location.href = jumpParams.baseUrl + '&st=' + (page - 1) * jumpParams.entriesPerPage;
+        wireJumpForm(container, data);
+        console.log('[BreadcrumbsModule] Pagination modernised (DOM)');
+    }
+
+    async function tryBuildPaginationFromApi() {
+        const ctx = await getPageContext();
+
+        let info = null, pageSize = 0, baseUrl = null;
+        if (ctx.topicData && ctx.topicData.info) {
+            info     = ctx.topicData.info;
+            pageSize = CONFIG.TOPIC_PAGE_SIZE;
+            baseUrl  = '?t=' + ctx.topicId;
+        } else if (ctx.sectionData && ctx.sectionData.info) {
+            info     = ctx.sectionData.info;
+            pageSize = CONFIG.SECTION_PAGE_SIZE;
+            baseUrl  = '?f=' + ctx.sectionId;
+        }
+
+        if (!info || !info.pages || info.pages <= 1) return null;
+
+        const totalPages  = info.pages;
+        const currentPage = info.currentPage || 1;
+        const pageItems   = [];
+
+        if (totalPages <= 7) {
+            for (let p = 1; p <= totalPages; p++) {
+                pageItems.push({
+                    type: 'page',
+                    url: baseUrl + '&st=' + ((p - 1) * pageSize),
+                    text: String(p),
+                    isCurrent: p === currentPage
+                });
+            }
+        } else {
+            pageItems.push({
+                type: 'page', url: baseUrl + '&st=0', text: '1',
+                isCurrent: currentPage === 1
+            });
+            const win = 2;
+            if (currentPage - win > 2) pageItems.push({ type: 'ellipsis' });
+            for (let p = Math.max(2, currentPage - win);
+                     p <= Math.min(totalPages - 1, currentPage + win); p++) {
+                pageItems.push({
+                    type: 'page',
+                    url: baseUrl + '&st=' + ((p - 1) * pageSize),
+                    text: String(p),
+                    isCurrent: p === currentPage
+                });
+            }
+            if (currentPage + win < totalPages - 1) pageItems.push({ type: 'ellipsis' });
+            if (currentPage + win < totalPages) {
+                pageItems.push({
+                    type: 'page',
+                    url: baseUrl + '&st=' + ((totalPages - 1) * pageSize),
+                    text: String(totalPages),
+                    isCurrent: currentPage === totalPages
                 });
             }
         }
-        console.log('[BreadcrumbsModule] Pagination modernised');
+        pageItems.push({ type: 'jump', totalPages, entriesPerPage: pageSize, baseUrl });
+
+        let actionsHtml = '';
+        if (ctx.topicData && ctx.topicData.info) {
+            const t = ctx.topicData.info;
+            actionsHtml += '<a href="/?act=Post&CODE=02&f=' + t.section_id + '&t=' + t.id +
+                '" class="modern-btn modern-btn-secondary modern-pagination-action modern-pagination-action--reply">' +
+                '<i class="fa-regular fa-reply" aria-hidden="true"></i> Reply</a>';
+            actionsHtml += '<a href="/?act=Post&CODE=00&f=' + t.section_id +
+                '" class="modern-btn modern-btn-primary modern-pagination-action modern-pagination-action--new-topic">' +
+                '<i class="fa-regular fa-plus" aria-hidden="true"></i> New topic</a>';
+        } else if (ctx.sectionData && ctx.sectionData.info) {
+            const s = ctx.sectionData.info;
+            actionsHtml += '<a href="/?act=Post&CODE=00&f=' + s.id +
+                '" class="modern-btn modern-btn-primary modern-pagination-action modern-pagination-action--new-topic">' +
+                '<i class="fa-regular fa-plus" aria-hidden="true"></i> New topic</a>';
+        }
+
+        return { pageItems, actionsHtml };
     }
 
-    function convertAllPagination() {
-        var topBar = document.querySelector(CONFIG.LEGACY_PAGINATION_SELECTOR_TOP) ||
-                     document.querySelector(CONFIG.LEGACY_PAGINATION_PLAIN_TOP + ' .pages')?.closest('.navsub');
-        var bottomBar = document.querySelector(CONFIG.LEGACY_PAGINATION_SELECTOR_BOTTOM) ||
-                        document.querySelector(CONFIG.LEGACY_PAGINATION_PLAIN_BOTTOM + ' .pages')?.closest('.navsub');
-        if (bottomBar || topBar) convertPagination(bottomBar || topBar);
+    async function convertAllPagination() {
+        const currentUrl = location.pathname + location.search + location.hash;
+        if (_renderedUrl.pagination === currentUrl) return;
+
+        // ── 1. API path ──────────────────────────────────────────
+        let data = null;
+        try {
+            data = await tryBuildPaginationFromApi();
+        } catch (e) {
+            console.warn('[BreadcrumbsModule] API pagination failed:', e);
+        }
+
+        if (data) {
+            const container = getOrCreateContainer(
+                CONFIG.MODERN_PAGINATION_ID, 'div', 'modern-pagination',
+                pickPaginationInsertTarget()
+            );
+            if (container) {
+                container.innerHTML = buildPaginationHtml(data);
+                wireJumpForm(container, data);
+                _renderedUrl.pagination = currentUrl;
+                console.log('[BreadcrumbsModule] Pagination modernised via API');
+                return;
+            }
+        }
+
+        // ── 2. DOM fallback (blog / msg / unknown) ───────────────
+        const topBar = document.querySelector(CONFIG.LEGACY_PAGINATION_SELECTOR_TOP) ||
+                       document.querySelector(CONFIG.LEGACY_PAGINATION_PLAIN_TOP + ' .pages')?.closest('.navsub');
+        const bottomBar = document.querySelector(CONFIG.LEGACY_PAGINATION_SELECTOR_BOTTOM) ||
+                          document.querySelector(CONFIG.LEGACY_PAGINATION_PLAIN_BOTTOM + ' .pages')?.closest('.navsub');
+        if (bottomBar || topBar) {
+            convertPagination(bottomBar || topBar);
+            _renderedUrl.pagination = currentUrl;
+        }
     }
 
     // =========================================================================
@@ -895,7 +1141,7 @@ function extractPaginationData(legacyBar) {
         try { globalThis.forumObserver.register({ id: 'pagination-module-' + idx, selector: sel, priority: 'high', callback: convertAllPagination }); } catch (e) { console.error(e); }
     });
 
-    // Emoji normalisation for the modern topic title — now fires on every page
+    // Emoji normalisation for the modern topic title — fires on every page
     // where .topic-title exists, not just topic/search/send.
     try {
         globalThis.forumObserver.register({
@@ -916,24 +1162,34 @@ function extractPaginationData(legacyBar) {
     // =========================================================================
     // INITIALIZATION
     // =========================================================================
-    function initialize() {
-    convertBreadcrumb();                                          // ← always try — API or legacy
-    if (document.querySelector(CONFIG.LEGACY_TITLE_SELECTOR))    convertTopicHeader();
-    if (document.querySelector(CONFIG.MEMBER_POSTS_SELECTOR))    convertMemberPostsHeader();
-    convertAllPagination();
-    registerObserver();
-    console.log('[BreadcrumbsModule] Initialised');
-}
+    async function initialize() {
+        // Ordered so breadcrumb renders first — topic header and pagination
+        // both anchor their container relative to #modern-breadcrumbs or
+        // #posts-container, which must exist by the time they render.
+        // The API path in convertBreadcrumb settles independently of any
+        // legacy DOM, so nothing here blocks on .nav / .mtitle / .navsub.
+        await convertBreadcrumb();
+        await convertTopicHeader();
+        if (document.querySelector(CONFIG.MEMBER_POSTS_SELECTOR)) convertMemberPostsHeader();
+        await convertAllPagination();
+        registerObserver();
+        console.log('[BreadcrumbsModule] Initialised');
+    }
 
     return {
         initialize: initialize,
         refresh: function () {
-    _apiCache.clear();
-    convertBreadcrumb();
-    convertTopicHeader();
-    convertMemberPostsHeader();
-    convertAllPagination();
-}
+            // Force a clean re-render on the current URL: drop cached
+            // API responses, the memoised context promise, and the
+            // per-URL render guards, then rebuild everything.
+            _apiCache.clear();
+            _contextPromise = null;
+            _renderedUrl = { breadcrumb: null, topicHeader: null, pagination: null };
+            convertBreadcrumb();
+            convertTopicHeader();
+            convertMemberPostsHeader();
+            convertAllPagination();
+        }
     };
 })();
 
