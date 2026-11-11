@@ -2959,6 +2959,9 @@ body.modal-open {
   animation: loading-shimmer 1.5s infinite;
   border-radius: var(--radius);
 }
+#modern-forum-wrapper > div:empty {
+    display: none;
+}
 @keyframes loading-shimmer {
   0%   { background-position: 200% 0; }
   100% { background-position: -200% 0; }
