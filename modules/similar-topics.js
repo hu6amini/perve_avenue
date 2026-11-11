@@ -744,6 +744,26 @@ var SimilarTopicsModule = (function () {
 
     attachPreviewHandlers(listEl);
 }
+
+    function renderEmpty(isError) {
+    var listEl = document.querySelector('#' + CONFIG.containerId + ' .similar-topics-list');
+    if (!listEl) return;
+
+    if (isError) {
+        listEl.innerHTML =
+            '<div class="similar-topics-empty">' +
+                '<i class="fa-regular fa-circle-exclamation" aria-hidden="true"></i>' +
+                '<span>Could not load similar topics.</span>' +
+            '</div>';
+    } else {
+        listEl.innerHTML =
+            '<div class="similar-topics-empty">' +
+                '<i class="fa-regular fa-circle-info" aria-hidden="true"></i>' +
+                '<span>No similar topics found.</span>' +
+            '</div>';
+    }
+}
+    
     /* ================================================================
        PREVIEW
        ================================================================ */
