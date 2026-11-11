@@ -4311,12 +4311,20 @@ function transformLegacyAttachments(htmlContent) {
     // POLL CONVERSION
     // ============================================================================
 
-    function convertPoll() {
+        function convertPoll() {
         if (document.body.id !== 'topic') return;
         const legacyPoll = document.querySelector('div.poll');
         if (!legacyPoll) return;
-        if (legacyPoll.dataset.converted === 'true') return;
-        legacyPoll.dataset.converted = 'true';
+
+        // Self-consistent idempotency check: skip only if a modern poll
+        // already exists in the container. When the container is wiped
+        // by a re-conversion (setSanitizedHTML(container, '')), the
+        // modern poll goes with it, so this correctly triggers a fresh
+        // conversion on the next pass. Replaces the old dataset.converted
+        // marker, which outlived the container wipe and caused the poll
+        // to vanish after any observer-driven re-conversion.
+        const container = getPostsContainer();
+        if (container.querySelector('.modern-poll')) return;
 
         const pollData = parseLegacyPoll(legacyPoll);
         if (!pollData) return;
@@ -4325,7 +4333,6 @@ function transformLegacyAttachments(htmlContent) {
         const modernPoll = createElementFromHTML(modernHtml);
         if (!modernPoll) return;
 
-        const container = getPostsContainer();
         const firstPost = container.querySelector('.post-card');
         if (firstPost) {
             container.insertBefore(modernPoll, firstPost);
@@ -4813,12 +4820,9 @@ function resolveViewerContext() {
             const m = panelLink.href.match(/MID=(\d+)/);
             if (m) viewerMid = m[1];
         }
-        if (!viewerMid) return { mid: null, permission: null };
+                if (!viewerMid) return { mid: null, permission: null };
         try {
-            const r = await fetch('/api.php?mid=' + viewerMid, { credentials: 'same-origin' });
-            if (!r.ok) return { mid: viewerMid, permission: null };
-            const data = await r.json();
-            const me = data['m' + viewerMid];
+            const me = await fetchUserData(viewerMid);
             return { mid: viewerMid, permission: me?.permission || null };
         } catch (e) {
             return { mid: viewerMid, permission: null };
@@ -4973,13 +4977,14 @@ async function fetchTopicPage(topicId, st) {
 
 function syncActionVisibilityFromLegacy(modernCard, postId) {
     const legacyPost = document.getElementById(CONFIG.POST_ID_PREFIX + postId);
-    if (!legacyPost) return;
+    if (!legacyPost) return false;
     const legacy = getAvailableActions(legacyPost, postId);
     ['quote', 'edit', 'delete', 'report', 'share'].forEach(action => {
         const btn = modernCard.querySelector('[data-action="' + action + '"]');
         if (!btn) return;
         btn.style.display = legacy[action] ? '' : 'none';
     });
+    return true;
 }
 
 function hydrateReactionsFromLegacy(postIds) {
@@ -5072,15 +5077,36 @@ async function convertAllPostsViaApi() {
     setTimeout(fixBrokenWeservImages, 300);
     stripLegacyEntryAnchors();
 
-    if (postsData.some(d => d.availableActions._needsDomSync)) {
-        setTimeout(() => {
-            cards.forEach((card, i) => {
-                const data = postsData[i];
-                if (data?.availableActions?._needsDomSync) {
-                    syncActionVisibilityFromLegacy(card, data.postId);
+        if (postsData.some(d => d.availableActions._needsDomSync)) {
+        const needsSync = new Map();
+        postsData.forEach((d, i) => {
+            if (d.availableActions._needsDomSync) needsSync.set(d.postId, cards[i]);
+        });
+
+        // Prime: legacy posts already in the DOM get their buttons
+        // resolved immediately. Any that fail stay in needsSync.
+        Array.from(needsSync.entries()).forEach(([pid, card]) => {
+            if (syncActionVisibilityFromLegacy(card, pid)) needsSync.delete(pid);
+        });
+
+        // Defer: any cards whose legacy post hasn't painted yet get
+        // synced when the shared observer delivers the corresponding
+        // .post element. Prevents silent permanent failure if the forum
+        // ever switches to lazy-loaded posts.
+        if (needsSync.size > 0 && globalThis.forumObserver) {
+            globalThis.forumObserver.register({
+                id: 'posts-module-actions-sync',
+                selector: CONFIG.POST_SELECTOR,
+                priority: 'low',
+                callback: (node) => {
+                    const pid = getPostId(node);
+                    if (!pid || !needsSync.has(pid)) return;
+                    if (syncActionVisibilityFromLegacy(needsSync.get(pid), pid)) {
+                        needsSync.delete(pid);
+                    }
                 }
             });
-        }, 0);
+        }
     }
 
     setTimeout(() => hydrateReactionsFromLegacy(postsData.map(d => d.postId)), 0);
