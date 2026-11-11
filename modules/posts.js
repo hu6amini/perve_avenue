@@ -4772,10 +4772,338 @@ function attachPollHandlers(modernPoll, legacyPoll, pollData) {
         finally { conversionInProgress = false; if (conversionPending) convertMessages(); }
     }
 
-    async function convertAllPosts() {
+    // ============================================================================
+// API-SOURCED CONVERSION (v3.4)
+// ============================================================================
+// Uses /api.php?t= and /api.php?mid= to build modern cards without waiting
+// for the legacy .post DOM to become interactive. Falls back to the legacy
+// scrape path if either endpoint fails or returns an unexpected shape.
+//
+// Feature flag ENABLE_API_CONVERSION toggles the whole path. When false,
+// behaviour is byte-for-byte identical to v3.3 — this is the safe rollback.
+//
+// What the API serves fully (no DOM dependency):
+//   content, author, group, avatar, status, stats, post date, likes,
+//   edit info, poll, rank title/icon, action availability.
+//
+// What still needs the legacy DOM (lazily, after card render):
+//   reactions, IP address, poll voter count / viewer vote,
+//   action hrefs (CODE=02 / CODE=08 / delete — resolved at click time).
+// ============================================================================
+
+const ENABLE_API_CONVERSION = true;
+
+let _viewerContextPromise = null;
+
+function resolveViewerContext() {
+    if (_viewerContextPromise) return _viewerContextPromise;
+    _viewerContextPromise = (async () => {
+        let viewerMid = null;
+        const panelSelectors = [
+            '#user_panel a[href*="act=Profile&MID="]',
+            '.user-header a[href*="act=Profile&MID="]',
+            '.loggedin a[href*="act=Profile&MID="]',
+            'a[href*="act=Profile&MID="][class*="user"]'
+        ].join(', ');
+        const panelLink = document.querySelector(panelSelectors);
+        if (panelLink) {
+            const m = panelLink.href.match(/MID=(\d+)/);
+            if (m) viewerMid = m[1];
+        }
+        if (!viewerMid) return { mid: null, permission: null };
+        try {
+            const r = await fetch('/api.php?mid=' + viewerMid, { credentials: 'same-origin' });
+            if (!r.ok) return { mid: viewerMid, permission: null };
+            const data = await r.json();
+            const me = data['m' + viewerMid];
+            return { mid: viewerMid, permission: me?.permission || null };
+        } catch (e) {
+            return { mid: viewerMid, permission: null };
+        }
+    })();
+    return _viewerContextPromise;
+}
+
+function deriveRankFromTitles(titles, postCount) {
+    if (!Array.isArray(titles) || !titles.length) return null;
+    let match = titles[0];
+    for (const t of titles) {
+        const threshold = parseInt(t.posts, 10);
+        if (Number.isFinite(threshold) && postCount >= threshold) match = t;
+        else break;
+    }
+    const tmp = document.createElement('div');
+    tmp.innerHTML = match.pips || '';
+    const iconEl = tmp.querySelector('i');
+    const labelEl = tmp.querySelector('span');
+    const iconClass = iconEl
+        ? (iconEl.className || '').replace(/\bfa-solid\b/g, 'fa-regular')
+        : 'fa-medal fa-regular';
+    const title = labelEl ? labelEl.textContent.trim() : 'Member';
+    return { title, iconClass };
+}
+
+function extractEditInfoFromContent(html) {
+    if (!html || typeof html !== 'string') return null;
+    const tmp = document.createElement('div');
+    tmp.innerHTML = html;
+    const editSpan = tmp.querySelector('.edit');
+    if (!editSpan) return null;
+
+    const fullText = editSpan.textContent.trim();
+    const parts = fullText.split(' - ');
+    if (parts.length < 2) return null;
+
+    const editorPart = parts.slice(0, -1).join(' - ').replace(/^Edited by\s*/i, '').trim();
+    const dateStr = parts[parts.length - 1].trim();
+    const date = parseDateFromTitle(dateStr);
+    if (!date || isNaN(date.getTime())) return null;
+
+    return {
+        editor: editorPart,
+        relative: getRelativeTimeString(date),
+        rawDate: date
+    };
+}
+
+function deriveAvailableActions({ message, info, viewerMid, viewerPerm }) {
+    const isOpen = info?.open_topic === 1 && info?.read_only === 0;
+    const isSelf = viewerMid != null && String(message.user?.id) === String(viewerMid);
+
+    const perm = viewerPerm || {};
+    const isGlobalStaff = perm.founder === 1 || perm.admin === 1 || perm.global_mod === 1;
+
+    const modsList = Array.isArray(info?.mods) ? info.mods : [];
+    const isSectionMod = viewerMid != null &&
+        modsList.some(m => String(m) === String(viewerMid));
+
+    const isPossibleSectionMod = perm.mod_sez === 1 || perm.admin_sez === 1;
+    const needsDomSync = viewerMid == null ||
+        (isPossibleSectionMod && !isSectionMod);
+
+    const canMutate = isOpen && (isSelf || isGlobalStaff || isSectionMod);
+
+    return {
+        quote:  isOpen && viewerMid != null,
+        edit:   canMutate,
+        delete: canMutate,
+        report: true,
+        share:  true,
+        _needsDomSync: needsDomSync
+    };
+}
+
+function buildPostDataFromApi({ message, topicData, apiUser, viewerContext, postNumber }) {
+    const user = message.user || {};
+    const info = message.info || {};
+    const points = info.points || {};
+
+    let contentHtml = transformContentHtmlString(message.content || '');
+    contentHtml = contentHtml.replace(/<p>\s*<\/p>/g, '');
+
+    const rank = deriveRankFromTitles(topicData.titles, apiUser?.messages ?? 0);
+    const customTitle = user.title ? sanitizeHTML(user.title) : '';
+    const userTitle = customTitle || rank?.title || 'Member';
+    const rankIconClass = rank?.iconClass || 'fa-medal fa-regular';
+
+    const postDate = info.date ? new Date(info.date) : null;
+    const relativeTime = postDate ? getRelativeTimeString(postDate) : 'Recently';
+
+    const likes = parseInt(points.points, 10) || 0;
+
+    return {
+        postId: String(message.id),
+        mid: user.id != null ? String(user.id) : null,
+        originalPost: null,
+        username: user.nickname || 'Unknown',
+        groupText: user.group?.name || 'Member',
+        postCount: apiUser?.messages ?? 0,
+        reputation: apiUser?.reputation ?? 0,
+        isOnline: user.status === 'online',
+        userTitle,
+        rankIconClass,
+        contentHtml,
+        signatureHtml: user.signature ? paragraphizeHtml(user.signature) : '',
+        editInfo: extractEditInfoFromContent(message.content || ''),
+        likes,
+        hasReactions: false,
+        reactionCount: 0,
+        reactions: [],
+        ipAddress: '',
+        relativeTime,
+        postDate,
+        availableActions: deriveAvailableActions({
+            message,
+            info: topicData.info,
+            viewerMid: viewerContext.mid,
+            viewerPerm: viewerContext.permission
+        }),
+        isMemberPostsPage: false,
+        hideActions: false,
+        hideFooter: false,
+        apiUser,
+        postNumber
+    };
+}
+
+async function fetchTopicPage(topicId, st) {
+    const params = new URLSearchParams({ t: String(topicId) });
+    if (st && st > 0) params.set('st', String(st));
+    const url = '/api.php?' + params.toString();
+    try {
+        const r = await fetch(url, { credentials: 'same-origin' });
+        if (!r.ok) {
+            console.warn('[PostsModule] API topic fetch failed:', r.status, r.statusText);
+            return null;
+        }
+        const data = await r.json();
+        if (!data || !Array.isArray(data.messages) || data.messages.length === 0) {
+            console.warn('[PostsModule] API topic fetch returned no messages');
+            return null;
+        }
+        return data;
+    } catch (e) {
+        console.warn('[PostsModule] API topic fetch error:', e);
+        return null;
+    }
+}
+
+function syncActionVisibilityFromLegacy(modernCard, postId) {
+    const legacyPost = document.getElementById(CONFIG.POST_ID_PREFIX + postId);
+    if (!legacyPost) return;
+    const legacy = getAvailableActions(legacyPost, postId);
+    ['quote', 'edit', 'delete', 'report', 'share'].forEach(action => {
+        const btn = modernCard.querySelector('[data-action="' + action + '"]');
+        if (!btn) return;
+        btn.style.display = legacy[action] ? '' : 'none';
+    });
+}
+
+function hydrateReactionsFromLegacy(postIds) {
+    postIds.forEach(id => {
+        try { refreshReactionDisplay(id); } catch (e) {}
+    });
+}
+
+function hydrateIpFromLegacy(postsData, container) {
+    postsData.forEach(data => {
+        if (!data.postId) return;
+        const legacyPost = document.getElementById(CONFIG.POST_ID_PREFIX + data.postId);
+        if (!legacyPost) return;
+        const ip = getMaskedIp(legacyPost);
+        if (!ip) return;
+        const card = container.querySelector('.post-card[data-original-id="' + CONFIG.POST_ID_PREFIX + data.postId + '"]');
+        if (!card) return;
+        const footer = card.querySelector('.post-footer');
+        if (!footer || footer.querySelector('.post-ip')) return;
+        const ipEl = document.createElement('div');
+        ipEl.className = 'post-ip';
+        ipEl.textContent = 'IP: ' + ip;
+        footer.appendChild(ipEl);
+        applyTip(ipEl,
+            '<div class="tip-info"><div class="tip-info-title">IP Address</div><div class="tip-info-text">Last three octets masked for privacy.</div></div>',
+            { placement: 'top' });
+    });
+}
+
+async function convertAllPostsViaApi() {
+    if (document.body.id !== 'topic') return null;
+    const urlParams = new URLSearchParams(window.location.search);
+    const topicId = urlParams.get('t');
+    if (!topicId) return null;
+
+    const st = parseInt(urlParams.get('st') || '0', 10);
+    const postStartOffset = Number.isFinite(st) && st > 0 ? st : 0;
+
+    const topicData = await fetchTopicPage(topicId, postStartOffset);
+    if (!topicData) return null;
+
+    const viewerContext = await resolveViewerContext();
+
+    const mids = [...new Set(topicData.messages.map(m => m.user?.id).filter(Boolean))];
+    await fetchMultipleUsers(mids);
+
+    const container = getPostsContainer();
+    setSanitizedHTML(container, '');
+    convertedPostIds.clear();
+    postReactions.clear();
+
+    try { convertPoll(); } catch (e) { console.warn('[PostsModule] Poll convert failed:', e); }
+
+    const postsData = [];
+    const cards = [];
+
+    for (let i = 0; i < topicData.messages.length; i++) {
+        const message = topicData.messages[i];
+        const apiUser = message.user?.id ? userDataCache.get(String(message.user.id)) : null;
+        const data = buildPostDataFromApi({
+            message, topicData, apiUser, viewerContext,
+            postNumber: postStartOffset + i + 1
+        });
+        postsData.push(data);
+        convertedPostIds.add(data.postId);
+
+        const cardHtml = generateModernPost(data);
+        const card = createElementFromHTML(cardHtml);
+        if (!card) continue;
+        container.appendChild(card);
+        cards.push(card);
+
+        fixMissingImageDimensions(card);
+        applyFaviconsToMessageLinks(card);
+        wrapImagesWithDimensions(card);
+        attachTips(card, data);
+        try { hydrateSocialEmbeds(card); } catch (e) {}
+        try { hydrateLiteEmbeds(card);   } catch (e) {}
+    }
+
+    attachEventHandlers();
+    initQuotesAndSpoilers();
+    whenTippyReady(function () { autoTippyFromTitle(container); });
+    waitForLightGallery();
+    setTimeout(fixBrokenWeservImages, 300);
+    stripLegacyEntryAnchors();
+
+    if (postsData.some(d => d.availableActions._needsDomSync)) {
+        setTimeout(() => {
+            cards.forEach((card, i) => {
+                const data = postsData[i];
+                if (data?.availableActions?._needsDomSync) {
+                    syncActionVisibilityFromLegacy(card, data.postId);
+                }
+            });
+        }, 0);
+    }
+
+    setTimeout(() => hydrateReactionsFromLegacy(postsData.map(d => d.postId)), 0);
+    setTimeout(() => hydrateIpFromLegacy(postsData, container), 0);
+    setTimeout(() => scrollToHashAfterBuild(container), 100);
+
+    return { count: postsData.length, source: 'api' };
+}
+
+        async function convertAllPosts() {
         if (conversionInProgress) { conversionPending = true; return; }
         conversionInProgress = true;
         conversionPending = false;
+        try {
+            if (ENABLE_API_CONVERSION) {
+                const apiResult = await convertAllPostsViaApi();
+                if (apiResult) {
+                    console.log('[PostsModule] API path ready - ' + apiResult.count + ' posts converted');
+                    return;
+                }
+            }
+            await convertAllPostsLegacy();
+        } catch (err) {
+            console.error('[PostsModule] Conversion error:', err);
+        } finally {
+            conversionInProgress = false;
+            if (conversionPending) convertAllPosts();
+        }
+    }
+
+    async function convertAllPostsLegacy() {
         try {
             const container = getPostsContainer();
             setSanitizedHTML(container, '');
