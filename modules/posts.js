@@ -1333,6 +1333,7 @@ function postProcessPreviewContent(el) {
         if (data.availableActions.delete) actionsHtml += '<button class="action-icon delete-action" title="Delete" aria-label="Delete this post" data-action="delete" data-pid="' + data.postId + '"><i class="fa-regular fa-trash-can"></i></button>';
 
         return '<article class="post-card post-card--blog ' + groupCssClass + '" data-original-id="' + CONFIG.POST_ID_PREFIX + data.postId + '" data-post-id="' + data.postId + '">' +
+            '<div class="anchor"><a id="entry' + data.postId + '"></a></div>' +
             '<header class="blog-card-header"><h1 class="blog-title"><a href="' + escapeHtml(data.permalink) + '">' + escapeHtml(data.title) + '</a></h1><div class="blog-meta"><span class="blog-date">' + data.absoluteDate + '</span>' + (actionsHtml ? '<div class="blog-actions top-actions">' + actionsHtml + '</div>' : '') + '</div></header>' +
             '<div class="post-card-body"><div class="avatar-modern">' + avatarHtml + '</div>' +
             '<div class="post-user-info"><div class="user-name"><a href="' + profileUrl + '" class="user-profile-link">' + escapeHtml(username) + '</a></div>' +
@@ -4708,10 +4709,10 @@ function attachPollHandlers(modernPoll, legacyPoll, pollData) {
     // #lastpost / #newpost anchors are left alone: scrollToHashAfterBuild
     // still needs them as the source of truth.
     function stripLegacyEntryAnchors() {
-        document.querySelectorAll('.post .anchor a[id^="entry"]').forEach(function (a) {
-            a.removeAttribute('id');
-        });
-    }
+    document.querySelectorAll('.post .anchor a[id^="entry"], .blog .article .anchor a[id^="entry"], .blog .article a.anchor[id^="entry"]').forEach(function (a) {
+        a.removeAttribute('id');
+    });
+}
 
     // ============================================================================
     // CONVERSION FUNCTIONS
@@ -4923,7 +4924,12 @@ function buildPostDataFromApi({ message, topicData, apiUser, viewerContext, post
 
     const likes = parseInt(points.points, 10) || 0;
 
-    return {
+        const isBlogOp = document.body.id === 'blog'
+        && Array.isArray(topicData.messages)
+        && topicData.messages[0]
+        && message.id === topicData.messages[0].id;
+
+    const data = {
         postId: String(message.id),
         mid: user.id != null ? String(user.id) : null,
         originalPost: null,
@@ -4956,6 +4962,25 @@ function buildPostDataFromApi({ message, topicData, apiUser, viewerContext, post
         apiUser,
         postNumber
     };
+
+    // Blog article pages: messages[0] is the article itself; everything
+    // after is a comment. Populate the fields generateBlogPost reads so
+    // the OP card can render as a blog article rather than a post card.
+    // The presence of data.title doubles as the discriminator in the
+    // render loop — regular post cards never get this field.
+    if (isBlogOp) {
+        data.title = topicData.info.title || '';
+        data.permalink = '/?t=' + topicData.info.id;
+        data.absoluteDate = postDate
+            ? postDate.toLocaleDateString('en-US', {
+                month: 'short', day: 'numeric', year: 'numeric'
+              })
+            : 'Unknown';
+        data.commentsCount = topicData.info.replies || 0;
+        data.viewsCount = topicData.info.views || 0;
+    }
+
+    return data;
 }
 
 async function fetchTopicPage(topicId, st) {
@@ -5020,7 +5045,7 @@ function hydrateIpFromLegacy(postsData, container) {
 }
 
 async function convertAllPostsViaApi() {
-    if (document.body.id !== 'topic') return null;
+    if (document.body.id !== 'topic' && document.body.id !== 'blog') return null;
     const urlParams = new URLSearchParams(window.location.search);
     const topicId = urlParams.get('t');
     if (!topicId) return null;
@@ -5061,7 +5086,9 @@ async function convertAllPostsViaApi() {
         postsData.push(data);
         convertedPostIds.add(data.postId);
 
-        const cardHtml = generateModernPost(data);
+        const cardHtml = data.title
+            ? generateBlogPost(data, apiUser)
+            : generateModernPost(data);
         const card = createElementFromHTML(cardHtml);
         if (!card) continue;
         container.appendChild(card);
