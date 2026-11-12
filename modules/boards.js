@@ -219,18 +219,22 @@ const ForumBoardsModule = (function () {
         return new Date(utcMs);
     }
 
-    function getRelativeTimeString(date) {
+        function getRelativeTimeString(date) {
         if (!date || isNaN(date.getTime())) return 'Unknown';
         const now = new Date();
-        const diff = date - now;
+        const diff = date - now;                          // ms, signed
         const absDiff = Math.abs(diff) / 1000;
         const rtf = new Intl.RelativeTimeFormat(document.documentElement.lang || 'en', { numeric: 'auto' });
-        if (absDiff < 60) return rtf.format(Math.floor(diff / 1000), 'second');
-        if (absDiff < 3600) return rtf.format(Math.floor(diff / 60000), 'minute');
-        if (absDiff < 86400) return rtf.format(Math.floor(diff / 3600000), 'hour');
-        if (absDiff < 2592000) return rtf.format(-Math.floor(absDiff / 86400), 'day');
-        if (absDiff < 31536000) return rtf.format(-Math.floor(absDiff / 2592000), 'month');
-        return rtf.format(-Math.floor(absDiff / 31536000), 'year');
+        // Math.trunc truncates toward zero: -1.083 → -1. Math.floor on
+        // negative values rounds away from zero (-1.083 → -2), inflating
+        // every "N hours/minutes ago" by 1 when the elapsed count wasn't
+        // an exact integer.
+        if (absDiff < 60)       return rtf.format(Math.trunc(diff / 1000), 'second');
+        if (absDiff < 3600)     return rtf.format(Math.trunc(diff / 60000), 'minute');
+        if (absDiff < 86400)    return rtf.format(Math.trunc(diff / 3600000), 'hour');
+        if (absDiff < 2592000)  return rtf.format(Math.trunc(diff / 86400000), 'day');
+        if (absDiff < 31536000) return rtf.format(Math.trunc(diff / 2592000000), 'month');
+        return rtf.format(Math.trunc(diff / 31536000000), 'year');
     }
 
     function formatNumber(num) {
@@ -2239,6 +2243,55 @@ const ForumBoardsModule = (function () {
 
         // Pre-fetch authors so avatars are ready at first paint
         await fetchAllRelevantUsersByMidList(mids);
+
+               // ── Fix RSS timestamps by fetching exact values from api.php ──
+        // rss.php emits wall-clock from ForumFree's server timezone
+        // (Europe/Rome) labeled with a stale +0200 offset marker,
+        // producing instants that are 1 hour behind the truth. Rather
+        // than trying to guess the server's actual timezone and DST
+        // rules, fetch the exact ISO timestamp per item.
+        //
+        // Two paths:
+        //   - #entry<pid> in the link   → ?p=<pid>, reads info.date
+        //   - otherwise ?t=<tid> link   → ?t=<tid>&st=lastpost, reads
+        //                                 messages[0].info.date
+        // Both return ISO 8601 UTC, confirmed correct against ?t=.
+        await mapWithConcurrencyLimit(postsData, async function (d) {
+            const link = d.topicUrl || '';
+            const entryMatch = link.match(/#entry(\d+)/);
+            const topicMatch = link.match(/[?&]t=(\d+)/);
+            let exact = null;
+            try {
+                if (entryMatch) {
+                    const r = await fetch('/api.php?p=' + entryMatch[1], {
+                        credentials: 'same-origin',
+                        cache: 'no-store'
+                    });
+                    if (r.ok) {
+                        const j = await r.json();
+                        const iso = j['p' + entryMatch[1]] && j['p' + entryMatch[1]].info
+                            ? j['p' + entryMatch[1]].info.date : null;
+                        if (iso) exact = new Date(iso);
+                    }
+                } else if (topicMatch) {
+                    const r = await fetch('/api.php?t=' + topicMatch[1] +
+                        '&st=lastpost&cookie=1', {
+                        credentials: 'same-origin',
+                        cache: 'no-store'
+                    });
+                    if (r.ok) {
+                        const j = await r.json();
+                        const iso = j.messages && j.messages[0] && j.messages[0].info
+                            ? j.messages[0].info.date : null;
+                        if (iso) exact = new Date(iso);
+                    }
+                }
+            } catch (e) {}
+            if (exact && !isNaN(exact.getTime())) {
+                d.postDate = exact;
+                d.relativeTime = getRelativeTimeString(exact);
+            }
+        });
 
         // Render with existing generateLatestPostCard()
         let html = '<section class="latest-posts-section">' +
