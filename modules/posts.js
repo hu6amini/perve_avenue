@@ -5189,11 +5189,58 @@ const postStartOffset = (() => {
 
             convertPoll();
 
+            // Blog list pages scrape .when, which has no title attribute on
+            // the current markup — parseDateFromTitle(null) returns null and
+            // the card renders "Unknown". Pre-fetch ?f= to get the exact ISO
+            // date per thread and use it to override the scraper output.
+            let blogDateMap = null;
+            if (document.body.id === 'blog') {
+                const blogSectionId = new URLSearchParams(window.location.search).get('f');
+                const blogTopicId   = new URLSearchParams(window.location.search).get('t');
+                if (blogSectionId && !blogTopicId) {
+                    try {
+                        const r = await fetch(
+                            '/api.php?f=' + blogSectionId + '&cookie=1',
+                            { credentials: 'same-origin' }
+                        );
+                        if (r.ok) {
+                            const d = await r.json();
+                            if (Array.isArray(d.threads)) {
+                                blogDateMap = new Map();
+                                d.threads.forEach(t => {
+                                    const iso = t.info?.start?.date;
+                                    if (t.id && iso) blogDateMap.set(String(t.id), iso);
+                                });
+                            }
+                        }
+                    } catch (e) {
+                        console.warn('[PostsModule] Blog date map fetch failed:', e);
+                    }
+                }
+            }
+
             const blogArticles = document.querySelectorAll('.blog .article');
             let blogCount = 0;
             const allMids = [];
             for (const articleLi of blogArticles) {
                 const blogData = getBlogArticleData(articleLi);
+                                // Override the broken DOM-scraped date with the exact ISO
+                // from ?f=. Topic ID comes from the `a<id>` class on the
+                // <li> (matches the title link's ?t=<id> target).
+                if (blogDateMap) {
+                    const clsMatch = (articleLi.className || '').match(/\ba(\d+)\b/);
+                    const topicId = clsMatch && clsMatch[1];
+                    if (topicId && blogDateMap.has(topicId)) {
+                        const isoDate = blogDateMap.get(topicId);
+                        const exact = new Date(isoDate);
+                        if (!isNaN(exact.getTime())) {
+                            blogData.postDate = exact;
+                            blogData.absoluteDate = exact.toLocaleDateString('en-US', {
+                                month: 'short', day: 'numeric', year: 'numeric'
+                            });
+                        }
+                    }
+                }
                 if (blogData.postId && convertedPostIds.has(blogData.postId)) continue;
                 if (blogData.mid) allMids.push(blogData.mid);
                 await fetchMultipleUsers(allMids);
