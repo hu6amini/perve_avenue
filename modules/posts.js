@@ -4929,6 +4929,23 @@ function buildPostDataFromApi({ message, topicData, apiUser, viewerContext, post
         && topicData.messages[0]
         && message.id === topicData.messages[0].id;
 
+        // Signatures are not populated in ?t= responses — message.user.signature
+    // is always "" on ForumFree's current API, even though the forum does
+    // store and render them. ?f= returns them for the thread starter only;
+    // ?mid= and ?p= don't carry them at all. Fall back to the legacy DOM
+    // (still present until the modern container is rebuilt). If the API
+    // ever starts returning signatures, the first branch wins automatically
+    // and the DOM lookup becomes a no-op.
+    let signatureHtml = '';
+    if (user.signature) {
+        signatureHtml = paragraphizeHtml(user.signature);
+    } else {
+        const legacyPost = document.getElementById(CONFIG.POST_ID_PREFIX + message.id);
+        if (legacyPost) {
+            signatureHtml = getSignatureHtml(legacyPost);
+        }
+    }
+
     const data = {
         postId: String(message.id),
         mid: user.id != null ? String(user.id) : null,
@@ -4941,7 +4958,7 @@ function buildPostDataFromApi({ message, topicData, apiUser, viewerContext, post
         userTitle,
         rankIconClass,
         contentHtml,
-        signatureHtml: user.signature ? paragraphizeHtml(user.signature) : '',
+        signatureHtml: signatureHtml,
         editInfo: extractEditInfoFromContent(message.content || ''),
         likes,
         hasReactions: false,
