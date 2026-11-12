@@ -6309,3 +6309,7 @@ body.has-docked-editor {
   display: block;
   pointer-events: none;
 }
+
+#blog .nav ~ div[style*="overflow"][style*="hidden"]  {
+ display: none
+}
