@@ -5189,32 +5189,49 @@ const postStartOffset = (() => {
 
             convertPoll();
 
-            // Blog list pages scrape .when, which has no title attribute on
-            // the current markup — parseDateFromTitle(null) returns null and
-            // the card renders "Unknown". Pre-fetch ?f= to get the exact ISO
-            // date per thread and use it to override the scraper output.
+                        // Blog list pages: .when has no title attribute on the current
+            // markup, so parseDateFromTitle(null) returns null and the card
+            // renders "Unknown". Pre-fetch ?f=<sectionId> for exact ISO
+            // dates per article.
+            //
+            // Blog sections return articles[] — regular sections return
+            // threads[]. Both carry info.start.date; only the array key
+            // differs. Handle both so one branch works everywhere.
             let blogDateMap = null;
             if (document.body.id === 'blog') {
-                const blogSectionId = new URLSearchParams(window.location.search).get('f');
-                const blogTopicId   = new URLSearchParams(window.location.search).get('t');
-                if (blogSectionId && !blogTopicId) {
-                    try {
-                        const r = await fetch(
-                            '/api.php?f=' + blogSectionId + '&cookie=1',
-                            { credentials: 'same-origin' }
-                        );
-                        if (r.ok) {
-                            const d = await r.json();
-                            if (Array.isArray(d.threads)) {
-                                blogDateMap = new Map();
-                                d.threads.forEach(t => {
-                                    const iso = t.info?.start?.date;
-                                    if (t.id && iso) blogDateMap.set(String(t.id), iso);
-                                });
+                const blogTopicId = new URLSearchParams(window.location.search).get('t');
+                if (!blogTopicId) {
+                    let blogSectionId = new URLSearchParams(window.location.search).get('f');
+                    if (!blogSectionId) {
+                        const m = (document.body.className || '').match(/\bf(\d+)\b/);
+                        if (m) blogSectionId = m[1];
+                    }
+                    if (blogSectionId) {
+                        try {
+                            const r = await fetch(
+                                '/api.php?f=' + blogSectionId + '&cookie=1',
+                                { credentials: 'same-origin', cache: 'no-store' }
+                            );
+                            if (r.ok) {
+                                const d = await r.json();
+                                const list = Array.isArray(d.articles) ? d.articles
+                                           : Array.isArray(d.threads)  ? d.threads
+                                           : [];
+                                if (list.length) {
+                                    blogDateMap = new Map();
+                                    list.forEach(t => {
+                                        const iso = t.info?.start?.date;
+                                        if (t.id && iso) blogDateMap.set(String(t.id), iso);
+                                    });
+                                    console.log('[PostsModule] Blog date map: ' +
+                                        blogDateMap.size + ' dates from ' + list.length + ' articles');
+                                }
+                            } else {
+                                console.warn('[PostsModule] ?f= returned ' + r.status);
                             }
+                        } catch (e) {
+                            console.warn('[PostsModule] Blog date map fetch failed:', e);
                         }
-                    } catch (e) {
-                        console.warn('[PostsModule] Blog date map fetch failed:', e);
                     }
                 }
             }
