@@ -77,7 +77,7 @@ const ForumBoardsModule = (function () {
         ],
 
         // Latest posts limit
-        LATEST_POSTS_LIMIT: 12,
+        LATEST_POSTS_LIMIT: 8,
 
         // API timeout (ms)
         API_TIMEOUT: 3000
