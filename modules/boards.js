@@ -2095,27 +2095,22 @@ const ForumBoardsModule = (function () {
         }
     }
 
+        // =========================================================================
+    // LATEST POSTS CONVERSION — dispatcher + legacy + API (RSS)
+    // =========================================================================
     async function convertLatestPosts() {
         if (conversionInProgress) return;
         conversionInProgress = true;
         try {
-            const container = getOrCreateContainer(CONFIG.LATEST_POSTS_CONTAINER_ID);
-            if (!container) return;
-
-            const legacyLatest = document.querySelector(CONFIG.LATEST_POSTS_SELECTOR);
-            if (!legacyLatest) return;
-
-            const allTopicDivs = legacyLatest.querySelectorAll(CONFIG.LATEST_POST_ITEM_SELECTOR);
-            if (allTopicDivs.length === 0) return;
-
-            const limitedDivs = Array.from(allTopicDivs).slice(0, CONFIG.LATEST_POSTS_LIMIT);
-
-            await fetchLatestPostAuthors(limitedDivs);
-
-            const modernHtml = buildLatestPostsList(limitedDivs);
-            container.innerHTML = modernHtml || '';
-            attachProfileTipsToCards(container);
-            console.log('[BoardsModule] Latest posts modernized (' + limitedDivs.length + ' shown)');
+            if (ENABLE_API_BOARDS) {
+                const apiResult = await convertLatestPostsViaApi();
+                if (apiResult) {
+                    console.log('[BoardsModule] Latest posts modernised via RSS (' +
+                        apiResult.count + ' items)');
+                    return;
+                }
+            }
+            await convertLatestPostsLegacy();
         } catch (err) {
             console.error('[BoardsModule] Latest posts error:', err);
         } finally {
@@ -2123,6 +2118,145 @@ const ForumBoardsModule = (function () {
         }
     }
 
+    // ─── Legacy DOM path (unchanged) ─────────────────────────────────────
+    async function convertLatestPostsLegacy() {
+        const container = getOrCreateContainer(CONFIG.LATEST_POSTS_CONTAINER_ID);
+        if (!container) return;
+
+        const legacyLatest = document.querySelector(CONFIG.LATEST_POSTS_SELECTOR);
+        if (!legacyLatest) return;
+
+        const allTopicDivs = legacyLatest.querySelectorAll(CONFIG.LATEST_POST_ITEM_SELECTOR);
+        if (allTopicDivs.length === 0) return;
+
+        const limitedDivs = Array.from(allTopicDivs).slice(0, CONFIG.LATEST_POSTS_LIMIT);
+
+        await fetchLatestPostAuthors(limitedDivs);
+
+        const modernHtml = buildLatestPostsList(limitedDivs);
+        container.innerHTML = modernHtml || '';
+        attachProfileTipsToCards(container);
+        console.log('[BoardsModule] Latest posts modernized (' + limitedDivs.length + ' shown)');
+    }
+
+    // ─── API path via rss.php?type=xml ───────────────────────────────────
+    async function convertLatestPostsViaApi() {
+        const container = getOrCreateContainer(CONFIG.LATEST_POSTS_CONTAINER_ID);
+        if (!container) return null;
+
+        // Forum ID from cached index (already fetched by convertBoards
+        // or convertStats — free at this point).
+        const idx = await fetchForumIndex();
+        const forumId = idx && idx.idForum;
+        if (!forumId) return null;
+
+        // Fetch RSS feed. responseType text; decode as windows-1252
+        // because the endpoint declares that charset and topic titles
+        // may carry non-ASCII bytes.
+        let xmlText;
+        try {
+            const r = await fetch('/rss.php?a=' + forumId +
+                '&type=xml&n=' + CONFIG.LATEST_POSTS_LIMIT, {
+                credentials: 'same-origin',
+                cache: 'no-store'
+            });
+            if (!r.ok) return null;
+            const buf = await r.arrayBuffer();
+            xmlText = new TextDecoder('windows-1252').decode(buf);
+        } catch (e) {
+            console.warn('[BoardsModule] RSS fetch failed:', e);
+            return null;
+        }
+        if (!xmlText || xmlText.indexOf('<item') === -1) return null;
+
+        // Parse
+        let doc;
+        try {
+            doc = new DOMParser().parseFromString(xmlText, 'application/xml');
+        } catch (e) {
+            return null;
+        }
+        if (doc.querySelector('parsererror')) return null;
+
+        const items = doc.querySelectorAll('channel > item');
+        if (!items.length) return null;
+
+        function rssField(el, name) {
+            const direct = el.querySelector(name);
+            if (direct) return (direct.textContent || '').trim();
+            const nsList = el.getElementsByTagName('dc:' + name);
+            return nsList.length ? (nsList[0].textContent || '').trim() : '';
+        }
+
+        const postsData = [];
+        const mids = [];
+
+        items.forEach(function (item, i) {
+            if (i >= CONFIG.LATEST_POSTS_LIMIT) return;
+
+            const title = rssField(item, 'title');
+            const creator = rssField(item, 'creator');
+            const link = rssField(item, 'link');
+            const pubDate = rssField(item, 'pubDate') || rssField(item, 'date');
+
+            // Description carries the author profile link (with MID) and
+            // section link as HTML entities. Parse to extract MID.
+            const descHtml = rssField(item, 'description');
+            let authorMid = null;
+            if (descHtml) {
+                const tmp = document.createElement('div');
+                tmp.innerHTML = descHtml;
+                const profileLink = tmp.querySelector('a[href*="MID="]');
+                if (profileLink) {
+                    const m = profileLink.getAttribute('href').match(/MID=(\d+)/);
+                    if (m) authorMid = m[1];
+                }
+            }
+            if (authorMid) mids.push(authorMid);
+
+            // Detect reply — RSS prepends "Re:" for reply posts
+            const isReply = /^Re:\s*/i.test(title);
+            const cleanTitle = title.replace(/^Re:\s*/i, '').trim();
+
+            const postDate = pubDate ? new Date(pubDate) : null;
+            const relativeTime = (postDate && !isNaN(postDate.getTime()))
+                ? getRelativeTimeString(postDate) : '';
+
+            postsData.push({
+                avatarSrc: null,        // filled from userDataCache
+                authorName: creator || 'Unknown',
+                authorProfileUrl: authorMid ? '/?act=Profile&MID=' + authorMid : '#',
+                authorMid: authorMid,
+                topicUrl: link || '#',
+                topicTitleHTML: escapeHtml(cleanTitle),
+                relativeTime: relativeTime,
+                isNew: false,           // RSS doesn't expose unread state
+                isReply: isReply
+            });
+        });
+
+        if (postsData.length === 0) return null;
+
+        // Pre-fetch authors so avatars are ready at first paint
+        await fetchAllRelevantUsersByMidList(mids);
+
+        // Render with existing generateLatestPostCard()
+        let html = '<section class="latest-posts-section">' +
+            '<header class="latest-posts-header">' +
+                '<h2 class="latest-posts-title">Latest posts</h2>' +
+            '</header>' +
+            '<div class="latest-posts-grid">';
+        postsData.forEach(function (data) {
+            html += generateLatestPostCard(data);
+        });
+        html += '</div></section>';
+
+        container.innerHTML = html;
+        attachProfileTipsToCards(container);
+
+        return { count: postsData.length };
+    }
+   
     async function convertStats() {
         if (conversionInProgress) return;
         conversionInProgress = true;
