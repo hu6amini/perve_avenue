@@ -451,20 +451,24 @@ function parseDateFromTitle(title) {
     return new Date(year, month, day, hour, minute, second);
 }
 
-    function getRelativeTimeString(date) {
+        function getRelativeTimeString(date) {
         if (!date || isNaN(date.getTime())) return 'Unknown';
         const now = new Date();
         const diff = date - now;
         const absDiff = Math.abs(diff) / 1000;
         const rtf = new Intl.RelativeTimeFormat(document.documentElement.lang || 'en', { numeric: 'auto' });
-        if (absDiff < 60) return rtf.format(Math.floor(diff / 1000), 'second');
-        if (absDiff < 3600) return rtf.format(Math.floor(diff / 60000), 'minute');
-        if (absDiff < 86400) return rtf.format(Math.floor(diff / 3600000), 'hour');
-        if (absDiff < 2592000) return rtf.format(-Math.floor(absDiff / 86400), 'day');
-        if (absDiff < 31536000) return rtf.format(-Math.floor(absDiff / 2592000), 'month');
-        return rtf.format(-Math.floor(absDiff / 31536000), 'year');
+        // Math.trunc truncates toward zero: -1.185 → -1. Math.floor on
+        // negative values rounds away from zero (-1.185 → -2), inflating
+        // every "N hours/minutes ago" by 1 whenever the elapsed count
+        // isn't an exact integer. Same fix as boards.js.
+        if (absDiff < 60)       return rtf.format(Math.trunc(diff / 1000), 'second');
+        if (absDiff < 3600)     return rtf.format(Math.trunc(diff / 60000), 'minute');
+        if (absDiff < 86400)    return rtf.format(Math.trunc(diff / 3600000), 'hour');
+        if (absDiff < 2592000)  return rtf.format(Math.trunc(diff / 86400000), 'day');
+        if (absDiff < 31536000) return rtf.format(Math.trunc(diff / 2592000000), 'month');
+        return rtf.format(Math.trunc(diff / 31536000000), 'year');
     }
-
+    
     // ============================================================================
     // API USER DATA FETCHING
     // ============================================================================
