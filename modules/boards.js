@@ -2381,7 +2381,16 @@ const ForumBoardsModule = (function () {
     // INITIALIZATION
     // =========================================================================
     async function initialize() {
-        var hasLatest = !!document.querySelector(CONFIG.LATEST_POSTS_SELECTOR);
+                var hasLatest = !!document.querySelector(CONFIG.LATEST_POSTS_SELECTOR);
+
+        // When the legacy .side_topics plugin is not present, render the
+        // sidebar via the RSS endpoint on the same page types the plugin
+        // targeted (forum index + section pages). The RSS path doesn't
+        // need any DOM scaffolding — it produces its own container.
+        if (!hasLatest && ENABLE_API_BOARDS) {
+            var bid = document.body.id;
+            hasLatest = (bid === 'board' || bid === 'forum');
+        }
         var hasBoard = !!document.querySelector(CONFIG.BOARD_LIST_SELECTOR);
         var hasForum = !!document.querySelector(CONFIG.FORUM_WRAPPER_SELECTOR);
         var hasStats = !!document.querySelector(CONFIG.STATS_SELECTOR);
