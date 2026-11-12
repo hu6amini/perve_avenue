@@ -80,8 +80,10 @@ const ForumBoardsModule = (function () {
         LATEST_POSTS_LIMIT: 12,
 
         // API timeout (ms)
-        API_TIMEOUT: 3000,
-            // =========================================================================
+        API_TIMEOUT: 3000
+    });
+
+   // =========================================================================
     // API MIGRATION FLAG
     // =========================================================================
     // Four convert* functions have an API fast-path (boards, topics,
@@ -111,7 +113,6 @@ const ForumBoardsModule = (function () {
         })();
         return _forumIndexPromise;
     }
-    });
 
     // =========================================================================
     // AVATAR COLOUR PALETTE
@@ -143,11 +144,19 @@ const ForumBoardsModule = (function () {
     // =========================================================================
     // UTILITIES
     // =========================================================================
-    const escapeHtml = (str) => {
+        const escapeHtml = (str) => {
         if (typeof str !== 'string') return '';
         const div = document.createElement('div');
         div.textContent = str;
         return div.innerHTML;
+    };
+
+    const decodeHtmlEntities = (str) => {
+        if (!str || typeof str !== 'string') return str || '';
+        if (str.indexOf('&') === -1) return str;
+        const ta = document.createElement('textarea');
+        ta.innerHTML = str;
+        return ta.value;
     };
 
     function parseDateFromTitle(title) {
