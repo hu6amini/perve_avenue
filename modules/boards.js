@@ -80,7 +80,37 @@ const ForumBoardsModule = (function () {
         LATEST_POSTS_LIMIT: 12,
 
         // API timeout (ms)
-        API_TIMEOUT: 3000
+        API_TIMEOUT: 3000,
+            // =========================================================================
+    // API MIGRATION FLAG
+    // =========================================================================
+    // Four convert* functions have an API fast-path (boards, topics,
+    // stats, online page). Set to false to force every path back to
+    // the DOM scraper. The remaining functions (latest posts, members,
+    // groups legend hrefs, group page) stay DOM-only — no API endpoints
+    // exist for them.
+    const ENABLE_API_BOARDS = true;
+
+    // Cached forum index — convertBoards() and convertStats() both
+    // consume the same `?` bare response. One fetch per page load.
+    let _forumIndexPromise = null;
+    function fetchForumIndex() {
+        if (_forumIndexPromise) return _forumIndexPromise;
+        _forumIndexPromise = (async () => {
+            try {
+                const r = await fetch('/api.php', {
+                    credentials: 'same-origin',
+                    cache: 'no-store'
+                });
+                if (!r.ok) return null;
+                return await r.json();
+            } catch (e) {
+                console.warn('[BoardsModule] Forum index API failed:', e);
+                return null;
+            }
+        })();
+        return _forumIndexPromise;
+    }
     });
 
     // =========================================================================
@@ -1820,39 +1850,210 @@ const ForumBoardsModule = (function () {
     // =========================================================================
     let conversionInProgress = false;
 
+        // =========================================================================
+    // BOARD CONVERSION — dispatcher + legacy + API
+    // =========================================================================
     async function convertBoards() {
         if (conversionInProgress) return;
         conversionInProgress = true;
         try {
-            const container = getOrCreateContainer(CONFIG.BOARD_CONTAINER_ID);
-            if (!container) return;
-
-            const legacyList = document.querySelector(CONFIG.BOARD_LIST_SELECTOR);
-            if (!legacyList) return;
-
-            const categories = legacyList.querySelectorAll(CONFIG.CATEGORY_SELECTOR);
-            if (categories.length === 0) return;
-
-            const allForumRows = [];
-            categories.forEach(function (cat) {
-                const rows = cat.querySelectorAll(CONFIG.FORUM_ROW_SELECTOR);
-                rows.forEach(function (row) { allForumRows.push(row); });
-            });
-
-            await fetchAllRelevantUsers(allForumRows, []);
-
-            const modernHtml = buildModernBoardList(categories);
-            container.innerHTML = modernHtml || '';
-
-            attachCategoryToggleEvents();
-            restoreCategoryStates();
-            attachProfileTipsToCards(container);
-
-            console.log('[BoardsModule] Board list modernized');
+            if (ENABLE_API_BOARDS) {
+                const apiResult = await convertBoardsViaApi();
+                if (apiResult) {
+                    console.log('[BoardsModule] Board list modernised via API (' +
+                        apiResult.count + ' forums)');
+                    return;
+                }
+            }
+            await convertBoardsLegacy();
         } catch (err) {
             console.error('[BoardsModule] Board conversion error:', err);
         } finally {
             conversionInProgress = false;
+        }
+    }
+
+    // ─── Legacy DOM path (unchanged) ─────────────────────────────────────
+    async function convertBoardsLegacy() {
+        const container = getOrCreateContainer(CONFIG.BOARD_CONTAINER_ID);
+        if (!container) return;
+
+        const legacyList = document.querySelector(CONFIG.BOARD_LIST_SELECTOR);
+        if (!legacyList) return;
+
+        const categories = legacyList.querySelectorAll(CONFIG.CATEGORY_SELECTOR);
+        if (categories.length === 0) return;
+
+        const allForumRows = [];
+        categories.forEach(function (cat) {
+            const rows = cat.querySelectorAll(CONFIG.FORUM_ROW_SELECTOR);
+            rows.forEach(function (row) { allForumRows.push(row); });
+        });
+
+        await fetchAllRelevantUsers(allForumRows, []);
+
+        const modernHtml = buildModernBoardList(categories);
+        container.innerHTML = modernHtml || '';
+
+        attachCategoryToggleEvents();
+        restoreCategoryStates();
+        attachProfileTipsToCards(container);
+
+        console.log('[BoardsModule] Board list modernized');
+    }
+
+    // ─── API path ────────────────────────────────────────────────────────
+    async function convertBoardsViaApi() {
+        const container = getOrCreateContainer(CONFIG.BOARD_CONTAINER_ID);
+        if (!container) return null;
+
+        // Category structure + icon classes + subsection info come from
+        // a cheap DOM walk — the API has no category concept and its
+        // sections[] is a flat array.
+        const domStructure = extractBoardStructureFromDom();
+        if (!domStructure || domStructure.length === 0) return null;
+
+        const idx = await fetchForumIndex();
+        if (!idx || !Array.isArray(idx.sections) || idx.sections.length === 0) {
+            return null;
+        }
+
+        // Pre-fetch last-post authors so cards carry real avatars +
+        // group colours from first paint.
+        const mids = [];
+        idx.sections.forEach(s => {
+            if (s.lastTopic && s.lastTopic.poster && s.lastTopic.poster.id) {
+                mids.push(String(s.lastTopic.poster.id));
+            }
+        });
+        await fetchAllRelevantUsersByMidList(mids);
+
+        const categories = buildBoardCategoriesFromApi(domStructure, idx.sections);
+        if (categories.length === 0) return null;
+
+        container.innerHTML = renderBoardCategories(categories);
+
+        attachCategoryToggleEvents();
+        restoreCategoryStates();
+        attachProfileTipsToCards(container);
+
+        return {
+            count: categories.reduce(function (n, c) { return n + c.forums.length; }, 0)
+        };
+    }
+
+    // Walk the legacy DOM once to capture structure + non-API fields:
+    //   - category grouping (id + name)
+    //   - forum row order within each category
+    //   - icon class (.aa i — no API equivalent)
+    //   - unread state (.on class — no API equivalent)
+    //   - subforum link (.zz .where first <a> when 2+ links present —
+    //     API's lastTopic doesn't say which subsection)
+    function extractBoardStructureFromDom() {
+        const categories = document.querySelectorAll('ul.board.List > li.skin_tbl');
+        if (!categories.length) return null;
+
+        return Array.from(categories).map(function (cat) {
+            const forums = Array.from(cat.querySelectorAll('ul.big_list > li')).map(function (li) {
+                const iconEl = li.querySelector('.aa i');
+                const whereEl = li.querySelector('.zz .where');
+                const whereLinks = whereEl ? whereEl.querySelectorAll('a') : [];
+                return {
+                    forumId: li.id ? li.id.replace('f', '') : '',
+                    iconClass: iconEl ? iconEl.className : 'fa-regular fa-folder',
+                    isUnread: li.classList.contains('on'),
+                    subForumUrl: whereLinks.length >= 2 ? (whereLinks[0].getAttribute('href') || '') : '',
+                    subForumName: whereLinks.length >= 2 ? whereLinks[0].textContent.trim() : ''
+                };
+            }).filter(function (f) { return f.forumId; });
+
+            return {
+                categoryId: cat.id ? cat.id.replace('c', '') : '',
+                categoryName: cat.querySelector('h2.mtitle') ?
+                    cat.querySelector('h2.mtitle').textContent.trim() : 'Category',
+                forums: forums
+            };
+        }).filter(function (c) { return c.forums.length > 0; });
+    }
+
+    // Produce the exact `data` shape generateForumCard() consumes, using
+    // API content for everything available and DOM for the rest.
+    function buildBoardCategoriesFromApi(domStructure, apiSections) {
+        const sectionById = new Map(apiSections.map(function (s) {
+            return [String(s.id), s];
+        }));
+
+        return domStructure.map(function (category) {
+            return {
+                categoryId: category.categoryId,
+                categoryName: category.categoryName,
+                forums: category.forums.map(function (dom) {
+                    const section = sectionById.get(dom.forumId);
+                    if (!section) return null;
+
+                    const last = section.lastTopic || {};
+                    const lastDate = last.date ? new Date(last.date) : null;
+                    const lastDateValid = lastDate && !isNaN(lastDate.getTime());
+
+                    const lastTopicId = last.topic && last.topic.id ? last.topic.id : null;
+                    const lastTopicName = last.topic && last.topic.name
+                        ? decodeHtmlEntities(last.topic.name) : '';
+
+                    return {
+                        forumId: String(section.id),
+                        forumName: section.name || 'Unknown Forum',
+                        forumUrl: '/?f=' + section.id,
+                        thumbnailUrl: section.targhetta || null,
+                        topicsCount: section.topics || 0,
+                        repliesCount: section.replies || 0,
+                        lastPostRelative: lastDateValid ? getRelativeTimeString(lastDate) : '',
+                        lastPostDateStr: last.date || '',
+                        lastTopicUrl: lastTopicId ? '?t=' + lastTopicId + '&st=lastpost' : '',
+                        lastTopicHTML: lastTopicName ? escapeHtml(lastTopicName) : '',
+                        subForumUrl: dom.subForumUrl,
+                        subForumName: dom.subForumName,
+                        lastPostAuthor: (last.poster && last.poster.name) || '',
+                        lastPostAuthorUrl: (last.poster && last.poster.id)
+                            ? '/?act=Profile&MID=' + last.poster.id : '',
+                        lastPostAuthorMid: (last.poster && last.poster.id)
+                            ? String(last.poster.id) : '',
+                        iconClass: dom.iconClass,
+                        isUnread: dom.isUnread
+                    };
+                }).filter(Boolean)
+            };
+        }).filter(function (c) { return c.forums.length > 0; });
+    }
+
+    // Reuses the existing generateForumCard() so visuals are identical
+    // between API and legacy paths.
+    function renderBoardCategories(categories) {
+        return categories.map(function (cat) {
+            return '<section class="board-category" data-category-id="' + cat.categoryId + '">' +
+                '<header class="board-category-header">' +
+                    '<h2 class="board-category-title">' + escapeHtml(cat.categoryName) + '</h2>' +
+                    '<button class="category-toggle-btn" aria-label="Toggle category" title="Collapse / expand" data-category-id="' + cat.categoryId + '">' +
+                        '<i class="fa-regular fa-angle-down" aria-hidden="true"></i>' +
+                    '</button>' +
+                '</header>' +
+                '<div class="modern-cards-grid">' +
+                    cat.forums.map(generateForumCard).join('') +
+                '</div>' +
+            '</section>';
+        }).join('');
+    }
+
+    // Simpler variant of fetchAllRelevantUsers that takes a MID list
+    // directly. Used by the API path since we never have DOM rows.
+    async function fetchAllRelevantUsersByMidList(midList) {
+        const unique = Array.from(new Set(midList.filter(Boolean)));
+        if (!unique.length) return;
+        try {
+            await mapWithConcurrencyLimit(unique, async function (mid) {
+                await fetchUserDataWithTimeout(mid);
+            });
+        } catch (e) {
+            console.warn('[BoardsModule] User pre-fetch failed:', e);
         }
     }
 
