@@ -3181,7 +3181,7 @@ body.modal-open {
     height: 24px;
     border-radius: var(--radius-full);
     object-fit: cover;
-    border: 2px solid var(--group-member);
+    border: 1px solid var(--group-member);
     box-sizing: border-box;
 }
 
