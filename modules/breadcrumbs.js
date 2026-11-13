@@ -56,11 +56,11 @@ const BreadcrumbsModule = (function () {
     // UTILITIES
     // =========================================================================
     const escapeHtml = (str) => {
-        if (typeof str !== 'string') return '';
-        const div = document.createElement('div');
-        div.textContent = str;
-        return div.innerHTML;
-    };
+    if (str == null) return '';
+    const div = document.createElement('div');
+    div.textContent = String(str);
+    return div.innerHTML;
+};
 
     function decodeHtmlEntities(str) {
         if (!str || typeof str !== 'string') return str || '';
@@ -840,8 +840,8 @@ else groupClass = 'group-member';
             eyebrowHtml:    eyebrowHtml,
             topicTitle:     titleText,
             topicTitleHtml: escapeHtml(titleText),
-            replyCount:     info.replies || '',
-            viewCount:      info.views || '',
+            replyCount:     info.replies != null ? Number(info.replies).toLocaleString('en-US') : '',
+            viewCount:      info.views   != null ? Number(info.views).toLocaleString('en-US')   : '',
             shareLink:      shareLink,
             starter:        starter,      // NEW
             startedDate:    startedDate   // NEW
