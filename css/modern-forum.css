@@ -3133,36 +3133,29 @@ body.modal-open {
   font-size: var(--text-xs);
   color: var(--text-secondary);
 }
+/* ------------------------------------------------------------
+   Topic starter chip — inside .topic-meta, alongside views/replies.
+   Sits between the topic title and the stats. Compact, inline,
+   fully token-driven: --space-* for gaps, --text-* for sizes,
+   --group-* for the avatar ring (one colour per group).
+   ------------------------------------------------------------ */
+
+/* The starter chip — inline-flex so the avatar and name align
+   on their baselines without the avatar padding out the line box. */
 .topic-meta .topic-starter {
     display: inline-flex;
     align-items: center;
-    gap: 6px;
-    padding-right: var(--space-md, 16px);
+    gap: var(--space-xs);
     color: var(--text-secondary);
-    font-size: var(--text-sm, 0.875rem);
+    font-size: var(--text-sm);
     white-space: nowrap;
+    padding-right: var(--space-sm);
 }
 
-.topic-starter-avatar {
-    width: 20px;
-    height: 20px;
-    border-radius: 50%;
-    object-fit: cover;
-    flex-shrink: 0;
-    vertical-align: middle;
-}
-
-.topic-starter-avatar--initial {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    background-color: var(--primary-color, #059669);
-    color: #fff;
-    font-size: 11px;
-    font-weight: 600;
-    line-height: 1;
-}
-
+/* Avatar link — resets inline link styles, adds a hover scale.
+   Kept as a separate element from .topic-starter-avatar so the
+   ring/scale applies to the whole clickable region, not just the
+   image box. */
 .topic-starter-avatar-link {
     display: inline-flex;
     align-items: center;
@@ -3170,41 +3163,160 @@ body.modal-open {
     line-height: 0;
     text-decoration: none;
     flex-shrink: 0;
-    border-radius: 50%;
-    transition: transform 0.15s ease, box-shadow 0.15s ease;
+    border-radius: var(--radius-full);
+    transition: transform 0.15s ease;
 }
 
-.topic-starter-avatar-link:hover {
-    transform: scale(1.08);
-    box-shadow: 0 0 0 2px var(--primary-color, #059669);
-}
-
+.topic-starter-avatar-link:hover,
 .topic-starter-avatar-link:focus-visible {
-    outline: 2px solid var(--primary-color, #059669);
-    outline-offset: 2px;
+    transform: scale(1.1);
 }
 
-.topic-starter-label {
-    color: var(--text-tertiary);
+/* Avatar — 24px circle with a 2px ring in the starter's group
+   colour. The default is --group-member (emerald); per-group
+   overrides below change it to the role colour. */
+.topic-starter-avatar {
+    display: block;
+    width: 24px;
+    height: 24px;
+    border-radius: var(--radius-full);
+    object-fit: cover;
+    border: 2px solid var(--group-member);
+    box-sizing: border-box;
 }
 
+/* Initial fallback — same dimensions and ring, but a colour-filled
+   circle with a single uppercase letter. Matches the initial-avatar
+   pattern used elsewhere (see .initial-avatar in post cards). */
+.topic-starter-avatar--initial {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 24px;
+    height: 24px;
+    background-color: var(--group-member);
+    color: #fff;
+    font-size: var(--text-xs);
+    font-weight: 600;
+    line-height: 1;
+    border: 2px solid var(--group-member);
+    border-radius: var(--radius-full);
+    box-sizing: border-box;
+}
+
+/* ------------------------------------------------------------
+   Group-specific avatar rings.
+   One rule per group. The base border above is a member-coloured
+   fallback; these override it. Order matters only if two group
+   classes land on the same element, which shouldn't happen given
+   the discriminator in breadcrumbs.js's groupClass derivation,
+   but founder is listed first for safety.
+   ------------------------------------------------------------ */
+.topic-starter.group-founder .topic-starter-avatar,
+.topic-starter.group-founder .topic-starter-avatar--initial {
+    border-color: var(--group-founder);
+}
+.topic-starter.group-founder .topic-starter-avatar--initial {
+    background-color: var(--group-founder);
+}
+
+.topic-starter.group-administrator .topic-starter-avatar,
+.topic-starter.group-administrator .topic-starter-avatar--initial {
+    border-color: var(--group-administrator);
+}
+.topic-starter.group-administrator .topic-starter-avatar--initial {
+    background-color: var(--group-administrator);
+}
+
+.topic-starter.group-global-moderator .topic-starter-avatar,
+.topic-starter.group-global-moderator .topic-starter-avatar--initial {
+    border-color: var(--group-global-moderator);
+}
+.topic-starter.group-global-moderator .topic-starter-avatar--initial {
+    background-color: var(--group-global-moderator);
+}
+
+.topic-starter.group-moderator .topic-starter-avatar,
+.topic-starter.group-moderator .topic-starter-avatar--initial {
+    border-color: var(--group-moderator);
+}
+.topic-starter.group-moderator .topic-starter-avatar--initial {
+    background-color: var(--group-moderator);
+}
+
+.topic-starter.group-developer .topic-starter-avatar,
+.topic-starter.group-developer .topic-starter-avatar--initial {
+    border-color: var(--group-developer);
+}
+.topic-starter.group-developer .topic-starter-avatar--initial {
+    background-color: var(--group-developer);
+}
+
+.topic-starter.group-game-dev .topic-starter-avatar,
+.topic-starter.group-game-dev .topic-starter-avatar--initial {
+    border-color: var(--group-game-dev);
+}
+.topic-starter.group-game-dev .topic-starter-avatar--initial {
+    background-color: var(--group-game-dev);
+}
+
+.topic-starter.group-fan .topic-starter-avatar,
+.topic-starter.group-fan .topic-starter-avatar--initial {
+    border-color: var(--group-fan);
+}
+.topic-starter.group-fan .topic-starter-avatar--initial {
+    background-color: var(--group-fan);
+}
+
+.topic-starter.group-member .topic-starter-avatar,
+.topic-starter.group-member .topic-starter-avatar--initial {
+    border-color: var(--group-member);
+}
+.topic-starter.group-member .topic-starter-avatar--initial {
+    background-color: var(--group-member);
+}
+
+/* Name link — primary text, hover to primary colour. */
 .topic-starter-link {
     color: var(--text-primary);
     font-weight: 500;
     text-decoration: none;
+    transition: color 0.2s cubic-bezier(0.4, 0, 0.2, 1);
 }
-
 .topic-starter-link:hover {
-    text-decoration: underline;
+    color: var(--primary-color);
+    text-decoration: none;
 }
 
+/* Separator dot between the name and the relative date. */
 .topic-starter-sep {
     color: var(--text-tertiary);
-    margin: 0 2px;
+    margin: 0 var(--space-2xs);
+    user-select: none;
 }
 
+/* Relative date — tertiary text, smaller than the chip's base
+   because it's secondary context. Uses the theme's --text-xs (0.75rem). */
 .topic-starter-date {
     color: var(--text-tertiary);
+    font-size: var(--text-xs);
+}
+
+/* Mobile: tighten gap and slightly reduce avatar size to prevent
+   the meta row from wrapping awkwardly on narrow screens. */
+@media (max-width: 680px) {
+    .topic-meta .topic-starter {
+        gap: var(--space-2xs);
+        padding-right: var(--space-xs);
+    }
+    .topic-starter-avatar,
+    .topic-starter-avatar--initial {
+        width: 20px;
+        height: 20px;
+    }
+    .topic-starter-avatar--initial {
+        font-size: 10px;
+    }
 }
 .topic-stats { display: flex; align-items: center; gap: 4px; }
 .topic-stats i { color: var(--primary-light); }
