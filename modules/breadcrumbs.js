@@ -679,11 +679,21 @@ const BreadcrumbsModule = (function () {
     // NEW — starter chip
     if (data.starter) {
         const profileUrl = '/?act=Profile&MID=' + data.starter.mid;
-        const groupClass = 'group-' + (data.starter.groupClass || 'member')
-            .split(/\s+/)[0]
-            .toLowerCase()
-            .replace(/[^a-z0-9]+/g, '-')
-            .replace(/^-+|-+$/g, '');
+        // The API's group.class string carries the group tokens, e.g.
+// "amministratore administrator founder" for the founder, or
+// "gruppo1" for global moderators. The founder flag only lives in
+// that string (group.name is just "Administrator"). Derive the
+// theme CSS class from the class tokens, mirroring the mapping
+// already used by posts.js / boards.js.
+const rawClass = (data.starter.groupClass || '').toLowerCase();
+let groupClass;
+if (rawClass.indexOf('founder') !== -1) groupClass = 'group-founder';
+else if (rawClass.indexOf('administrator') !== -1 || rawClass.indexOf('amministratore') !== -1) groupClass = 'group-administrator';
+else if (rawClass.indexOf('globalmod') !== -1 || rawClass.indexOf('gruppo1') !== -1) groupClass = 'group-global-moderator';
+else if (rawClass.indexOf('gamdev') !== -1 || rawClass.indexOf('gruppo2') !== -1) groupClass = 'group-game-dev';
+else if (rawClass.indexOf('gruppo3') !== -1 || rawClass.indexOf('fan') !== -1) groupClass = 'group-fan';
+else if (rawClass.indexOf('moderat') !== -1) groupClass = 'group-moderator';
+else groupClass = 'group-member';
 
         let avatarHtml;
         if (data.starter.avatar && /^(https?:)?\/\//i.test(data.starter.avatar)) {
@@ -906,30 +916,6 @@ const BreadcrumbsModule = (function () {
     if (!container) return;
 
     container.innerHTML = buildTopicHeaderHtml(data);
-
-    if (data.starter && data.starter.mid) {
-    const starterLink = container.querySelector('.topic-starter-link');
-    if (starterLink) {
-        var attempts = 0;
-        function tryAttach() {
-            var PM = window.ForumPostsModule;
-            if (PM && typeof PM.attachProfileTip === 'function') {
-                PM.attachProfileTip(starterLink, {
-                    mid: data.starter.mid,
-                    username: data.starter.username,
-                    apiUser: null,              // will populate from PM's cache if available
-                    groupText: 'Member',
-                    postCount: 0,
-                    reputation: 0,
-                    isOnline: data.starter.status === 'online'
-                });
-                return;
-            }
-            if (++attempts < 25) setTimeout(tryAttach, 200);
-        }
-        tryAttach();
-    }
-}
 
     // NEW: normalise unicode emoji that survived from the legacy title
     applyEmojiReplacer(container, 50);
