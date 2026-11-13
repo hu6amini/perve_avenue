@@ -2760,6 +2760,19 @@ function buildPollBuilder(legacyForm) {
             var existingHeader = host.querySelector('.modern-dock-header');
             if (existingHeader) existingHeader.remove();
 
+            // Disconnect previous observer/listener if rebuilding
+            if (host.__dockObserver) {
+                if (typeof host.__dockObserver === 'function') {
+                    host.__dockObserver();
+                } else if (host.__dockObserver.disconnect) {
+                    host.__dockObserver.disconnect();
+                }
+                host.__dockObserver = null;
+            }
+            
+            // Clean up body class
+            document.body.classList.remove('has-docked-editor');
+
             // Detach host if it's currently inside an old placeholder
             var oldPlaceholder = host.closest('.modern-dock-placeholder');
             if (oldPlaceholder) {
@@ -2774,11 +2787,6 @@ function buildPollBuilder(legacyForm) {
             
             // Move the editor inside the placeholder
             placeholder.appendChild(host);
-
-            // The sentinel sits right before the placeholder.
-            var sentinel = document.createElement('div');
-            sentinel.className = 'modern-dock-sentinel';
-            placeholder.parentNode.insertBefore(sentinel, placeholder);
 
             // The mini bar shown when docked
             var dockHeader = document.createElement('div');
@@ -2798,19 +2806,20 @@ function buildPollBuilder(legacyForm) {
             }
             updateDockHeader();
 
-            // Replaced IntersectionObserver with a reliable scroll listener
+            // Bulletproof check based directly on the placeholder's position
             function updateDockState() {
-                if (!sentinel) return;
-                var rect = sentinel.getBoundingClientRect();
-                // Dock if the sentinel is below the top of the viewport (meaning we are scrolled above the editor)
-                var docked = rect.top > 0;
+                if (!placeholder) return;
+                var rect = placeholder.getBoundingClientRect();
+                
+                // If the placeholder is below the viewport, we dock the editor
+                var docked = rect.top > window.innerHeight;
                 
                 if (docked !== isDocked) {
                     isDocked = docked;
                     
                     if (isDocked) {
                         // Measure height BEFORE changing to fixed
-                        var h = host.offsetHeight;
+                        var h = placeholder.offsetHeight || host.offsetHeight;
                         placeholder.style.height = h + 'px';
                         
                         // Apply fixed positioning styles
@@ -2842,8 +2851,10 @@ function buildPollBuilder(legacyForm) {
             window.addEventListener('scroll', scrollHandler, { passive: true });
             window.addEventListener('resize', scrollHandler, { passive: true });
             
-            // Initial check on load
+            // Initial checks on load to catch layout shifts
+            updateDockState();
             setTimeout(updateDockState, 100);
+            setTimeout(updateDockState, 500);
 
             // Click docked bar to toggle expanded state
             dockHeader.addEventListener('click', function() {
@@ -2871,15 +2882,13 @@ function buildPollBuilder(legacyForm) {
                     placeholder.parentNode.insertBefore(host, placeholder);
                     placeholder.parentNode.removeChild(placeholder);
                 }
-                if (sentinel && sentinel.parentNode) {
-                    sentinel.parentNode.removeChild(sentinel);
-                }
                 host.classList.remove('is-docked');
                 host.classList.remove('is-minified');
                 if (!document.querySelector('.modern-editor-dockable.is-docked')) {
                     document.body.classList.remove('has-docked-editor');
                 }
             };
+            host.__dockObserver = host.__dockCleanup;
         }
         // ────────────────────────────────────────────────────────────────────
         
