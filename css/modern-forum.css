@@ -3102,7 +3102,7 @@ body.modal-open {
 .modern-current-forum:hover { color: var(--primary-light); text-decoration: underline; }
 .modern-current-forum i { color: var(--primary-light); margin-right: 4px; }
 
-.modern-topic-header { margin-bottom: var(--space-md); }
+.modern-topic-header { margin-bottom: var(--space-lg); }
 .topic-header {
   display: flex;
   justify-content: space-between;
