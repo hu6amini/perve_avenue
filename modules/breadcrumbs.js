@@ -249,7 +249,7 @@ const BreadcrumbsModule = (function () {
         return p;
     }
 
-    function getPageContext() {
+        function getPageContext() {
         if (_contextPromise) return _contextPromise;
         _contextPromise = (async () => {
             const params    = new URLSearchParams(window.location.search);
@@ -272,9 +272,28 @@ const BreadcrumbsModule = (function () {
                 ? await apiFetch('mid=' + encodeURIComponent(userId))
                 : null;
 
+            // Fetch the topic starter's full user record so the header
+            // chip can render a complete profile hovercard (posts / rep /
+            // joined). ?t= only carries id + nickname in `starter`, and
+            // messages[0].user has avatar + group but not the stats.
+            // One extra ?mid= fetch per topic page, cached in _apiCache.
+            let starterUser = null;
+            const starterId = topicData && topicData.starter && topicData.starter.id;
+            if (starterId) {
+                const starterMid = String(starterId);
+                if (userId && String(userId) === starterMid) {
+                    // Viewer is the starter — reuse the fetch already made.
+                    starterUser = userData && (userData['m' + starterMid] || userData.info);
+                } else {
+                    const starterData = await apiFetch('mid=' + encodeURIComponent(starterMid));
+                    starterUser = starterData && (starterData['m' + starterMid] || starterData.info);
+                }
+            }
+
             return {
                 topicId, sectionId, postId, userId, st,
-                topicData, sectionData, postData, userData
+                topicData, sectionData, postData, userData,
+                starterUser
             };
         })();
         return _contextPromise;
@@ -721,9 +740,10 @@ else groupClass = 'group-member';
                 escapeHtml(abs) + '">' + escapeHtml(rel) + '</time>';
         }
 
-        html += '<span class="topic-starter ' + groupClass + '">' +
-            avatarHtml +
-            '<span class="topic-starter-label">Started by</span> ' +
+                html += '<span class="topic-starter ' + groupClass + '">' +
+            '<a class="topic-starter-avatar-link" href="' + escapeHtml(profileUrl) + '" rel="nofollow" aria-label="View ' + escapeHtml(data.starter.username) + '\'s profile">' +
+                avatarHtml +
+            '</a>' +
             '<a class="topic-starter-link" href="' + escapeHtml(profileUrl) + '" rel="nofollow">' +
                 escapeHtml(data.starter.username) +
             '</a>' +
@@ -782,7 +802,7 @@ else groupClass = 'group-member';
         // NEW — topic starter, from messages[0].user (has avatar) or the
         // top-level `starter` field (has id + nickname). Prefer messages[0].user
         // because it carries the avatar and group class without an extra fetch.
-        let starter = null;
+                let starter = null;
         const firstMessage = ctx.topicData.messages && ctx.topicData.messages[0];
         if (firstMessage && firstMessage.user && firstMessage.user.id) {
             starter = {
@@ -792,16 +812,17 @@ else groupClass = 'group-member';
                 groupClass: firstMessage.user.group && firstMessage.user.group.class
                     ? firstMessage.user.group.class
                     : '',
-                status: firstMessage.user.status || ''
+                status: firstMessage.user.status || '',
+                apiUser: ctx.starterUser || null
             };
         } else if (ctx.topicData.starter && ctx.topicData.starter.id) {
-            // Fallback: no messages array, but starter field is present
             starter = {
                 mid: String(ctx.topicData.starter.id),
                 username: decodeHtmlEntities(ctx.topicData.starter.nickname || ''),
                 avatar: '',
                 groupClass: '',
-                status: ''
+                status: '',
+                apiUser: ctx.starterUser || null
             };
         }
 
@@ -916,6 +937,38 @@ else groupClass = 'group-member';
     if (!container) return;
 
     container.innerHTML = buildTopicHeaderHtml(data);
+
+           // Attach profile hovercard to both the avatar link and the name
+        // link. data.starter.apiUser carries the full record fetched by
+        // getPageContext's ?mid= call, so the tooltip shows real stats
+        // (posts / rep / joined) instead of 0/0/Unknown.
+        if (data.starter && data.starter.mid) {
+            var avatarLink = container.querySelector('.topic-starter-avatar-link');
+            var nameLink = container.querySelector('.topic-starter-link');
+
+            var starterApiUser = data.starter.apiUser || null;
+            var tipData = {
+                mid: data.starter.mid,
+                username: data.starter.username,
+                apiUser: starterApiUser,
+                groupText: (starterApiUser && starterApiUser.group && starterApiUser.group.name) || 'Member',
+                postCount: (starterApiUser && starterApiUser.messages != null) ? starterApiUser.messages : 0,
+                reputation: (starterApiUser && starterApiUser.reputation != null) ? starterApiUser.reputation : 0,
+                isOnline: data.starter.status === 'online'
+            };
+
+            var attempts = 0;
+            function tryAttach() {
+                var PM = window.ForumPostsModule;
+                if (PM && typeof PM.attachProfileTip === 'function') {
+                    if (avatarLink) PM.attachProfileTip(avatarLink, tipData);
+                    if (nameLink) PM.attachProfileTip(nameLink, tipData);
+                    return;
+                }
+                if (++attempts < 25) setTimeout(tryAttach, 200);
+            }
+            tryAttach();
+        }
 
     // NEW: normalise unicode emoji that survived from the legacy title
     applyEmojiReplacer(container, 50);
