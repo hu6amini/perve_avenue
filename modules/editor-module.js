@@ -2760,15 +2760,6 @@ function buildPollBuilder(legacyForm) {
             var existingHeader = host.querySelector('.modern-dock-header');
             if (existingHeader) existingHeader.remove();
 
-            // Disconnect previous observer if rebuilding
-            if (host.__dockObserver) {
-                host.__dockObserver.disconnect();
-                host.__dockObserver = null;
-            }
-            
-            // Clean up body class
-            document.body.classList.remove('has-docked-editor');
-
             // Detach host if it's currently inside an old placeholder
             var oldPlaceholder = host.closest('.modern-dock-placeholder');
             if (oldPlaceholder) {
@@ -2785,8 +2776,6 @@ function buildPollBuilder(legacyForm) {
             placeholder.appendChild(host);
 
             // The sentinel sits right before the placeholder.
-            // When it leaves the viewport (top > window.innerHeight), we know 
-            // the user is scrolled up and the editor should float at the bottom.
             var sentinel = document.createElement('div');
             sentinel.className = 'modern-dock-sentinel';
             placeholder.parentNode.insertBefore(sentinel, placeholder);
@@ -2809,45 +2798,52 @@ function buildPollBuilder(legacyForm) {
             }
             updateDockHeader();
 
-            var dockObserver = new IntersectionObserver(function(entries) {
-                entries.forEach(function(entry) {
-                    // Dock if the sentinel is out of view and below the viewport.
-                    var docked = !entry.isIntersecting && entry.boundingClientRect.top > window.innerHeight;
+            // Replaced IntersectionObserver with a reliable scroll listener
+            function updateDockState() {
+                if (!sentinel) return;
+                var rect = sentinel.getBoundingClientRect();
+                // Dock if the sentinel is below the top of the viewport (meaning we are scrolled above the editor)
+                var docked = rect.top > 0;
+                
+                if (docked !== isDocked) {
+                    isDocked = docked;
                     
-                    if (docked !== isDocked) {
-                        isDocked = docked;
+                    if (isDocked) {
+                        // Measure height BEFORE changing to fixed
+                        var h = host.offsetHeight;
+                        placeholder.style.height = h + 'px';
                         
-                        if (isDocked) {
-                            // Measure height BEFORE changing to fixed
-                            var h = host.offsetHeight;
-                            placeholder.style.height = h + 'px';
-                            
-                            // Apply fixed positioning styles
-                            host.classList.add('is-docked');
-                            
-                            // By default, open minified unless already expanded
-                            if (!isExpanded) {
-                                host.classList.add('is-minified');
-                            }
-                            
-                            document.body.classList.add('has-docked-editor');
-                        } else {
-                            // Remove fixed positioning and restore flow
-                            host.classList.remove('is-docked');
-                            host.classList.remove('is-minified');
-                            isExpanded = false;
-                            updateDockHeader();
-                            
-                            if (!document.querySelector('.modern-editor-dockable.is-docked')) {
-                                document.body.classList.remove('has-docked-editor');
-                            }
-                            placeholder.style.height = '';
+                        // Apply fixed positioning styles
+                        host.classList.add('is-docked');
+                        
+                        // By default, open minified unless already expanded
+                        if (!isExpanded) {
+                            host.classList.add('is-minified');
                         }
+                        
+                        document.body.classList.add('has-docked-editor');
+                    } else {
+                        // Remove fixed positioning and restore flow
+                        host.classList.remove('is-docked');
+                        host.classList.remove('is-minified');
+                        isExpanded = false;
+                        updateDockHeader();
+                        
+                        if (!document.querySelector('.modern-editor-dockable.is-docked')) {
+                            document.body.classList.remove('has-docked-editor');
+                        }
+                        placeholder.style.height = '';
                     }
-                });
-            }, { threshold: 0 });
-            dockObserver.observe(sentinel);
-            host.__dockObserver = dockObserver;
+                }
+            }
+
+            // Listen to scroll and resize events
+            var scrollHandler = function() { updateDockState(); };
+            window.addEventListener('scroll', scrollHandler, { passive: true });
+            window.addEventListener('resize', scrollHandler, { passive: true });
+            
+            // Initial check on load
+            setTimeout(updateDockState, 100);
 
             // Click docked bar to toggle expanded state
             dockHeader.addEventListener('click', function() {
@@ -2868,6 +2864,9 @@ function buildPollBuilder(legacyForm) {
 
             // Clean up on destroy
             host.__dockCleanup = function() {
+                window.removeEventListener('scroll', scrollHandler);
+                window.removeEventListener('resize', scrollHandler);
+                
                 if (placeholder && placeholder.parentNode) {
                     placeholder.parentNode.insertBefore(host, placeholder);
                     placeholder.parentNode.removeChild(placeholder);
