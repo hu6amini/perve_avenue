@@ -124,6 +124,20 @@ const BreadcrumbsModule = (function () {
         return text.charAt(0).toUpperCase() + text.slice(1).toLowerCase();
     }
 
+       function getRelativeTimeString(date) {
+        if (!date || isNaN(date.getTime())) return 'Unknown';
+        const now = new Date();
+        const diff = date - now;
+        const absDiff = Math.abs(diff) / 1000;
+        const rtf = new Intl.RelativeTimeFormat(document.documentElement.lang || 'en', { numeric: 'auto' });
+        if (absDiff < 60)       return rtf.format(Math.trunc(diff / 1000), 'second');
+        if (absDiff < 3600)     return rtf.format(Math.trunc(diff / 60000), 'minute');
+        if (absDiff < 86400)    return rtf.format(Math.trunc(diff / 3600000), 'hour');
+        if (absDiff < 2592000)  return rtf.format(Math.trunc(diff / 86400000), 'day');
+        if (absDiff < 31536000) return rtf.format(Math.trunc(diff / 2592000000), 'month');
+        return rtf.format(Math.trunc(diff / 31536000000), 'year');
+    }
+
        function extractTitleContent(titleEl) {
     if (!titleEl) return { text: '', html: '' };
     var text = '';
@@ -659,12 +673,58 @@ const BreadcrumbsModule = (function () {
                  + eyebrowBlock
                  + '<h1 class="topic-title">' + titleHtml + '</h1>';
 
-        if (data.viewCount || data.replyCount) {
-            html += '<div class="topic-meta">';
-            if (data.viewCount)  html += '<span class="topic-stats"><i class="fa-regular fa-eye" aria-hidden="true"></i><span>Views: '   + escapeHtml(data.viewCount)  + '</span></span>';
-            if (data.replyCount) html += '<span class="topic-stats"><i class="fa-regular fa-comment" aria-hidden="true"></i><span>Replies: ' + escapeHtml(data.replyCount) + '</span></span>';
-            html += '</div>';
+        if (data.starter || data.viewCount || data.replyCount) {
+    html += '<div class="topic-meta">';
+
+    // NEW — starter chip
+    if (data.starter) {
+        const profileUrl = '/?act=Profile&MID=' + data.starter.mid;
+        const groupClass = 'group-' + (data.starter.groupClass || 'member')
+            .split(/\s+/)[0]
+            .toLowerCase()
+            .replace(/[^a-z0-9]+/g, '-')
+            .replace(/^-+|-+$/g, '');
+
+        let avatarHtml;
+        if (data.starter.avatar && /^(https?:)?\/\//i.test(data.starter.avatar)) {
+            // Use the raw URL — the forum serves avatars ~60px, downscaled
+            // to 20px here. Not weserv-proxied to keep breadcrumbs.js free
+            // of image-optimisation dependencies; the browser downscale is
+            // adequate for a 20px chip.
+            avatarHtml = '<img class="topic-starter-avatar" src="' +
+                escapeHtml(data.starter.avatar) + '" alt="" width="20" height="20" loading="lazy">';
+        } else {
+            const initial = (data.starter.username || '?').charAt(0).toUpperCase();
+            avatarHtml = '<span class="topic-starter-avatar topic-starter-avatar--initial">' +
+                escapeHtml(initial) + '</span>';
         }
+
+        let startedTimeHtml = '';
+        if (data.startedDate) {
+            const iso = data.startedDate.toISOString();
+            const rel = getRelativeTimeString(data.startedDate);
+            const abs = data.startedDate.toLocaleString(undefined, {
+                year: 'numeric', month: 'long', day: 'numeric'
+            });
+            startedTimeHtml = ' <span class="topic-starter-sep">·</span> ' +
+                '<time class="topic-starter-date" datetime="' + iso + '" title="' +
+                escapeHtml(abs) + '">' + escapeHtml(rel) + '</time>';
+        }
+
+        html += '<span class="topic-starter ' + groupClass + '">' +
+            avatarHtml +
+            '<span class="topic-starter-label">Started by</span> ' +
+            '<a class="topic-starter-link" href="' + escapeHtml(profileUrl) + '" rel="nofollow">' +
+                escapeHtml(data.starter.username) +
+            '</a>' +
+            startedTimeHtml +
+        '</span>';
+    }
+
+    if (data.viewCount)  html += '<span class="topic-stats"><i class="fa-regular fa-eye" aria-hidden="true"></i><span>Views: '   + escapeHtml(data.viewCount)  + '</span></span>';
+    if (data.replyCount) html += '<span class="topic-stats"><i class="fa-regular fa-comment" aria-hidden="true"></i><span>Replies: ' + escapeHtml(data.replyCount) + '</span></span>';
+    html += '</div>';
+}
         html += '</div>';
         if (data.shareLink) {
             html += '<div class="topic-actions"><button class="btn btn-icon modern-share-topic-btn" data-action="share-topic" title="Share topic" aria-label="Share topic"><i class="fa-regular fa-share-nodes" aria-hidden="true"></i></button></div>';
@@ -674,53 +734,89 @@ const BreadcrumbsModule = (function () {
     }
 
     async function tryBuildTopicHeaderFromApi() {
-        const bodyId = document.body.id;
-        if (CONFIG.SKIP_TOPIC_HEADER_BODY_IDS.indexOf(bodyId) !== -1) return null;
+    const bodyId = document.body.id;
+    if (CONFIG.SKIP_TOPIC_HEADER_BODY_IDS.indexOf(bodyId) !== -1) return null;
 
-        const ctx = await getPageContext();
+    const ctx = await getPageContext();
 
-        // ── Topic view / edit-OP send page: title comes from ?t= ──
-        if (ctx.topicData && ctx.topicData.info) {
-            const info = ctx.topicData.info;
-            const titleText = decodeHtmlEntities(info.title || '').trim();
-            if (!titleText) return null;
+    if (ctx.topicData && ctx.topicData.info) {
+        const info = ctx.topicData.info;
+        const titleText = decodeHtmlEntities(info.title || '').trim();
+        if (!titleText) return null;
 
-            let eyebrow = '';
-            let eyebrowHtml = '';
-            if (bodyId === 'send') {
-                const mode = detectSendMode();
-                const english = englishEyebrowForMode(mode);
-                if (english) {
-                    eyebrow = english;
-                    eyebrowHtml = escapeHtml(english);
+        let eyebrow = '';
+        let eyebrowHtml = '';
+        if (bodyId === 'send') {
+            const mode = detectSendMode();
+            const english = englishEyebrowForMode(mode);
+            if (english) {
+                eyebrow = english;
+                eyebrowHtml = escapeHtml(english);
+            }
+        }
+
+        let shareLink = null;
+        if (bodyId === 'topic') {
+            const pageUrl    = window.location.origin + window.location.pathname + window.location.search;
+            const shareTitle = titleText +
+                (info.section_name ? ' - ' + decodeHtmlEntities(info.section_name) : '');
+            const shareHref  = 'https://www.addtoany.com/share#url=' +
+                encodeURIComponent(pageUrl) + '&title=' + encodeURIComponent(shareTitle);
+            shareLink = {
+                click: function () {
+                    window.open(shareHref, '_blank', 'noopener,noreferrer');
                 }
-            }
-
-            let shareLink = null;
-            if (bodyId === 'topic') {
-                const pageUrl    = window.location.origin + window.location.pathname + window.location.search;
-                const shareTitle = titleText +
-                    (info.section_name ? ' - ' + decodeHtmlEntities(info.section_name) : '');
-                const shareHref  = 'https://www.addtoany.com/share#url=' +
-                    encodeURIComponent(pageUrl) + '&title=' + encodeURIComponent(shareTitle);
-                shareLink = {
-                    click: function () {
-                        window.open(shareHref, '_blank', 'noopener,noreferrer');
-                    }
-                };
-            }
-
-            return {
-                eyebrow:        eyebrow,
-                eyebrowHtml:    eyebrowHtml,
-                topicTitle:     titleText,
-                topicTitleHtml: escapeHtml(titleText),
-                replyCount:     info.replies || '',
-                viewCount:      info.views || '',
-                shareLink:      shareLink
             };
         }
 
+        // NEW — topic starter, from messages[0].user (has avatar) or the
+        // top-level `starter` field (has id + nickname). Prefer messages[0].user
+        // because it carries the avatar and group class without an extra fetch.
+        let starter = null;
+        const firstMessage = ctx.topicData.messages && ctx.topicData.messages[0];
+        if (firstMessage && firstMessage.user && firstMessage.user.id) {
+            starter = {
+                mid: String(firstMessage.user.id),
+                username: decodeHtmlEntities(firstMessage.user.nickname || ''),
+                avatar: firstMessage.user.avatar || '',
+                groupClass: firstMessage.user.group && firstMessage.user.group.class
+                    ? firstMessage.user.group.class
+                    : '',
+                status: firstMessage.user.status || ''
+            };
+        } else if (ctx.topicData.starter && ctx.topicData.starter.id) {
+            // Fallback: no messages array, but starter field is present
+            starter = {
+                mid: String(ctx.topicData.starter.id),
+                username: decodeHtmlEntities(ctx.topicData.starter.nickname || ''),
+                avatar: '',
+                groupClass: '',
+                status: ''
+            };
+        }
+
+        let startedDate = null;
+        if (info.first_post_time) {
+            const d = new Date(info.first_post_time);
+            if (!isNaN(d.getTime())) startedDate = d;
+        } else if (firstMessage && firstMessage.info && firstMessage.info.date) {
+            const d = new Date(firstMessage.info.date);
+            if (!isNaN(d.getTime())) startedDate = d;
+        }
+
+        return {
+            eyebrow:        eyebrow,
+            eyebrowHtml:    eyebrowHtml,
+            topicTitle:     titleText,
+            topicTitleHtml: escapeHtml(titleText),
+            replyCount:     info.replies || '',
+            viewCount:      info.views || '',
+            shareLink:      shareLink,
+            starter:        starter,      // NEW
+            startedDate:    startedDate   // NEW
+        };
+    }
+       
         // ── New-topic send page: title is the section name from ?f= ──
         if (bodyId === 'send' && ctx.sectionData && ctx.sectionData.info) {
             const info = ctx.sectionData.info;
@@ -810,6 +906,30 @@ const BreadcrumbsModule = (function () {
     if (!container) return;
 
     container.innerHTML = buildTopicHeaderHtml(data);
+
+    if (data.starter && data.starter.mid) {
+    const starterLink = container.querySelector('.topic-starter-link');
+    if (starterLink) {
+        var attempts = 0;
+        function tryAttach() {
+            var PM = window.ForumPostsModule;
+            if (PM && typeof PM.attachProfileTip === 'function') {
+                PM.attachProfileTip(starterLink, {
+                    mid: data.starter.mid,
+                    username: data.starter.username,
+                    apiUser: null,              // will populate from PM's cache if available
+                    groupText: 'Member',
+                    postCount: 0,
+                    reputation: 0,
+                    isOnline: data.starter.status === 'online'
+                });
+                return;
+            }
+            if (++attempts < 25) setTimeout(tryAttach, 200);
+        }
+        tryAttach();
+    }
+}
 
     // NEW: normalise unicode emoji that survived from the legacy title
     applyEmojiReplacer(container, 50);
