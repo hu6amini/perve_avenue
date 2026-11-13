@@ -4990,7 +4990,7 @@ function buildPostDataFromApi({ message, topicData, apiUser, viewerContext, post
     // The presence of data.title doubles as the discriminator in the
     // render loop — regular post cards never get this field.
     if (isBlogOp) {
-        data.title = topicData.info.title || '';
+        data.title = decodeHtmlEntities(topicData.info.title || '');
         data.permalink = '/?t=' + topicData.info.id;
         data.absoluteDate = postDate
             ? postDate.toLocaleDateString('en-US', {
