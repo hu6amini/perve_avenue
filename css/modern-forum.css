@@ -313,6 +313,36 @@
   vertical-align: -0.1em;
 }
 
+/* Defensive: a .image-wrapper should never contain a twemoji. It
+   happens if the wrap ran before twemoji detection, or if the image
+   was already wrapped in cached DOM. Neutralise both the wrapper
+   and the img's inline styles so the emoji renders inline at the
+   correct size. */
+
+.image-wrapper:has(> img.twemoji),
+.image-wrapper:has(> img[src*="twemoji"]),
+.image-wrapper:has(> img[src*="forumfree.net"][src*="emoticons"]) {
+    display: inline-block !important;
+    width: auto !important;
+    aspect-ratio: auto !important;
+    max-width: none !important;
+    position: static !important;
+    overflow: visible !important;
+    margin: 0 !important;
+    vertical-align: -0.1em !important;
+}
+
+.image-wrapper:has(> img.twemoji) > img,
+.image-wrapper:has(> img[src*="twemoji"]) > img,
+.image-wrapper:has(> img[src*="forumfree.net"][src*="emoticons"]) > img {
+    width: 1.25em !important;
+    height: 1.25em !important;
+    aspect-ratio: auto !important;
+    object-fit: initial !important;
+    display: inline-block !important;
+    vertical-align: -0.1em !important;
+}
+
 /* Reader-side image sizes (matches editor + preview) */
 .post-message img[data-size="small"]  { max-width: 25%; height: auto; }
 .post-message img[data-size="medium"] { max-width: 50%; height: auto; }
