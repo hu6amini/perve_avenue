@@ -2772,25 +2772,43 @@ body.modal-open {
   border: 2px solid var(--primary-color);
   background: var(--surface-light);
 }
-/* Group-colored avatar border in the reports list. Mirrors the
-   .modern-like-item.group-* pattern in section 12, and works for
-   both image avatars and initial-avatar fallbacks. */
-.report-item.group-founder .report-avatar img,
-.report-item.group-founder .report-avatar .initial-avatar { border-color: var(--group-founder); }
-.report-item.group-administrator .report-avatar img,
-.report-item.group-administrator .report-avatar .initial-avatar { border-color: var(--group-administrator); }
-.report-item.group-global-moderator .report-avatar img,
-.report-item.group-global-moderator .report-avatar .initial-avatar { border-color: var(--group-global-moderator); }
-.report-item.group-moderator .report-avatar img,
-.report-item.group-moderator .report-avatar .initial-avatar { border-color: var(--group-moderator); }
-.report-item.group-developer .report-avatar img,
-.report-item.group-developer .report-avatar .initial-avatar { border-color: var(--group-developer); }
-.report-item.group-game-dev .report-avatar img,
-.report-item.group-game-dev .report-avatar .initial-avatar { border-color: var(--group-game-dev); }
-.report-item.group-fan .report-avatar img,
-.report-item.group-fan .report-avatar .initial-avatar { border-color: var(--group-fan); }
-.report-item.group-member .report-avatar img,
-.report-item.group-member .report-avatar .initial-avatar { border-color: var(--group-member); }
+/* Group-colored avatar border in reports list. Matches the
+   .modern-like-item.group-* pattern from section 12. Covers both
+   image avatars and initial-avatar fallbacks. */
+.report-item.group-founder           .report-avatar img,
+.report-item.group-founder           .report-avatar .modal-initial-avatar { border-color: var(--group-founder); }
+
+.report-item.group-administrator     .report-avatar img,
+.report-item.group-administrator     .report-avatar .modal-initial-avatar { border-color: var(--group-administrator); }
+
+.report-item.group-global-moderator  .report-avatar img,
+.report-item.group-global-moderator  .report-avatar .modal-initial-avatar { border-color: var(--group-global-moderator); }
+
+.report-item.group-moderator         .report-avatar img,
+.report-item.group-moderator         .report-avatar .modal-initial-avatar { border-color: var(--group-moderator); }
+
+.report-item.group-developer         .report-avatar img,
+.report-item.group-developer         .report-avatar .modal-initial-avatar { border-color: var(--group-developer); }
+
+.report-item.group-game-dev          .report-avatar img,
+.report-item.group-game-dev          .report-avatar .modal-initial-avatar { border-color: var(--group-game-dev); }
+
+.report-item.group-fan               .report-avatar img,
+.report-item.group-fan               .report-avatar .modal-initial-avatar { border-color: var(--group-fan); }
+
+.report-item.group-member            .report-avatar img,
+.report-item.group-member            .report-avatar .modal-initial-avatar { border-color: var(--group-member); }
+
+/* Initial-avatar fallback inside report rows — same sizing as the
+   image branch so the two don't shift layout when swapping. */
+.report-avatar .modal-initial-avatar {
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  border: 2px solid var(--primary-color);
+  object-fit: cover;
+  background: var(--surface-light);
+}
 .report-details {
   flex: 1;
   display: flex;
