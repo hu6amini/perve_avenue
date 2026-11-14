@@ -171,6 +171,9 @@
   box-shadow: 0 0 0 2px var(--primary-color), 0 4px 12px rgba(0, 0, 0, 0.2);
   border-color: var(--primary-light);
 }
+.post-avatar-wrapper a:hover {
+  text-decoration: none;
+}
 
 .status-dot {
   position: absolute;
