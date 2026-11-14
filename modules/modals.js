@@ -398,39 +398,96 @@ var ModalsModule = (function() {
     }
 
     function getUserRoleInfo(user) {
-        if (user.banned === 1) return { class: 'role-banned', text: 'Banned', groupNameForClass: 'banned' };
-        if (user.group) {
-            var groupName  = (user.group.name || '').toLowerCase();
-            var groupClass = (user.group.class || '').toLowerCase();
-            var groupBody  = (user.group.bodyclass || '').toLowerCase();
-            var groupId    = user.group.id;
-            var isFounder  = groupClass.indexOf('founder') !== -1 ||
-                             groupBody.indexOf('founder') !== -1 ||
-                             groupName === 'founder';
-            if (isFounder)                                                       return { class: 'role-founder', text: 'Founder', groupNameForClass: 'founder' };
-            if (groupName === 'administrator' || groupClass.indexOf('admin') !== -1 || groupId === 1)
-                                                                                 return { class: 'role-administrator', text: 'Administrator', groupNameForClass: 'administrator' };
-            if (groupName === 'global moderator' || groupClass.indexOf('global_mod') !== -1)
-                                                                                 return { class: 'role-global-mod', text: 'Global Mod', groupNameForClass: 'global-moderator' };
-            if (groupName === 'moderator' || groupClass.indexOf('mod') !== -1)   return { class: 'role-moderator', text: 'Moderator', groupNameForClass: 'moderator' };
-            if (groupName === 'developer' || groupClass.indexOf('developer') !== -1)
-                                                                                 return { class: 'role-developer', text: 'Developer', groupNameForClass: 'developer' };
-            if (groupName === 'game dev' || groupClass.indexOf('game_dev') !== -1)
-                                                                                 return { class: 'role-game-dev', text: 'Game Dev', groupNameForClass: 'game-dev' };
-            if (groupName === 'fan')                                             return { class: 'role-fan', text: 'Fan', groupNameForClass: 'fan' };
-            if (groupName === 'premium' || groupClass.indexOf('premium') !== -1)
-                                                                                 return { class: 'role-premium', text: 'Premium', groupNameForClass: 'premium' };
-            if (groupName === 'vip' || groupClass.indexOf('vip') !== -1)         return { class: 'role-vip', text: 'VIP', groupNameForClass: 'vip' };
-            return { class: 'role-member', text: user.group.name || 'Member', groupNameForClass: user.group.name || 'member' };
-        }
-        if (user.permission) {
-            if (user.permission.founder === 1)     return { class: 'role-founder', text: 'Founder', groupNameForClass: 'founder' };
-            if (user.permission.admin === 1)       return { class: 'role-administrator', text: 'Administrator', groupNameForClass: 'administrator' };
-            if (user.permission.global_mod === 1)  return { class: 'role-global-mod', text: 'Global Mod', groupNameForClass: 'global-moderator' };
-            if (user.permission.mod_sez === 1)     return { class: 'role-moderator', text: 'Moderator', groupNameForClass: 'moderator' };
-        }
-        return { class: 'role-member', text: 'Member', groupNameForClass: 'member' };
+    if (user.banned === 1) {
+        return { class: 'role-banned', text: 'Banned', groupNameForClass: 'banned' };
     }
+
+    if (user.group) {
+        var groupName = (user.group.name      || '').toLowerCase();
+        var groupCls  = (user.group.class     || '').toLowerCase();
+        var groupBody = (user.group.bodyclass || '').toLowerCase();
+        var all       = groupName + ' ' + groupCls + ' ' + groupBody;
+
+        // ── Founder — most specific ─────────────────────────────
+        if (all.indexOf('founder') !== -1) {
+            return { class: 'role-founder', text: 'Founder', groupNameForClass: 'founder' };
+        }
+
+        // ── Global Moderator — BEFORE admin ─────────────────────
+        // Ported from similar-topics.js getGroupClass(). Two reasons
+        // it must precede admin:
+        //   (a) on some forums group id 1 is the global-mod group,
+        //       not admin. So `groupId === 1` is not a safe admin
+        //       signal and must never be used.
+        //   (b) a demoted user keeps stale `class: "admin"` or
+        //       `bodyclass: "admin_sez"` tokens while the group name
+        //       says "Global Moderator". Word-boundary matching on
+        //       "global" + "mod" catches the current role first.
+        var isGlobal = /\bglobal\b/.test(all)
+                    || all.indexOf('globalmod') !== -1
+                    || /\bgmod\b/.test(all);
+        var isMod    = /\bmod(erator)?s?\b/.test(all)
+                    || /\bmoderat/.test(all)       // Italian "moderatore"
+                    || all.indexOf('globalmod') !== -1;
+        if (isGlobal && isMod) {
+            return { class: 'role-global-mod', text: 'Global Mod', groupNameForClass: 'global-moderator' };
+        }
+
+        // ── Administrator — word boundaries matter ──────────────
+        // `/\badmin(istrator)?s?\b/` will NOT match `admin_sez`,
+        // because `_` is a word char so there is no `\b` after
+        // "admin". That's what stops section-admin flags from
+        // promoting a global mod to full admin.
+        if (/\badmin(istrator)?s?\b/.test(all) || all.indexOf('amministrat') !== -1) {
+            return { class: 'role-administrator', text: 'Administrator', groupNameForClass: 'administrator' };
+        }
+
+        // ── Moderator — plain ───────────────────────────────────
+        if (isMod) {
+            return { class: 'role-moderator', text: 'Moderator', groupNameForClass: 'moderator' };
+        }
+
+        // ── Developer ───────────────────────────────────────────
+        if (all.indexOf('developer') !== -1) {
+            return { class: 'role-developer', text: 'Developer', groupNameForClass: 'developer' };
+        }
+
+        // ── Game dev ────────────────────────────────────────────
+        if (all.indexOf('game dev') !== -1 || all.indexOf('game_dev') !== -1) {
+            return { class: 'role-game-dev', text: 'Game Dev', groupNameForClass: 'game-dev' };
+        }
+
+        // ── Fan ─────────────────────────────────────────────────
+        if (/\bfan(s)?\b/.test(all)) {
+            return { class: 'role-fan', text: 'Fan', groupNameForClass: 'fan' };
+        }
+
+        // ── Premium ─────────────────────────────────────────────
+        if (all.indexOf('premium') !== -1) {
+            return { class: 'role-premium', text: 'Premium', groupNameForClass: 'premium' };
+        }
+
+        // ── VIP ─────────────────────────────────────────────────
+        if (all.indexOf('vip') !== -1) {
+            return { class: 'role-vip', text: 'VIP', groupNameForClass: 'vip' };
+        }
+
+        return {
+            class: 'role-member',
+            text: user.group.name || 'Member',
+            groupNameForClass: user.group.name || 'member'
+        };
+    }
+
+    // ── Fallback: permission flags (no group object) ────────────
+    if (user.permission) {
+        if (user.permission.founder === 1)     return { class: 'role-founder', text: 'Founder', groupNameForClass: 'founder' };
+        if (user.permission.admin === 1)       return { class: 'role-administrator', text: 'Administrator', groupNameForClass: 'administrator' };
+        if (user.permission.global_mod === 1)  return { class: 'role-global-mod', text: 'Global Mod', groupNameForClass: 'global-moderator' };
+        if (user.permission.mod_sez === 1)     return { class: 'role-moderator', text: 'Moderator', groupNameForClass: 'moderator' };
+    }
+    return { class: 'role-member', text: 'Member', groupNameForClass: 'member' };
+}
 
     function formatNumber(num) {
         if (!num && num !== 0) return '0';
