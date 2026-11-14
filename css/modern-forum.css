@@ -2804,7 +2804,7 @@ body.modal-open {
 }
 .report-username {
   font-weight: 700;
-  color: var(--primary-light);
+  color: var(--text-primary);
   font-size: 0.95rem;
 }
 .report-badge {
