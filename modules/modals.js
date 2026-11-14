@@ -2,7 +2,7 @@
 // ==UserScript==
 // @name         Modern Modals for ForumFree (Likes + Report)
 // @namespace    http://tampermonkey.net/
-// @version      7.8
+// @version      7.9
 // @description  Replaces old likes popup, report modal, and admin report-notify modal – uses ForumCoreObserver exclusively. Added group classes to like items.
 // @author       You
 // @match        *://*.forumfree.it/*
@@ -375,8 +375,13 @@ var ModalsModule = (function() {
             var user = userMap.get(itemUid);
             if (!user) continue;
 
-            if (user.group && user.group.name) {
-                itemEl.classList.add('group-' + sanitizeGroupName(user.group.name));
+            // Use the same role derivation the likes modal uses, so founders
+            // are detected here too (group.class / group.bodyclass / group.name).
+            // Passing user.group.name directly was the bug — "Administrator"
+            // wins before the founder markers get checked.
+            var roleInfo = getUserRoleInfo(user);
+            if (roleInfo && roleInfo.groupNameForClass) {
+                itemEl.classList.add('group-' + sanitizeGroupName(roleInfo.groupNameForClass));
             }
 
             // Second-chance avatar fix: if the initial render fell back
@@ -393,39 +398,39 @@ var ModalsModule = (function() {
     }
 
     function getUserRoleInfo(user) {
-    if (user.banned === 1) return { class: 'role-banned', text: 'Banned', groupNameForClass: 'banned' };
-    if (user.group) {
-        var groupName    = (user.group.name || '').toLowerCase();
-        var groupClass   = (user.group.class || '').toLowerCase();
-        var groupBody    = (user.group.bodyclass || '').toLowerCase();
-        var groupId      = user.group.id;
-        var isFounder    = groupClass.indexOf('founder') !== -1 ||
-                           groupBody.indexOf('founder') !== -1 ||
-                           groupName === 'founder';
-        if (isFounder)                                                      return { class: 'role-founder', text: 'Founder', groupNameForClass: 'founder' };
-        if (groupName === 'administrator' || groupClass.indexOf('admin') !== -1 || groupId === 1)
-                                                                            return { class: 'role-administrator', text: 'Administrator', groupNameForClass: 'administrator' };
-        if (groupName === 'global moderator' || groupClass.indexOf('global_mod') !== -1)
-                                                                            return { class: 'role-global-mod', text: 'Global Mod', groupNameForClass: 'global-moderator' };
-        if (groupName === 'moderator' || groupClass.indexOf('mod') !== -1)  return { class: 'role-moderator', text: 'Moderator', groupNameForClass: 'moderator' };
-        if (groupName === 'developer' || groupClass.indexOf('developer') !== -1)
-                                                                            return { class: 'role-developer', text: 'Developer', groupNameForClass: 'developer' };
-        if (groupName === 'game dev' || groupClass.indexOf('game_dev') !== -1)
-                                                                            return { class: 'role-game-dev', text: 'Game Dev', groupNameForClass: 'game-dev' };
-        if (groupName === 'fan')                                            return { class: 'role-fan', text: 'Fan', groupNameForClass: 'fan' };
-        if (groupName === 'premium' || groupClass.indexOf('premium') !== -1)
-                                                                            return { class: 'role-premium', text: 'Premium', groupNameForClass: 'premium' };
-        if (groupName === 'vip' || groupClass.indexOf('vip') !== -1)        return { class: 'role-vip', text: 'VIP', groupNameForClass: 'vip' };
-        return { class: 'role-member', text: user.group.name || 'Member', groupNameForClass: user.group.name || 'member' };
+        if (user.banned === 1) return { class: 'role-banned', text: 'Banned', groupNameForClass: 'banned' };
+        if (user.group) {
+            var groupName  = (user.group.name || '').toLowerCase();
+            var groupClass = (user.group.class || '').toLowerCase();
+            var groupBody  = (user.group.bodyclass || '').toLowerCase();
+            var groupId    = user.group.id;
+            var isFounder  = groupClass.indexOf('founder') !== -1 ||
+                             groupBody.indexOf('founder') !== -1 ||
+                             groupName === 'founder';
+            if (isFounder)                                                       return { class: 'role-founder', text: 'Founder', groupNameForClass: 'founder' };
+            if (groupName === 'administrator' || groupClass.indexOf('admin') !== -1 || groupId === 1)
+                                                                                 return { class: 'role-administrator', text: 'Administrator', groupNameForClass: 'administrator' };
+            if (groupName === 'global moderator' || groupClass.indexOf('global_mod') !== -1)
+                                                                                 return { class: 'role-global-mod', text: 'Global Mod', groupNameForClass: 'global-moderator' };
+            if (groupName === 'moderator' || groupClass.indexOf('mod') !== -1)   return { class: 'role-moderator', text: 'Moderator', groupNameForClass: 'moderator' };
+            if (groupName === 'developer' || groupClass.indexOf('developer') !== -1)
+                                                                                 return { class: 'role-developer', text: 'Developer', groupNameForClass: 'developer' };
+            if (groupName === 'game dev' || groupClass.indexOf('game_dev') !== -1)
+                                                                                 return { class: 'role-game-dev', text: 'Game Dev', groupNameForClass: 'game-dev' };
+            if (groupName === 'fan')                                             return { class: 'role-fan', text: 'Fan', groupNameForClass: 'fan' };
+            if (groupName === 'premium' || groupClass.indexOf('premium') !== -1)
+                                                                                 return { class: 'role-premium', text: 'Premium', groupNameForClass: 'premium' };
+            if (groupName === 'vip' || groupClass.indexOf('vip') !== -1)         return { class: 'role-vip', text: 'VIP', groupNameForClass: 'vip' };
+            return { class: 'role-member', text: user.group.name || 'Member', groupNameForClass: user.group.name || 'member' };
+        }
+        if (user.permission) {
+            if (user.permission.founder === 1)     return { class: 'role-founder', text: 'Founder', groupNameForClass: 'founder' };
+            if (user.permission.admin === 1)       return { class: 'role-administrator', text: 'Administrator', groupNameForClass: 'administrator' };
+            if (user.permission.global_mod === 1)  return { class: 'role-global-mod', text: 'Global Mod', groupNameForClass: 'global-moderator' };
+            if (user.permission.mod_sez === 1)     return { class: 'role-moderator', text: 'Moderator', groupNameForClass: 'moderator' };
+        }
+        return { class: 'role-member', text: 'Member', groupNameForClass: 'member' };
     }
-    if (user.permission) {
-        if (user.permission.founder === 1)     return { class: 'role-founder', text: 'Founder', groupNameForClass: 'founder' };
-        if (user.permission.admin === 1)       return { class: 'role-administrator', text: 'Administrator', groupNameForClass: 'administrator' };
-        if (user.permission.global_mod === 1)  return { class: 'role-global-mod', text: 'Global Mod', groupNameForClass: 'global-moderator' };
-        if (user.permission.mod_sez === 1)     return { class: 'role-moderator', text: 'Moderator', groupNameForClass: 'moderator' };
-    }
-    return { class: 'role-member', text: 'Member', groupNameForClass: 'member' };
-}
 
     function formatNumber(num) {
         if (!num && num !== 0) return '0';
@@ -645,9 +650,6 @@ var ModalsModule = (function() {
             for (var i = 0; i < sortedUsers.length; i++) {
                 var user = sortedUsers[i];
                 var roleInfo = getUserRoleInfo(user);
-if (roleInfo && roleInfo.groupNameForClass) {
-    itemEl.classList.add('group-' + sanitizeGroupName(roleInfo.groupNameForClass));
-}
                 var avatarData = getAvatarData(user, user.nickname, user.id);
                 var statusText = user.status || 'offline';
                 var statusClass = user.status === 'online' ? 'online' : (user.status === 'idle' ? 'idle' : (user.status === 'dnd' ? 'dnd' : 'offline'));
