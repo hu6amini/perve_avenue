@@ -29,10 +29,11 @@
             modals: true,
             messenger: true,
             'slick-carousel': true,
-            boards: true, // ← new
+            boards: true, 
             'quote-queue': true,
             'similar-topics': true,
             editor: true,
+            report: true,
             navigation: false,
             sidebar: false,
             footer: false
@@ -291,6 +292,12 @@ if (typeof ThemeModule !== 'undefined') {
 } else {
     log('ThemeModule not found, theme toggle disabled', 'warn');
     ENHANCER_CONFIG.modules.theme = false;
+}
+        if (typeof ModernReport !== 'undefined') {
+    registerModule('report', ModernReport, ['domUtils', 'eventBus']);
+} else {
+    log('ModernReport not found, report UI disabled', 'warn');
+    ENHANCER_CONFIG.modules.report = false;
 }
         
         if (typeof MediaDimensionsModule !== 'undefined') {
