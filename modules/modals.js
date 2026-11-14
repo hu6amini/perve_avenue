@@ -2,7 +2,7 @@
 // ==UserScript==
 // @name         Modern Modals for ForumFree (Likes + Report)
 // @namespace    http://tampermonkey.net/
-// @version      7.7
+// @version      7.8
 // @description  Replaces old likes popup, report modal, and admin report-notify modal – uses ForumCoreObserver exclusively. Added group classes to like items.
 // @author       You
 // @match        *://*.forumfree.it/*
@@ -73,7 +73,7 @@ var ModalsModule = (function() {
 
     var userProfileLinks = new Map();
 
-    // ========== HELPER: SANITIZE GROUP NAME FOR CSS CLASS ==========
+    // ========== HELPERS ==========
     function sanitizeGroupName(groupName) {
         if (!groupName) return 'unknown';
         return groupName.toLowerCase()
@@ -81,7 +81,6 @@ var ModalsModule = (function() {
             .replace(/^-+|-+$/g, '');
     }
 
-    // ========== HELPER: GET COLOR FROM NICKNAME ==========
     function getColorFromNickname(nickname, userId) {
         var hash = 0;
         var str = nickname || userId || 'user';
@@ -93,7 +92,6 @@ var ModalsModule = (function() {
         return AVATAR_COLORS[colorIndex];
     }
 
-    // ========== RELATIVE TIME HELPERS (with Italian timezone conversion) ==========
     function parseDateFromTitle(title) {
         if (!title) return null;
         title = title.replace(/(\d{1,2}):(\d{2})\s*(AM|PM)?:(\d+)/i, '$1:$2 $3');
@@ -285,8 +283,116 @@ var ModalsModule = (function() {
         }
     }
 
+    // ========== REPORTING API (ffp.) ==========
+    // Same endpoint script 51 (the "Reporting System" forum add-on) posts to.
+    // We only use act=Notify here — reading the report list for enrichment.
+    // Never touches act=Report; the user-facing report flow lives in
+    // report.js, which submits act=Report directly to the same endpoint.
+    function getReportingEndpoint() {
+        var m = location.hostname.match(/(forumfree|blogfree|forumcommunity)\.(it|net)$/);
+        return m ? 'https://ffp.' + m[0] + '/php7/reporting/reporting.php' : null;
+    }
+
+    function getReportCookie() {
+        var m = document.cookie.match(/(?:^|;\s*)ffp_auth=([^;]+)/);
+        return m ? m[1] : null;
+    }
+
+    function setReportCookie(value) {
+        try {
+            document.cookie = 'ffp_auth=' + value +
+                '; path=/; max-age=14400; Secure; SameSite=Lax';
+        } catch (_) {}
+    }
+
+    async function fetchNotifyFromApi() {
+        var endpoint = getReportingEndpoint();
+        if (!endpoint) return [];
+        var cookie = getReportCookie();
+        var body = new URLSearchParams({
+            act: 'Notify',
+            domain: location.hostname
+        });
+        if (cookie) body.set('auth_personal', cookie);
+
+        try {
+            var r = await fetch(endpoint, {
+                method: 'POST',
+                credentials: 'include',
+                headers: { 'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8' },
+                body: body
+            });
+            if (!r.ok) return [];
+            var data = await r.json();
+            if (data && data.ffp_auth) setReportCookie(data.ffp_auth);
+            return Array.isArray(data && data.notify) ? data.notify : [];
+        } catch (e) {
+            console.warn('[Modern Modals] Notify API fetch failed:', e);
+            return [];
+        }
+    }
+
+    // Enriches rendered .report-item elements with the reporter's group,
+    // so their avatar border picks up --group-<slug> via the CSS rules in
+    // modern-forum.css. Runs after the modal has mounted (fire-and-forget)
+    // so the modal opens immediately; group class fades in ~200ms later.
+    async function enrichReportItems(container) {
+        if (!container) return;
+
+        var apiReports = await fetchNotifyFromApi();
+        if (!apiReports.length) return;
+
+        var apiByReportId = new Map();
+        for (var i = 0; i < apiReports.length; i++) {
+            var n = apiReports[i];
+            if (n && n.id) apiByReportId.set(String(n.id), n);
+        }
+
+        var uidSet = new Set();
+        var reportToUid = new Map();
+        var items = container.querySelectorAll('.report-item[data-report-id]');
+        for (var j = 0; j < items.length; j++) {
+            var rid = items[j].getAttribute('data-report-id');
+            var api = apiByReportId.get(String(rid));
+            if (api && api.FFUid) {
+                reportToUid.set(String(rid), String(api.FFUid));
+                uidSet.add(String(api.FFUid));
+            }
+        }
+        if (!uidSet.size) return;
+
+        var users = await fetchUsersFromApi(Array.from(uidSet));
+        var userMap = new Map();
+        for (var k = 0; k < users.length; k++) {
+            userMap.set(String(users[k].id), users[k]);
+        }
+
+        for (var l = 0; l < items.length; l++) {
+            var itemEl = items[l];
+            var itemRid = itemEl.getAttribute('data-report-id');
+            var itemUid = reportToUid.get(String(itemRid));
+            if (!itemUid) continue;
+            var user = userMap.get(itemUid);
+            if (!user) continue;
+
+            if (user.group && user.group.name) {
+                itemEl.classList.add('group-' + sanitizeGroupName(user.group.name));
+            }
+
+            // Second-chance avatar fix: if the initial render fell back
+            // to an initial-avatar for some reason (empty scrape, broken
+            // weserv URL), a good ?mid= response can replace it here.
+            var avatarDiv = itemEl.querySelector('.report-avatar');
+            if (avatarDiv && !avatarDiv.querySelector('img') && user.avatar) {
+                var opt = optimizeImageUrl(user.avatar, 48, 48);
+                var src = (opt && opt.url) ? opt.url : user.avatar;
+                avatarDiv.innerHTML = '<img src="' + escapeHtml(src) +
+                    '" alt="Avatar" width="48" height="48">';
+            }
+        }
+    }
+
     function getUserRoleInfo(user) {
-        // Determine role class and display text (as before)
         if (user.banned === 1) return { class: 'role-banned', text: 'Banned', groupNameForClass: 'banned' };
         if (user.group) {
             var groupName = (user.group.name || '').toLowerCase();
@@ -301,7 +407,6 @@ var ModalsModule = (function() {
             if (groupName === 'fan') return { class: 'role-fan', text: 'Fan', groupNameForClass: 'fan' };
             if (groupName === 'premium' || groupClass.indexOf('premium') !== -1) return { class: 'role-premium', text: 'Premium', groupNameForClass: 'premium' };
             if (groupName === 'vip' || groupClass.indexOf('vip') !== -1) return { class: 'role-vip', text: 'VIP', groupNameForClass: 'vip' };
-            // fallback to the raw group name for custom groups
             return { class: 'role-member', text: user.group.name || 'Member', groupNameForClass: user.group.name || 'member' };
         }
         if (user.permission) {
@@ -320,10 +425,11 @@ var ModalsModule = (function() {
 
     function escapeHtml(str) {
         if (!str) return '';
-        return str.replace(/[&<>]/g, function(m) {
+        return String(str).replace(/[&<>"]/g, function(m) {
             if (m === '&') return '&amp;';
             if (m === '<') return '&lt;';
             if (m === '>') return '&gt;';
+            if (m === '"') return '&quot;';
             return m;
         });
     }
@@ -358,7 +464,7 @@ var ModalsModule = (function() {
         document.body.classList.remove('modal-open');
     }
 
-    // ========== FOCUS TRAP GENERIC ==========
+    // ========== FOCUS TRAP ==========
     function getFocusableElements(modalElement) {
         var selectors = 'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])';
         var elements = modalElement.querySelectorAll(selectors);
@@ -447,7 +553,7 @@ var ModalsModule = (function() {
         modal.setAttribute('aria-describedby', 'modal-description');
 
         var currentTime = getCurrentTime();
-        modal.innerHTML = 
+        modal.innerHTML =
             '<div class="modern-modal-header">' +
                 '<div class="modern-modal-title">' +
                     '<i class="fa-regular fa-thumbs-up" aria-hidden="true"></i>' +
@@ -534,14 +640,13 @@ var ModalsModule = (function() {
                 var statusText = user.status || 'offline';
                 var statusClass = user.status === 'online' ? 'online' : (user.status === 'idle' ? 'idle' : (user.status === 'dnd' ? 'dnd' : 'offline'));
                 var escapedNickname = escapeHtml(user.nickname);
-                
-                // Compute group class from the roleInfo (or directly from user.group)
+
                 var groupRaw = (user.group && user.group.name) ? user.group.name : roleInfo.text;
                 var groupNameForClass = roleInfo.groupNameForClass;
                 var groupClass = 'group-' + sanitizeGroupName(groupNameForClass || groupRaw);
 
                 if (avatarData.type === 'img') {
-                    itemsHtml += 
+                    itemsHtml +=
                         '<div class="modern-like-item ' + groupClass + '" data-user-id="' + user.id + '" tabindex="0" role="button" aria-label="View profile of ' + escapedNickname + '">' +
                             '<div class="modern-like-avatar-wrapper">' +
                                 '<img class="modern-like-avatar" src="' + avatarData.url + '" alt="Avatar of ' + escapedNickname + '" loading="lazy" decoding="async" width="48" height="48">' +
@@ -559,7 +664,7 @@ var ModalsModule = (function() {
                             '</div>' +
                         '</div>';
                 } else {
-                    itemsHtml += 
+                    itemsHtml +=
                         '<div class="modern-like-item ' + groupClass + '" data-user-id="' + user.id + '" tabindex="0" role="button" aria-label="View profile of ' + escapedNickname + '">' +
                             '<div class="modern-like-avatar-wrapper">' +
                                 '<div class="modal-initial-avatar" style="background-color: #' + avatarData.bgColor + ';">' + escapeHtml(avatarData.initial) + '</div>' +
@@ -611,7 +716,7 @@ var ModalsModule = (function() {
         processingModal = false;
     }
 
-    // ========== USER REPORT MODAL (unchanged from before) ==========
+    // ========== USER REPORT MODAL ==========
     function autoGrowTextarea(textarea) {
         if (!textarea) return;
         textarea.style.height = 'auto';
@@ -690,7 +795,7 @@ var ModalsModule = (function() {
         container.setAttribute('aria-labelledby', 'reportModalTitle');
         container.setAttribute('aria-describedby', 'reportModalDesc');
 
-        container.innerHTML = 
+        container.innerHTML =
             '<div class="report-modal-header">' +
                 '<div class="report-modal-title">' +
                     '<i class="fa-regular fa-circle-exclamation" aria-hidden="true"></i>' +
@@ -716,7 +821,7 @@ var ModalsModule = (function() {
                         '<span class="counter-value" id="reportCharCounter">0/300</span>' +
                     '</label>' +
                     '<textarea id="reportReasonTextarea" class="report-textarea" rows="3" maxlength="300" placeholder="Write your report here… (minimum 5 characters)" aria-describedby="charHint"></textarea>' +
-                    '<span id="charHint" class="sr-only">Maximum 300 characters, minimum 5 characters required.</span>' +
+                    '<span id="charHint" style="position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);border:0">Maximum 300 characters, minimum 5 characters required.</span>' +
                 '</div>' +
             '</div>' +
             '<div class="report-modal-footer">' +
@@ -729,7 +834,7 @@ var ModalsModule = (function() {
                     '</button>' +
                 '</div>' +
             '</div>' +
-            '<div id="reportModalDesc" class="sr-only">Dialog to report an inappropriate post. Fill in the reason and confirm sending. The action cannot be undone.</div>';
+            '<div id="reportModalDesc" style="position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0">Dialog to report an inappropriate post. Fill in the reason and confirm sending. The action cannot be undone.</div>';
 
         overlay.appendChild(container);
         document.body.appendChild(overlay);
@@ -838,7 +943,7 @@ var ModalsModule = (function() {
         });
     }
 
-    // ========== ADMIN REPORT NOTIFY MODAL (unchanged) ==========
+    // ========== ADMIN REPORT NOTIFY MODAL ==========
     function closeModernReportNotifyModal(legacyModal, skipOriginalClose) {
         if (currentReportNotifyModal) {
             unlockBodyScroll();
@@ -956,7 +1061,20 @@ var ModalsModule = (function() {
         var reportsHtml = '';
         for (var i = 0; i < reports.length; i++) {
             var r = reports[i];
-            var avatarData = getAvatarData(null, r.username, r.reportId);
+
+            // CRITICAL: pass the avatar URL scraped from the legacy .report_row.
+            // The legacy DOM carries the reporter's actual avatar in an
+            // <img>; passing null here was why -JuNioR- (and every other
+            // reporter with an image avatar) fell through to the initial
+            // fallback. Note: the group class cannot be derived from the
+            // legacy DOM because script 51's row markup has no MID — the
+            // group class is added later by enrichReportItems() via the
+            // ffp. Notify API + /api.php?mid=.
+            var avatarData = getAvatarData(
+                r.avatarUrl ? { avatar: r.avatarUrl } : null,
+                r.username,
+                r.reportId
+            );
             var avatarHtml = '';
             if (avatarData.type === 'img') {
                 avatarHtml = '<img src="' + escapeHtml(avatarData.url) + '" alt="Avatar" width="48" height="48">';
@@ -966,9 +1084,9 @@ var ModalsModule = (function() {
             var localDate = italianTimeToLocalDate(r.time);
             var relativeTime = localDate ? getRelativeTimeString(localDate) : r.time;
             var datetimeAttr = localDate ? localDate.toISOString() : '';
-            var titleAttr = localDate ? localDate.toLocaleString() : escapeHtml(r.time);
-            
-            reportsHtml += 
+            var titleAttr = localDate ? localDate.toLocaleString() : r.time;
+
+            reportsHtml +=
                 '<div class="report-item" data-report-id="' + escapeHtml(r.reportId) + '" data-post-url="' + escapeHtml(r.postUrl) + '">' +
                     '<div class="report-avatar">' + avatarHtml + '</div>' +
                     '<div class="report-details">' +
@@ -979,7 +1097,7 @@ var ModalsModule = (function() {
                         '<div class="report-reason">' + escapeHtml(r.reason) + '</div>' +
                         '<div class="report-time">' +
                             '<i class="fa-regular fa-clock" aria-hidden="true"></i> ' +
-                            '<time datetime="' + datetimeAttr + '" title="' + titleAttr + '">' +
+                            '<time datetime="' + datetimeAttr + '" title="' + escapeHtml(titleAttr) + '">' +
                                 escapeHtml(relativeTime) +
                             '</time>' +
                         '</div>' +
@@ -999,7 +1117,7 @@ var ModalsModule = (function() {
         container.setAttribute('aria-labelledby', 'notifyModalTitle');
         container.setAttribute('aria-describedby', 'notifyModalDesc');
 
-        container.innerHTML = 
+        container.innerHTML =
             '<div class="notify-modal-header">' +
                 '<div class="notify-modal-title">' +
                     '<i class="fa-regular fa-flag" aria-hidden="true"></i>' +
@@ -1030,7 +1148,10 @@ var ModalsModule = (function() {
             '<div class="notify-modal-footer">' +
                 '<i class="fa-regular fa-shield" aria-hidden="true"></i> Reported posts are visible to staff only' +
             '</div>' +
-            '<div id="notifyModalDesc" class="sr-only">Admin panel for managing user reports and group permissions.</div>';
+            // Fixed: was class="sr-only", which is not defined anywhere in the
+            // stylesheet, so it rendered as visible italic text. Now uses the
+            // same inline-style clipping the likes modal uses.
+            '<div id="notifyModalDesc" style="position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0">Admin panel for managing user reports and group permissions.</div>';
 
         overlay.appendChild(container);
         document.body.appendChild(overlay);
@@ -1090,21 +1211,23 @@ var ModalsModule = (function() {
             if (postUrl && postUrl !== '#') {
                 var avatarDiv = item.querySelector('.report-avatar');
                 var detailsDiv = item.querySelector('.report-details');
-                function goToPost(e) {
-                    if (e.target.closest('.delete-report')) return;
-                    e.preventDefault();
-                    window.location.href = postUrl;
-                }
-                avatarDiv.style.cursor = 'pointer';
-                detailsDiv.style.cursor = 'pointer';
-                avatarDiv.addEventListener('click', goToPost);
-                detailsDiv.addEventListener('click', goToPost);
-                avatarDiv.setAttribute('tabindex', '0');
-                detailsDiv.setAttribute('tabindex', '0');
-                avatarDiv.setAttribute('role', 'link');
-                detailsDiv.setAttribute('role', 'link');
-                avatarDiv.setAttribute('aria-label', 'Go to reported post');
-                detailsDiv.setAttribute('aria-label', 'Go to reported post');
+                (function(targetPostUrl, avatarEl, detailsEl) {
+                    function goToPost(e) {
+                        if (e.target.closest('.delete-report')) return;
+                        e.preventDefault();
+                        window.location.href = targetPostUrl;
+                    }
+                    avatarEl.style.cursor = 'pointer';
+                    detailsEl.style.cursor = 'pointer';
+                    avatarEl.addEventListener('click', goToPost);
+                    detailsEl.addEventListener('click', goToPost);
+                    avatarEl.setAttribute('tabindex', '0');
+                    detailsEl.setAttribute('tabindex', '0');
+                    avatarEl.setAttribute('role', 'link');
+                    detailsEl.setAttribute('role', 'link');
+                    avatarEl.setAttribute('aria-label', 'Go to reported post');
+                    detailsEl.setAttribute('aria-label', 'Go to reported post');
+                })(postUrl, avatarDiv, detailsDiv);
             }
         }
 
@@ -1155,9 +1278,17 @@ var ModalsModule = (function() {
         overlay.addEventListener('click', function(e) { if (e.target === overlay) closeHandler(); });
         var escHandler = function(e) { if (e.key === 'Escape') { closeHandler(); document.removeEventListener('keydown', escHandler); } };
         document.addEventListener('keydown', escHandler);
+
+        // Enrich report items asynchronously — adds group-<slug> so the
+        // avatar border picks up --group-* via CSS. Fire-and-forget: the
+        // modal is already visible with correct avatars (from the scrape);
+        // this only upgrades border colour ~200ms later. Never blocks.
+        enrichReportItems(container).catch(function(e) {
+            console.warn('[Modern Modals] enrichReportItems failed:', e);
+        });
     }
 
-    // ========== INITIALIZATION – ONLY USES FORUMCORE OBSERVER ==========
+    // ========== INITIALIZATION ==========
     async function waitForForumObserver() {
         if (globalThis.forumObserver) return true;
         return new Promise((resolve) => {
@@ -1181,7 +1312,6 @@ var ModalsModule = (function() {
             return;
         }
 
-        // Ensure Font Awesome is loaded
         if (!document.querySelector('link[href*="font-awesome"], link[href*="fa.css"]')) {
             var faLink = document.createElement('link');
             faLink.rel = 'stylesheet';
@@ -1191,7 +1321,6 @@ var ModalsModule = (function() {
 
         function getTriggerElement() { return document.activeElement; }
 
-        // Likes popup – register with reprocessOnStyle: true so it fires every time the style changes to visible
         globalThis.forumObserver.register({
             id: 'modern-likes-modal',
             selector: '.popup.pop_points, #overlay.pop_points',
@@ -1207,11 +1336,17 @@ var ModalsModule = (function() {
             }
         });
 
-        // Report modals
+        // reprocessOnStyle: true is required here. Script 51's legacy modal
+        // starts with no inline display and gains display:block when the
+        // reporter clicks the legacy button / the staffer opens the menu.
+        // Without reprocessOnStyle, the observer marks the modal as
+        // "processed" on the initial insert (when display is '') and then
+        // skips the style mutation that actually makes it visible.
         globalThis.forumObserver.register({
             id: 'modern-report-modal',
             selector: '.ff-modal.modal.report-modal, .report-modal',
             priority: 'high',
+            reprocessOnStyle: true,
             callback: function(node) {
                 if (node && (node.style.display === 'inline-block' || node.style.display === 'block') && !currentReportModal) {
                     showModernReportModal(node, getTriggerElement());
@@ -1222,13 +1357,14 @@ var ModalsModule = (function() {
             id: 'modern-report-notify-modal',
             selector: '.ff-modal.modal.report-modal-notify, .report-modal-notify',
             priority: 'high',
+            reprocessOnStyle: true,
             callback: function(node) {
                 if (node && (node.style.display === 'inline-block' || node.style.display === 'block') && !currentReportNotifyModal) {
                     showModernReportNotifyModal(node, getTriggerElement());
                 }
             }
         });
-        console.log('[Modern Modals] Registered with ForumCoreObserver (likes modal uses reprocessOnStyle flag)');
+        console.log('[Modern Modals] Registered with ForumCoreObserver (likes + report modals use reprocessOnStyle flag)');
     }
 
     var initialized = false;
@@ -1237,16 +1373,12 @@ var ModalsModule = (function() {
         await init();
         initialized = true;
 
-        // ===== USER TIMING: mark ready and measure =====
         if (typeof performance !== 'undefined' && performance.mark) {
             performance.mark('modals-ready');
             try {
                 performance.measure('modals-load-time', 'modals-start', 'modals-ready');
-            } catch (e) {
-                // Ignore if marks missing
-            }
+            } catch (e) {}
         }
-        // ================================================
     }
 
     return {
