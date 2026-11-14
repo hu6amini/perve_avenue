@@ -1,20 +1,14 @@
 // modules/report.js
 //
 // Modern report dialog. Peer client to script 51 ("Reporting System") —
-// both submit to the same ffp.{domain}/php7/reporting backend, both are
-// seen as identical by the server. Script 51 stays installed for staff
-// notification features; this file owns the user-facing UI.
+// both submit to the same ffp.{domain}/php7/reporting backend.
+//
+// Uses the CSS classes already defined in modern-forum.css section 12 /
+// 12b (report-modal-*). Do not rename them — ModalsModule and the
+// stylesheet are both built against this shape.
 //
 // Registered in forum-enhancer.js as `report` with dependencies
 // ['domUtils', 'eventBus'].
-//
-// To maximise compliance with the sanctioned-client path, submitReport
-// could be changed to proxy through script 51's hidden `.report_button`
-// (click it, fill its textarea, click its submit). That would require
-// temporarily overriding window.confirm, since script 51 always fires a
-// native confirm(). The current implementation submits directly to the
-// same endpoint with the same payload, which is simpler and has no
-// confirm() interruption. Flip if you decide the proxy path is worth it.
 
 var ModernReport = (function () {
     'use strict';
@@ -36,10 +30,12 @@ var ModernReport = (function () {
         return m ? m[0] : location.hostname;
     })();
 
-    const REPORT_MIN = 5;      // script 51: config.report_minLength
-    const REPORT_MAX = 300;    // script 51: config.limitText
-    const COOKIE_NAME = 'ffp_auth';
-    const COOKIE_TTL = 14400;  // script 51: setCookie("ffp_auth", …, 14400, false)
+    const REPORT_MIN   = 5;         // script 51: config.report_minLength
+    const REPORT_MAX   = 300;       // script 51: config.limitText
+    const TEXTAREA_MAX = 220;       // px — cap auto-grow so modal stays bounded
+    const WARN_AT      = Math.floor(REPORT_MAX * 0.8);  // 240 — amber counter
+    const COOKIE_NAME  = 'ffp_auth';
+    const COOKIE_TTL   = 14400;     // script 51: 14400 seconds
 
     // =========================================================================
     // HELPERS
@@ -60,11 +56,15 @@ var ModernReport = (function () {
 
     function setReportCookie(value) {
         try {
-            document.cookie =
-                COOKIE_NAME + '=' + value +
+            document.cookie = COOKIE_NAME + '=' + value +
                 '; path=/; max-age=' + COOKIE_TTL +
                 '; Secure; SameSite=Lax';
-        } catch (_) { /* ignore cookie write failures */ }
+        } catch (_) { /* ignore */ }
+    }
+
+    function autoGrow(textarea) {
+        textarea.style.height = 'auto';
+        textarea.style.height = Math.min(textarea.scrollHeight, TEXTAREA_MAX) + 'px';
     }
 
     // =========================================================================
@@ -104,61 +104,101 @@ var ModernReport = (function () {
     }
 
     // =========================================================================
-    // DIALOG
+    // DIALOG — built to the markup shape already defined by the CSS
     // =========================================================================
     function openReportDialog(pid) {
-        // Close any existing dialog first
-        document.querySelectorAll('.modern-report-dialog-host').forEach(function (el) {
+        // Close any existing report dialog first
+        document.querySelectorAll('.modern-report-overlay.is-open').forEach(function (el) {
             el.remove();
         });
+        document.body.classList.remove('modal-open');
 
         const card = document.querySelector('.post-card[data-post-id="' + pid + '"]');
         const username =
             (card && card.querySelector('.user-profile-link')?.textContent || '').trim() ||
             'this user';
 
+        // ── Overlay + container ─────────────────────────────────
         const overlay = document.createElement('div');
-        overlay.className = 'modern-modal-overlay modern-report-dialog-host';
+        overlay.className = 'modern-report-overlay is-open';
 
-        const box = document.createElement('div');
-        box.className = 'modern-modal-box modern-report-dialog';
-        box.setAttribute('role', 'dialog');
-        box.setAttribute('aria-modal', 'true');
-        box.setAttribute('aria-labelledby', 'modern-report-title');
-        box.innerHTML =
-            '<h3 class="modern-confirm-title" id="modern-report-title">' +
-                '<i class="fa-regular fa-flag modern-confirm-icon" aria-hidden="true"></i>' +
-                '<span>Report post</span>' +
-            '</h3>' +
-            '<p class="modern-confirm-message">' +
-                'Report the post by <strong>' + escapeHtml(username) + '</strong> ' +
-                'to the moderators.' +
-            '</p>' +
-            '<textarea class="modern-report-textarea" ' +
-                'rows="5" maxlength="' + REPORT_MAX + '" ' +
-                'placeholder="Why are you reporting this post? (min ' + REPORT_MIN + ' characters)">' +
-            '</textarea>' +
-            '<div class="modern-report-counter"><span>0</span>/' + REPORT_MAX + '</div>' +
-            '<div class="modern-confirm-actions">' +
-                '<button type="button" class="modern-btn modern-btn-secondary" data-action="cancel">Cancel</button>' +
-                '<button type="button" class="modern-btn modern-btn-danger" data-action="confirm" disabled>Send report</button>' +
+        const container = document.createElement('div');
+        container.className = 'modern-report-container';
+        container.setAttribute('role', 'dialog');
+        container.setAttribute('aria-modal', 'true');
+        container.setAttribute('aria-labelledby', 'report-modal-title-text');
+        overlay.appendChild(container);
+
+        // ── Header ──────────────────────────────────────────────
+        const header = document.createElement('div');
+        header.className = 'report-modal-header';
+        header.innerHTML =
+            '<div class="report-modal-title">' +
+                '<i class="fa-regular fa-flag" aria-hidden="true"></i>' +
+                '<h3 id="report-modal-title-text">Report post</h3>' +
+            '</div>' +
+            '<button type="button" class="report-modal-close" aria-label="Close">' +
+                '<i class="fa-regular fa-xmark" aria-hidden="true"></i>' +
+            '</button>';
+        container.appendChild(header);
+
+        // ── Content ─────────────────────────────────────────────
+        const content = document.createElement('div');
+        content.className = 'report-modal-content';
+        content.innerHTML =
+            '<div class="report-context">' +
+                '<i class="fa-regular fa-circle-info" aria-hidden="true"></i>' +
+                '<span class="report-intro">You are reporting the post of:</span>' +
+                '<span class="reported-nickname">' + escapeHtml(username) + '</span>' +
+            '</div>' +
+            '<div class="report-field">' +
+                '<label for="report-reason">' +
+                    '<span>Reason for reporting</span>' +
+                    '<span class="counter-value" id="report-counter">0 / ' + REPORT_MAX + '</span>' +
+                '</label>' +
+                '<textarea id="report-reason" class="report-textarea" ' +
+                    'maxlength="' + REPORT_MAX + '" rows="5" ' +
+                    'placeholder="Why are you reporting this post? (min ' + REPORT_MIN + ' characters)"></textarea>' +
             '</div>';
-        overlay.appendChild(box);
-        document.body.appendChild(overlay);
+        container.appendChild(content);
 
-        const textarea = box.querySelector('.modern-report-textarea');
-        const counter = box.querySelector('.modern-report-counter > span');
-        const confirmBtn = box.querySelector('[data-action="confirm"]');
-        const cancelBtn = box.querySelector('[data-action="cancel"]');
+        // ── Footer ──────────────────────────────────────────────
+        const footer = document.createElement('div');
+        footer.className = 'report-modal-footer';
+        footer.innerHTML =
+            '<div class="footer-note">' +
+                '<i class="fa-regular fa-triangle-exclamation" aria-hidden="true"></i> ' +
+                'Your report will be sent to the moderators.' +
+            '</div>' +
+            '<div class="action-buttons">' +
+                '<button type="button" class="btn-outline" data-action="cancel">Cancel</button>' +
+                '<button type="button" class="btn-primary-filled" data-action="confirm" disabled>' +
+                    '<i class="fa-regular fa-paper-plane" aria-hidden="true"></i> Send report' +
+                '</button>' +
+            '</div>';
+        container.appendChild(footer);
+
+        // ── Refs ────────────────────────────────────────────────
+        const textarea   = container.querySelector('.report-textarea');
+        const counter    = container.querySelector('.counter-value');
+        const confirmBtn = container.querySelector('[data-action="confirm"]');
+        const cancelBtn  = container.querySelector('[data-action="cancel"]');
+        const closeBtn   = container.querySelector('.report-modal-close');
         const previousFocus = document.activeElement;
 
+        // ── Behaviours ──────────────────────────────────────────
         function refresh() {
-            counter.textContent = textarea.value.length;
+            const len = textarea.value.length;
+            counter.textContent = len + ' / ' + REPORT_MAX;
+            counter.classList.toggle('warning', len >= WARN_AT && len < REPORT_MAX);
+            counter.classList.toggle('exceed',  len >= REPORT_MAX);
             confirmBtn.disabled = textarea.value.trim().length < REPORT_MIN;
+            autoGrow(textarea);
         }
 
         function close() {
             overlay.remove();
+            document.body.classList.remove('modal-open');
             document.removeEventListener('keydown', onKey, true);
             if (previousFocus && typeof previousFocus.focus === 'function') {
                 try { previousFocus.focus(); } catch (_) {}
@@ -175,6 +215,7 @@ var ModernReport = (function () {
 
         textarea.addEventListener('input', refresh);
         cancelBtn.addEventListener('click', close);
+        closeBtn.addEventListener('click', close);
         overlay.addEventListener('click', function (e) {
             if (e.target === overlay) close();
         });
@@ -182,7 +223,7 @@ var ModernReport = (function () {
 
         confirmBtn.addEventListener('click', async function () {
             confirmBtn.disabled = true;
-            const originalLabel = confirmBtn.textContent;
+            const originalLabel = confirmBtn.innerHTML;
             confirmBtn.textContent = 'Sending…';
 
             try {
@@ -190,25 +231,28 @@ var ModernReport = (function () {
                 if (result && result.confirm) {
                     close();
                     markPostReported(pid);
-                    showSuccessToast();
+                    showToast('Your report was sent to the moderators.', 'success');
                     emitSubmitted(pid);
                 } else {
                     confirmBtn.disabled = false;
-                    confirmBtn.textContent = originalLabel;
-                    showErrorToast('The report was not accepted. Try again later.');
+                    confirmBtn.innerHTML = originalLabel;
+                    showToast('The report was not accepted. Try again later.', 'error');
                 }
             } catch (e) {
                 confirmBtn.disabled = false;
-                confirmBtn.textContent = originalLabel;
+                confirmBtn.innerHTML = originalLabel;
                 const msg = (e && e.message === 'TOO_SHORT')
                     ? 'Please write at least ' + REPORT_MIN + ' characters.'
                     : 'Something went wrong. Try again later.';
-                showErrorToast(msg);
+                showToast(msg, 'error');
             }
         });
 
+        // ── Mount + focus ───────────────────────────────────────
+        document.body.appendChild(overlay);
+        document.body.classList.add('modal-open');
         requestAnimationFrame(function () {
-            try { textarea.focus(); } catch (_) {}
+            try { textarea.focus(); autoGrow(textarea); } catch (_) {}
         });
         refresh();
     }
@@ -223,66 +267,59 @@ var ModernReport = (function () {
         btn.disabled = true;
         btn.setAttribute('aria-disabled', 'true');
         btn.title = 'You have already reported this post';
-        btn.classList.add('is-reported');
     }
 
     function emitSubmitted(pid) {
         if (typeof ForumEventBus !== 'undefined' && ForumEventBus.trigger) {
             try { ForumEventBus.trigger('forum:report:submitted', { pid: pid }); }
-            catch (_) { /* ignore */ }
+            catch (_) {}
         }
     }
 
     // =========================================================================
-    // TOASTS
+    // TOAST — prefers Commons, falls back to inline element
     // =========================================================================
-    function showSuccessToast() {
+    function showToast(message, kind) {
         if (window.Commons && window.Commons.toast && window.Commons.toast.show) {
             try {
                 window.Commons.toast.show({
-                    title: 'Post reported',
-                    content: 'Your report was sent to the moderators.',
-                    class: ['cs-toast-success'],
-                    ttl: 4000
-                });
-                return;
-            } catch (_) { /* fall through */ }
-        }
-        fallbackToast('Report sent.', 'success');
-    }
-
-    function showErrorToast(message) {
-        if (window.Commons && window.Commons.toast && window.Commons.toast.show) {
-            try {
-                window.Commons.toast.show({
-                    title: 'Report failed',
+                    title: kind === 'error' ? 'Report failed' : 'Post reported',
                     content: message,
-                    class: ['cs-toast-error'],
-                    ttl: 5000
+                    class: [kind === 'error' ? 'cs-toast-error' : 'cs-toast-success'],
+                    ttl: kind === 'error' ? 5000 : 4000
                 });
                 return;
             } catch (_) { /* fall through */ }
         }
-        fallbackToast(message, 'error');
-    }
-
-    function fallbackToast(message, kind) {
         const t = document.createElement('div');
-        t.className = 'modern-toast modern-toast-' + (kind || 'info');
         t.textContent = message;
+        Object.assign(t.style, {
+            position: 'fixed',
+            bottom: '20px',
+            right: '20px',
+            padding: '12px 20px',
+            borderRadius: '8px',
+            background: kind === 'error' ? '#dc2626' : '#059669',
+            color: '#fff',
+            fontFamily: 'inherit',
+            fontSize: '14px',
+            fontWeight: '500',
+            boxShadow: '0 4px 16px rgba(0,0,0,0.3)',
+            zIndex: '100002',
+            maxWidth: '320px'
+        });
         document.body.appendChild(t);
-        setTimeout(function () {
-            try { t.remove(); } catch (_) {}
-        }, 4000);
+        setTimeout(function () { try { t.remove(); } catch (_) {} }, 4000);
     }
 
     // =========================================================================
     // LIFECYCLE
     // =========================================================================
     function handlePagehide() {
-        document.querySelectorAll('.modern-report-dialog-host').forEach(function (el) {
+        document.querySelectorAll('.modern-report-overlay.is-open').forEach(function (el) {
             el.remove();
         });
+        document.body.classList.remove('modal-open');
     }
 
     function initialize() {
@@ -292,7 +329,7 @@ var ModernReport = (function () {
         if (REPORT_ENDPOINT) {
             console.log('[ModernReport] ready (endpoint: ' + REPORT_ENDPOINT + ')');
         } else {
-            console.warn('[ModernReport] ready, but endpoint is unavailable on this host');
+            console.warn('[ModernReport] ready, but endpoint unavailable on this host');
         }
     }
 
@@ -309,7 +346,7 @@ var ModernReport = (function () {
     if (typeof performance !== 'undefined' && performance.mark) {
         performance.mark('report-end');
         try { performance.measure('report-load-time', 'report-start', 'report-end'); }
-        catch (_) { /* ignore */ }
+        catch (_) {}
     }
 
     return api;
