@@ -1889,7 +1889,12 @@ function isTwemojiLike(img) {
     if (img.classList.contains('twemoji')) return true;
 
     const alt = img.getAttribute('alt') || '';
-    if (alt.startsWith(':') && alt.endsWith(':')) return true;
+// Colon-wrapped shortcode: :smile:
+if (/^:[a-z0-9_]+:$/i.test(alt)) return true;
+// ASCII smiley: :), ;), :(, :D, :P, :O, :3, :/, :\, :|, :-
+if (/^[:;=]-?[)(DPpOo3\/\\|]$/.test(alt)) return true;
+// Heart
+if (alt === '<3') return true;
 
     // src may be weserv-proxied (encoded) — data-original is the real URL.
     // Check both, lowercased, so host/path matching is uniform.
@@ -1898,7 +1903,7 @@ function isTwemojiLike(img) {
         img.getAttribute('data-original') || ''
     ].join(' ').toLowerCase();
 
-    return /twemoji\.maxcdn\.com|twemoji\.jsdelivr\.net|twemoji\.jdecked\.com|cdn\.jsdelivr\.net\/(?:gh\/jdecked\/twemoji|emojione)|forumfree\.net\/i\/[^/]*\/emojis\//.test(urls);
+    return /twemoji\.maxcdn\.com|twemoji\.jsdelivr\.net|twemoji\.jdecked\.com|cdn\.jsdelivr\.net\/(?:gh\/jdecked\/twemoji|emojione)|forumfree\.net\/(?:html\/emoticons|i\/[^/]*\/emojis)\//.test(urls);
 }
 
 function attemptWrapImage(img) {
@@ -2503,11 +2508,12 @@ function setupTooltipObserver() {
 
             images.forEach(img => {
     if (img.getAttribute('data-nsfw') === 'true') return;
-                if (img.classList.contains('twemoji')) return;
-                const alt = img.getAttribute('alt');
-                if (alt && alt.startsWith(':') && alt.endsWith(':')) return;
-                if (img.closest('.modern-embedded-link')) return;
-                if (img.dataset.src) return;
+    // Use the same detection the wrap pipeline uses, so forum
+    // emoticons and shortcode- or smiley-alt images are excluded
+    // regardless of whether twemoji has run yet.
+    if (isTwemojiLike(img)) return;
+    if (img.closest('.modern-embedded-link')) return;
+    if (img.dataset.src) return;
 
                 const link = img.closest('a');
                 if (link) {
