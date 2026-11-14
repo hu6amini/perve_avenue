@@ -932,7 +932,7 @@ function postProcessPreviewContent(el) {
     }
 
     function getAvailableActions($post, postId) {
-        const actions = { quote: false, edit: false, delete: false, report: true, share: true };
+        const actions = { quote: false, edit: false, delete: false, report: Boolean(window.ModernReport?.openReportDialog), share: true };
         if ($post.querySelector('a[href*="CODE=02"]')) actions.quote = true;
         // Edit is available through EITHER the standard full-page
         // editor (CODE=08) OR the in-place fast-edit button. Checking
@@ -3361,10 +3361,24 @@ function resolveFaviconUrl(domain) {
         }).catch(err => console.error('Copy failed:', err));
     }
     function handleReport(pid) {
-        const reportBtn = document.getElementById(CONFIG.POST_ID_PREFIX + pid + ' .report_button') ||
-            document.querySelector('.report_button[data-pid="' + pid + '"]');
-        if (reportBtn) reportBtn.click();
+    if (window.ModernReport?.openReportDialog) {
+        window.ModernReport.openReportDialog(pid);
+        return;
     }
+
+    // ModernReport not loaded. The legacy .report_button opens
+    // .ff-modal.modal.report-modal, which critical CSS (§6) hides
+    // with visibility:hidden. Clicking it is a visible no-op.
+    // Tell the user rather than leave them guessing.
+    if (window.Commons?.toast?.show) {
+        window.Commons.toast.show({
+            title: 'Reporting unavailable',
+            content: 'Please refresh the page and try again.',
+            class: ['cs-toast-error'],
+            ttl: 5000
+        });
+    }
+}
     function handleLike(pid, isCountClick) {
         const originalPost = document.getElementById(CONFIG.POST_ID_PREFIX + pid);
         if (!originalPost) return;
@@ -4904,7 +4918,7 @@ function deriveAvailableActions({ message, info, viewerMid, viewerPerm }) {
         quote:  isOpen && viewerMid != null,
         edit:   canMutate,
         delete: canMutate,
-        report: true,
+        report: Boolean(window.ModernReport?.openReportDialog),
         share:  true,
         _needsDomSync: needsDomSync
     };
