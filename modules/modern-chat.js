@@ -375,16 +375,20 @@ var ModernChat = (function () {
         if (!msg.user || !msg.user.id) return;
         var mid = String(msg.user.id);
 
-        function paint(user) {
+            function paint(user) {
             var role = resolveRole(user);
             if (!role) return;
-            if (nicknameEl && nicknameEl.isConnected && !nicknameEl.parentNode.querySelector('.mc-role-badge')) {
+            // No isConnected check here: renderClone() calls applyRoleIdentity
+            // while the clone is still detached, so isConnected is always
+            // false during the synchronous (cached) paint. parentNode exists
+            // inside the detached subtree, so querySelector works as expected.
+            if (nicknameEl && nicknameEl.parentNode && !nicknameEl.parentNode.querySelector('.mc-role-badge')) {
                 var badge = document.createElement('span');
                 badge.className = 'mc-role-badge ' + role.className;
                 badge.textContent = role.label;
                 nicknameEl.insertAdjacentElement('afterend', badge);
             }
-            if (avatarEl && avatarEl.isConnected) {
+            if (avatarEl) {
                 avatarEl.setAttribute('data-role', role.className.replace('group-', ''));
             }
         }
