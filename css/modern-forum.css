@@ -6898,13 +6898,13 @@ body.has-docked-editor {
 }
 
 /* 2. Apply the colored rings */
-.mc-message .hb-avatar[data-role="admin"]        { border-color: #DC2626 !important; }
-.mc-message .hb-avatar[data-role="founder"]      { border-color: #F59E0B !important; }
-.mc-message .hb-avatar[data-role="global-mod"]   { border-color: #7C3AED !important; }
-.mc-message .hb-avatar[data-role="mod"]          { border-color: #2563EB !important; }
-.mc-message .hb-avatar[data-role="developer"]    { border-color: #0891B2 !important; }
-.mc-message .hb-avatar[data-role="game-dev"]     { border-color: #059669 !important; }
-.mc-message .hb-avatar[data-role="fan"]          { border-color: #DB2777 !important; }
+.mc-message .hb-avatar[data-role="admin"]        { border-color: var(--admin-color) !important; }
+.mc-message .hb-avatar[data-role="founder"]      { border-color: var(--founder-color) !important; }
+.mc-message .hb-avatar[data-role="global-mod"]   { border-color: var(--group-global-moderator) !important; }
+.mc-message .hb-avatar[data-role="mod"]          { border-color: var(--mod-color) !important; }
+.mc-message .hb-avatar[data-role="member"]       { border-color: var(--member-color) !important; }
+.mc-message .hb-avatar[data-role="game-dev"]     { border-color: var(--game-dev-color) !important; }
+.mc-message .hb-avatar[data-role="fan"]          { border-color: var(--fan-color) !important; }
 
 .mc-message .hb-body   { flex: 1; min-width: 0; }
 .mc-message .hb-header {
