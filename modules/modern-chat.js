@@ -311,30 +311,42 @@ var ModernChat = (function () {
     var userDataCache = new Map();
     var USER_FETCH_TIMEOUT = 8000;
 
-    function fetchUserData(mid) {
+        function fetchUserData(mid) {
         if (mid == null) return Promise.resolve(null);
-        var key = String(mid);
-        if (userDataCache.has(key)) return Promise.resolve(userDataCache.get(key));
+        
+        // HelloBox uses "fc11517378", but the API expects just "11517378"
+        var numericId = String(mid).replace(/\D/g, '');
+        if (!numericId) return Promise.resolve(null);
+
+        if (userDataCache.has(numericId)) return Promise.resolve(userDataCache.get(numericId));
 
         return new Promise(function (resolve) {
             var controller = new AbortController();
             var timer = setTimeout(function () { controller.abort(); }, USER_FETCH_TIMEOUT);
-            fetch('/api.php?mid=' + encodeURIComponent(key), {
+            
+            fetch('/api.php?mid=' + encodeURIComponent(numericId), {
                 credentials: 'include',
                 signal: controller.signal
             })
             .then(function (r) {
                 clearTimeout(timer);
-                return r.ok ? r.json() : null;
+                if (!r.ok) return null;
+                return r.text(); // Get text first to prevent JSON parse crash on 404 HTML
             })
-            .then(function (data) {
-                var user = data && (data['m' + key] || data.info) || null;
-                userDataCache.set(key, user);
-                resolve(user);
+            .then(function (text) {
+                if (!text) return null;
+                try {
+                    var data = JSON.parse(text);
+                    var user = data['m' + numericId] || data.info || null;
+                    userDataCache.set(numericId, user);
+                    resolve(user);
+                } catch (e) {
+                    resolve(null);
+                }
             })
             .catch(function () {
                 clearTimeout(timer);
-                userDataCache.set(key, null);
+                userDataCache.set(numericId, null);
                 resolve(null);
             });
         });
