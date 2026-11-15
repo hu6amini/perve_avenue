@@ -6877,15 +6877,9 @@ body.has-docked-editor {
     padding: 10px 12px;
     margin: 0 12px 6px;
     position: relative;
-    background: var(--surface-elevated, #F9FAFB);
-    border: 1px solid var(--border-color, #E5E7EB);
     border-radius: var(--radius, 12px);
     transition: border-color 0.12s ease, background 0.12s ease;
     animation: mc-msg-in 0.18s ease-out;
-}
-
-.mc-message:hover {
-    border-color: var(--border-color-strong, #D1D5DB);
 }
 
 .mc-message .hb-avatar {
@@ -6895,8 +6889,6 @@ body.has-docked-editor {
     object-fit: cover;
     flex-shrink: 0;
     aspect-ratio: 1 / 1 !important;
-    background: var(--surface-elevated, #F9FAFB);
-    border: 2px solid transparent;
     transition: border-color 0.15s ease;
 }
 /* Role-tinted ring — set from JS via data-role="<group class>" */
@@ -6954,6 +6946,7 @@ body.has-docked-editor {
     overflow-wrap: anywhere;
     background: transparent !important;
     border: none !important;
+    text-align: left;
 }
 .mc-message .hb-text-content a {
     color: var(--primary-color, #10B981);
