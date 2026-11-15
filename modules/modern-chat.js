@@ -32,8 +32,7 @@ var ModernChat = (function () {
             PREFS: 'modern-chat:prefs'
         },
         TIPTAP_VERSION: '2.5.2',
-        TIPTAP_TIMEOUT_MS: 8000,
-        GROUP_WINDOW_MS: 5 * 60 * 1000
+        TIPTAP_TIMEOUT_MS: 8000
     };
 
     // ─── STATE ────────────────────────────────────────────────────────────
@@ -305,6 +304,101 @@ var ModernChat = (function () {
         try { localStorage.setItem(CONFIG.STORAGE.LAST_SEEN, String(ts)); } catch (e) {}
     }
 
+       // ─── USER DATA (role badges) ──────────────────────────────────────────
+    // Posts.js already fetches /api.php?mid=<id> for the same purpose; we
+    // reuse the endpoint and cache results aggressively. A cached `null`
+    // marks a failed fetch so we don't retry on every poll cycle.
+    var userDataCache = new Map();
+    var USER_FETCH_TIMEOUT = 8000;
+
+    function fetchUserData(mid) {
+        if (mid == null) return Promise.resolve(null);
+        var key = String(mid);
+        if (userDataCache.has(key)) return Promise.resolve(userDataCache.get(key));
+
+        return new Promise(function (resolve) {
+            var controller = new AbortController();
+            var timer = setTimeout(function () { controller.abort(); }, USER_FETCH_TIMEOUT);
+            fetch('/api.php?mid=' + encodeURIComponent(key), {
+                credentials: 'include',
+                signal: controller.signal
+            })
+            .then(function (r) {
+                clearTimeout(timer);
+                return r.ok ? r.json() : null;
+            })
+            .then(function (data) {
+                var user = data && (data['m' + key] || data.info) || null;
+                userDataCache.set(key, user);
+                resolve(user);
+            })
+            .catch(function () {
+                clearTimeout(timer);
+                userDataCache.set(key, null);
+                resolve(null);
+            });
+        });
+    }
+
+    // Mirrors posts.js resolveGroupBadge. Returns null for regular members
+    // and unknown custom groups so the chat isn't plastered with "Member"
+    // badges on every line — only elevated roles earn a pill.
+    function resolveRole(user) {
+        if (!user || !user.group) return null;
+        var name = String(user.group.name || '').toLowerCase();
+        var cls  = String(user.group.class || '').toLowerCase();
+        var body = String(user.group.bodyclass || '').toLowerCase();
+        var all  = name + ' ' + cls + ' ' + body;
+
+        if (all.indexOf('founder') !== -1)
+            return { className: 'group-founder',    label: 'Founder' };
+        if (all.indexOf('administrator') !== -1 || all.indexOf('amministrat') !== -1)
+            return { className: 'group-admin',      label: 'Admin' };
+        if (all.indexOf('global') !== -1 && all.indexOf('mod') !== -1)
+            return { className: 'group-global-mod', label: 'Global Mod' };
+        if (all.indexOf('moderator') !== -1 || /\bmod\b/.test(all))
+            return { className: 'group-mod',        label: 'Mod' };
+        if (all.indexOf('developer') !== -1)
+            return { className: 'group-developer',  label: 'Developer' };
+        if (all.indexOf('game dev') !== -1 || all.indexOf('game_dev') !== -1)
+            return { className: 'group-game-dev',   label: 'Game Dev' };
+        if (all.indexOf('fan') !== -1)
+            return { className: 'group-fan',        label: 'Fan' };
+        return null;
+    }
+
+    // Renders the badge into `nicknameEl` and stamps a role class onto
+    // `avatarEl` (for the tinted ring). Both happen from the same cached
+    // user object. If we already have the user cached, this is synchronous
+    // — no flash. Otherwise the badge appears a few hundred ms later.
+    function applyRoleIdentity(nicknameEl, avatarEl, msg) {
+        if (!msg.user || !msg.user.id) return;
+        var mid = String(msg.user.id);
+
+        function paint(user) {
+            var role = resolveRole(user);
+            if (!role) return;
+            if (nicknameEl && nicknameEl.isConnected && !nicknameEl.parentNode.querySelector('.mc-role-badge')) {
+                var badge = document.createElement('span');
+                badge.className = 'mc-role-badge ' + role.className;
+                badge.textContent = role.label;
+                nicknameEl.insertAdjacentElement('afterend', badge);
+            }
+            if (avatarEl && avatarEl.isConnected) {
+                avatarEl.setAttribute('data-role', role.className.replace('group-', ''));
+            }
+        }
+
+        if (userDataCache.has(mid)) {
+            paint(userDataCache.get(mid));
+            return;
+        }
+        fetchUserData(mid).then(function (user) {
+            if (!nicknameEl || !nicknameEl.isConnected) return;
+            paint(user);
+        });
+    }
+
     // ─── DOM CONSTRUCTION ─────────────────────────────────────────────────
     var els = {};
 
@@ -471,6 +565,16 @@ var ModernChat = (function () {
         });
         if (acts.length) clone.appendChild(actions);
 
+               // Role badge + avatar tint. Cached data → synchronous, uncached →
+        // async paint. Safe to fire-and-forget; the clone may be replaced
+        // by a fresher one before the fetch resolves, in which case the
+        // isConnected check in applyRoleIdentity drops the update.
+        applyRoleIdentity(
+            clone.querySelector('.hb-nickname'),
+            clone.querySelector('.hb-avatar'),
+            msg
+        );
+
         // Modern timestamp: <time datetime="ISO"> + rich tooltip.
         var timeEl = clone.querySelector('.hb-time');
         if (timeEl) {
@@ -577,8 +681,6 @@ var ModernChat = (function () {
             }
         });
 
-        applyGrouping(canonical);
-
         if (typeof ForumEventBus !== 'undefined' && state.lastSeenAt > 0) {
             var prevLastSeen = state.lastSeenAt;
             var newlyArrived = canonical.filter(function (m) {
@@ -596,19 +698,7 @@ var ModernChat = (function () {
         updateUnread(wasAtBottom);
         if (wasAtBottom || state.open) scheduleScrollToBottom();
     }
-    function applyGrouping(canonical) {
-        var lastUid = null, lastTs = 0;
-        canonical.forEach(function (msg) {
-            var entry = state.dom.get(msg.id);
-            if (!entry) return;
-            var date = msg.date instanceof Date ? msg.date.getTime() : new Date(msg.date).getTime();
-            var uid = String(msg.user && msg.user.id || '');
-            var grouped = (uid === lastUid) && (date - lastTs < CONFIG.GROUP_WINDOW_MS);
-            entry.clone.classList.toggle('mc-grouped', grouped);
-            lastUid = uid;
-            lastTs = date;
-        });
-    }
+
     function isNearBottom() {
         if (!els.messages) return true;
         return els.messages.scrollHeight - els.messages.scrollTop - els.messages.clientHeight < 80;
@@ -1168,10 +1258,11 @@ var ModernChat = (function () {
         state.dom.forEach(function (entry) {
             destroyMessageTippy(entry.clone);
         });
-        state.mounted = false;
+                state.mounted = false;
         state.open = false;
         state.messages = [];
         state.dom.clear();
+        userDataCache.clear();
     };
 
     return API;
