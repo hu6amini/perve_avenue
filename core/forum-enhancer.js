@@ -34,6 +34,7 @@
             'similar-topics': true,
             editor: true,
             report: true,
+            'modern-chat': true,
             navigation: false,
             sidebar: false,
             footer: false
@@ -325,7 +326,7 @@ if (typeof ThemeModule !== 'undefined') {
             registerModule('modals', ModalsModule, ['forumObserver']);
         } else {
             log('ModalsModule not found, modern modals disabled', 'warn');
-            ENHANCER_CONFIG.modals.modals = false;
+            ENHANCER_CONFIG.modules.modals = false;
         }
 
         // --- MESSENGER MODULE ---
@@ -371,6 +372,18 @@ if (typeof SimilarTopicsModule !== 'undefined') {
 } else {
     log('SimilarTopicsModule not found, similar topics disabled', 'warn');
     ENHANCER_CONFIG.modules['similar-topics'] = false;
+}
+        // --- MODERN CHAT (overlay; independent of the wrapper) ---
+// Registered last so the wrapper and other UI settle first.
+// No formal dependencies: ModernChat talks to <hello-box>
+// (injected by Innovation's script-loader) and optionally
+// uses Commons.toast at call time. Requiring domUtils here
+// would only delay boot for no benefit.
+if (typeof ModernChat !== 'undefined') {
+    registerModule('modern-chat', ModernChat, []);
+} else {
+    log('ModernChat not found, chat overlay disabled', 'warn');
+    ENHANCER_CONFIG.modules['modern-chat'] = false;
 }
     }
     
