@@ -519,28 +519,28 @@ var ModernChat = (function () {
             }
         });
 
-        function open() {
-    if (state.open || !state.mounted) return;
-    state.open = true;
-    document.body.setAttribute('data-mc-open', '1');
-    els.panel.classList.add('mc-panel-open');
-    els.panel.setAttribute('aria-hidden', 'false');
-    els.fab.classList.add('mc-fab-hidden');
-    requestAnimationFrame(function () {
-        scheduleScrollToBottom();
-        initComposer();
-        focusComposer();
-    });
-    // Mark all as seen
-    var latest = state.messages[state.messages.length - 1];
-    if (latest) {
-        var ts = latest.date instanceof Date ? latest.date.getTime() : new Date(latest.date).getTime();
-        state.lastSeenAt = ts;
-        state.unread = 0;
-        saveLastSeen(ts);
-        renderUnreadBadge();
+        applyGrouping(canonical);
+
+        // Emit BEFORE updateUnread so we diff against the OLD lastSeenAt.
+        // Skip the very first sync (lastSeenAt === 0) so a brand-new user
+        // doesn't get the whole backlog emitted as "new".
+        if (typeof ForumEventBus !== 'undefined' && state.lastSeenAt > 0) {
+            var prevLastSeen = state.lastSeenAt;
+            var newlyArrived = canonical.filter(function (m) {
+                var ts = m.date instanceof Date ? m.date.getTime() : new Date(m.date).getTime();
+                return ts > prevLastSeen;
+            });
+            if (newlyArrived.length) {
+                ForumEventBus.trigger('chat:messages', {
+                    messages: newlyArrived,
+                    unread: state.unread
+                });
+            }
+        }
+
+        updateUnread(wasAtBottom);
+        if (wasAtBottom || state.open) scheduleScrollToBottom();
     }
-}
     function applyGrouping(canonical) {
         var lastUid = null, lastTs = 0;
         canonical.forEach(function (msg) {
@@ -973,10 +973,9 @@ var ModernChat = (function () {
             saveLastSeen(ts);
             renderUnreadBadge();
         }
-           if (typeof ForumEventBus !== 'undefined') {
-        ForumEventBus.trigger('chat:opened', { unreadCleared: state.unread === 0 });
-    }
-}
+                   if (typeof ForumEventBus !== 'undefined') {
+            ForumEventBus.trigger('chat:opened', { unreadCleared: state.unread === 0 });
+        }
     }
     function close() {
         if (!state.open) return;
@@ -986,10 +985,9 @@ var ModernChat = (function () {
         els.panel.setAttribute('aria-hidden', 'true');
         els.fab.classList.remove('mc-fab-hidden');
         els.emojiPicker.hidden = true;
-           if (typeof ForumEventBus !== 'undefined') {
-        ForumEventBus.trigger('chat:closed', {});
-    }
-}
+                   if (typeof ForumEventBus !== 'undefined') {
+            ForumEventBus.trigger('chat:closed', {});
+        }
     }
     function toggle() { state.open ? close() : open(); }
 
@@ -1108,35 +1106,34 @@ var ModernChat = (function () {
         }
     };
 
+    // Attach module-compatible lifecycle methods INSIDE the IIFE so
+    // they can reach the private state, els, boot and stopPolling.
+    // The enhancer calls API.initialize(); the auto-boot below only
+    // runs when no enhancer is present.
+    API.initialize = function () {
+        if (state.mounted) return Promise.resolve(true);
+        boot();
+        return Promise.resolve(true);
+    };
+
+    API.destroy = function () {
+        stopPolling();
+        if (state.mutationObserver) {
+            state.mutationObserver.disconnect();
+            state.mutationObserver = null;
+        }
+        if (els.fab && els.fab.parentNode) els.fab.parentNode.removeChild(els.fab);
+        if (els.panel && els.panel.parentNode) els.panel.parentNode.removeChild(els.panel);
+        var hideStyle = document.getElementById('mc-native-hide');
+        if (hideStyle) hideStyle.remove();
+        state.mounted = false;
+        state.open = false;
+        state.messages = [];
+        state.dom.clear();
+    };
+
     return API;
 })();
-
-// Enhance the public API with a module-compatible initialize()
-// and an event-bus hook. Kept separate from the API object above
-// so the boot section stays self-contained.
-ModernChat.initialize = function () {
-    // Do NOT block other enhancer modules while we wait for
-    // <hello-box> to appear — boot() already polls for up to
-    // CONFIG.MOUNT_TIMEOUT_MS and resolves when mounted. The
-    // enhancer's per-round retry loop would not retry us anyway
-    // if we were the only module still failing.
-    if (state.mounted) return Promise.resolve(true);
-    boot();
-    return Promise.resolve(true);
-};
-
-ModernChat.destroy = function () {
-    stopPolling();
-    if (els.mutationObserver) { els.mutationObserver.disconnect(); els.mutationObserver = null; }
-    if (els.fab && els.fab.parentNode) els.fab.parentNode.removeChild(els.fab);
-    if (els.panel && els.panel.parentNode) els.panel.parentNode.removeChild(els.panel);
-    var hideStyle = document.getElementById('mc-native-hide');
-    if (hideStyle) hideStyle.remove();
-    state.mounted = false;
-    state.open = false;
-    state.messages = [];
-    state.dom.clear();
-};
 
 // Auto-boot only when the enhancer is NOT driving us.
 // The enhancer sets window.ForumEnhancer before we run.
