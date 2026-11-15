@@ -30,6 +30,14 @@ var ModernReport = (function () {
 
     const _reportedThisSession = new Set();
 
+// Feature-detect native textarea auto-grow. Chrome 123+, Safari 26+
+// support this; Firefox is flag-only as of late 2026. When supported,
+// CSS handles growth; when not, autoGrow() in openReportDialog does.
+const FIELD_SIZING_SUPPORTED = (function () {
+    try { return !!(window.CSS && CSS.supports && CSS.supports('field-sizing', 'content')); }
+    catch (_) { return false; }
+})();
+
     // =========================================================================
     // HELPERS
     // =========================================================================
@@ -133,14 +141,22 @@ var ModernReport = (function () {
                         '</div>' +
                     '</div>' +
                     '<div class="report-field">' +
-                        '<label>' +
-                            '<span>Reason for reporting</span>' +
-                            '<span class="counter-value">0/' + REPORT_MAX + '</span>' +
-                        '</label>' +
-                        '<textarea class="report-textarea" rows="5" ' +
-                            'maxlength="' + REPORT_MAX + '" ' +
-                            'placeholder="Explain why you are reporting this post (min ' +
-                            REPORT_MIN + ' characters)\u2026"></textarea>' +
+    '<label for="report-reason-input">' +
+        '<span>Reason for reporting</span>' +
+        '<span class="counter-value">0/' + REPORT_MAX + '</span>' +
+    '</label>' +
+    '<textarea id="report-reason-input" class="report-textarea" rows="5" ' +
+        'maxlength="' + REPORT_MAX + '" ' +
+        'aria-describedby="report-reason-hint" ' +
+        'autocomplete="off" ' +
+        'enterkeyhint="enter" ' +
+        'placeholder="Explain why you are reporting this post (min ' +
+        REPORT_MIN + ' characters)\u2026"></textarea>' +
+    '<span id="report-reason-hint" style="position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0">' +
+        'Minimum ' + REPORT_MIN + ' characters, maximum ' + REPORT_MAX + '. ' +
+        'Press Control or Command plus Enter to submit, Escape to cancel.' +
+    '</span>' +
+'</div>' + ' characters)\u2026"></textarea>' +
                     '</div>' +
                 '</div>' +
                 '<div class="report-modal-footer">' +
@@ -169,9 +185,10 @@ var ModernReport = (function () {
         const previousFocus = document.activeElement;
 
         function autoGrow() {
-            textarea.style.height = 'auto';
-            textarea.style.height = textarea.scrollHeight + 'px';
-        }
+    if (FIELD_SIZING_SUPPORTED) return;   // CSS handles it
+    textarea.style.height = 'auto';
+    textarea.style.height = textarea.scrollHeight + 'px';
+}
 
         function refresh() {
             const len = textarea.value.length;
