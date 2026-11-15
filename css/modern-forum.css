@@ -6926,6 +6926,7 @@ body.has-docked-editor {
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
+    text-align: left;
 }
 .mc-message .hb-nickname a {
     color: inherit; 
