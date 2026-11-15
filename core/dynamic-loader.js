@@ -28,6 +28,17 @@ STYLESHEETS.forEach(url => {
 
 // ============================================================================
 // 2. SCRIPT LOADER ENGINE
+//
+// Notes on loading semantics:
+//  - Scripts inserted via document.createElement are always executed as soon
+//    as they are available (equivalent to `async`); the `defer` attribute is
+//    ignored by the spec for such scripts. That is why no `defer` is set here.
+//  - Execution order across the phases below is preserved by awaiting the
+//    Promise returned by loadScript, which resolves on `onload` — i.e. after
+//    the script has executed, not just been fetched.
+//  - `crossOrigin = "anonymous"` matches the <link rel="preload"> hints the
+//    boot loader creates for the foundation scripts, so the fetch is reused
+//    instead of performed twice.
 // ============================================================================
 function loadScript(src, isModule = false) {
     return new Promise((resolve, reject) => {
@@ -40,8 +51,6 @@ function loadScript(src, isModule = false) {
 
         if (isModule || fileName === 'media-optimizer') {
             script.type = 'module';
-        } else {
-            script.defer = fileName !== 'event-bus';
         }
 
         script.crossOrigin = "anonymous";
@@ -160,7 +169,7 @@ async function bootSystem() {
         injectCriticalCSS();
         preloadLCPImage();
 
-        // PHASE B: Visual core (Slick, DOM utils, Forum Observer)
+        // PHASE B: Visual core (Slick, DOM utils, Forum Observer, theme)
         const phaseBStart = performance.now();
         const resultsB = await Promise.allSettled([
             loadScript("https://cdnjs.cloudflare.com/ajax/libs/slick-carousel/1.9.0/slick.min.js"),
