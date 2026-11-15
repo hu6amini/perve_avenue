@@ -6874,11 +6874,18 @@ body.has-docked-editor {
 .mc-message {
     display: flex;
     gap: 10px;
-    padding: 4px 12px;
-    margin: 0 0 2px;
+    padding: 10px 12px;
+    margin: 0 12px 6px;
     position: relative;
-    transition: background 0.12s ease;
+    background: var(--surface-elevated, #F9FAFB);
+    border: 1px solid var(--border-color, #E5E7EB);
+    border-radius: var(--radius, 12px);
+    transition: border-color 0.12s ease, background 0.12s ease;
     animation: mc-msg-in 0.18s ease-out;
+}
+
+.mc-message:hover {
+    border-color: var(--border-color-strong, #D1D5DB);
 }
 
 .mc-message .hb-avatar {
@@ -6939,21 +6946,14 @@ body.has-docked-editor {
 /* ── Content bubble ─────────────────────────────────────────── */
 .mc-message .hb-text-content {
     margin: 0 !important;
-    padding: 8px 12px !important;
+    padding: 0 !important;
     font-size: 14px;
     line-height: 1.45;
     color: var(--text-primary, #111827);
     word-wrap: break-word;
     overflow-wrap: anywhere;
-    background: var(--surface-elevated, #F9FAFB) !important;
-    border: 1px solid var(--border-color, #E5E7EB) !important;
-    border-radius: var(--radius, 12px);
-    transition: background 0.15s ease, border-color 0.15s ease;
-    display: inline-block;
-    max-width: 100%;
-}
-.mc-message:hover .hb-text-content {
-    border-color: var(--border-color-strong, #D1D5DB) !important;
+    background: transparent !important;
+    border: none !important;
 }
 .mc-message .hb-text-content a {
     color: var(--primary-color, #10B981);
@@ -7018,7 +7018,7 @@ body.has-docked-editor {
 .mc-message .hb-spoiler.mc-revealed { filter: none; user-select: text; }
 
 /* Flash when jumping to a quoted message */
-.mc-message.mc-flash .hb-text-content {
+.mc-message.mc-flash {
     animation: mc-flash 1.2s ease;
 }
 @keyframes mc-flash {
