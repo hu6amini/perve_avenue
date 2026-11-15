@@ -6911,17 +6911,30 @@ body.has-docked-editor {
     display: flex;
     align-items: center;
     gap: 8px;
-    flex-wrap: wrap;
+    flex-wrap: nowrap;
     margin: 0 0 4px;
     line-height: 1.2;
+    min-width: 0;
 }
 .mc-message .hb-nickname {
     font-size: 13px;
     font-weight: 600;
     color: var(--text-primary, #111827);
     margin: 0;
+    flex: 1 1 auto;
+    min-width: 0; /* Crucial: allows the flex item to shrink below its content size */
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
 }
-.mc-message .hb-nickname a { color: inherit; text-decoration: none; }
+.mc-message .hb-nickname a {
+    color: inherit; 
+    text-decoration: none; 
+    display: block;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
 .mc-message .hb-nickname a:hover { text-decoration: underline; }
 
 .mc-message .hb-time,
@@ -6929,7 +6942,7 @@ body.has-docked-editor {
     font-size: 11px;
     color: var(--text-tertiary, #9CA3AF);
     margin-left: auto;
-    font-family: inherit !important;
+    flex-shrink: 0;
 }
 .mc-message time.mc-time {
     cursor: help;
