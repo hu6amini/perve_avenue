@@ -457,6 +457,9 @@ var ModernChat = (function () {
             '    <button type="button" class="mc-header-btn mc-btn-close" aria-label="Close">',
             '      <i class="fa-regular fa-xmark" aria-hidden="true"></i>',
             '    </button>',
+                '<button type="button" class="mc-jump-btn" hidden>',
+            '  <i class="fa-regular fa-arrow-down" aria-hidden="true"></i> New messages',
+            '</button>',
             '  </div>',
             '</div>',
             '<div class="mc-messages" role="log" aria-live="polite"></div>',
@@ -503,7 +506,7 @@ var ModernChat = (function () {
         els.toggleToolbarBtn = panel.querySelector('.mc-btn-toggle-toolbar');
         els.closeBtn = panel.querySelector('.mc-btn-close');
         els.settingsBtn = panel.querySelector('.mc-btn-settings');
-
+        els.jumpBtn = panel.querySelector('.mc-jump-btn');
         els.closeBtn.addEventListener('click', close);
         els.settingsBtn.addEventListener('click', showSettings);
         els.presenceChip.addEventListener('click', togglePresenceList);
@@ -513,7 +516,19 @@ var ModernChat = (function () {
         });
         els.emojiBtn.addEventListener('click', toggleEmojiPicker);
         els.sendBtn.addEventListener('click', function () { submitComposer(); });
-
+        els.jumpBtn.addEventListener('click', function() {
+            scheduleScrollToBottom();
+            els.jumpBtn.hidden = true;
+            // Mark unread as seen
+            var latest = state.messages[state.messages.length - 1];
+            if (latest) {
+                var ts = latest.date instanceof Date ? latest.date.getTime() : new Date(latest.date).getTime();
+                state.lastSeenAt = ts;
+                state.unread = 0;
+                saveLastSeen(ts);
+                renderUnreadBadge();
+            }
+        });
         els.toolbar.addEventListener('click', function (e) {
             var btn = e.target.closest('button[data-cmd]');
             if (!btn) return;
@@ -666,6 +681,8 @@ var ModernChat = (function () {
         var seen = new Set();
         var lastInserted = null;
         var wasAtBottom = isNearBottom();
+        // Remember the scroll position in case we modify the DOM
+        var prevScrollTop = els.messages ? els.messages.scrollTop : 0;
 
         state.dom.forEach(function (entry, id) {
             if (!canonical.some(function (m) { return m.id === id; })) {
@@ -717,10 +734,20 @@ var ModernChat = (function () {
             }
         }
 
-                updateUnread(wasAtBottom);
-        // Only auto-scroll if the user was ALREADY at the bottom.
-        // If they scrolled up to read history, leave them there.
-        if (wasAtBottom) scheduleScrollToBottom();
+        updateUnread(wasAtBottom);
+
+               // Show/hide the jump button
+        if (els.jumpBtn) {
+            els.jumpBtn.hidden = wasAtBottom || state.unread === 0 || !state.open;
+        }
+        
+        // If we were at the bottom, stay at the bottom.
+        // If we were scrolled up reading, lock us exactly where we were.
+        if (wasAtBottom) {
+            scheduleScrollToBottom();
+        } else if (els.messages) {
+            els.messages.scrollTop = prevScrollTop;
+        }
     }
 
     function isNearBottom() {
