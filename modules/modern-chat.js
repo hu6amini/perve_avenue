@@ -519,10 +519,28 @@ var ModernChat = (function () {
             }
         });
 
-        applyGrouping(canonical);
-        updateUnread(wasAtBottom);
-        if (wasAtBottom || state.open) scheduleScrollToBottom();
+        function open() {
+    if (state.open || !state.mounted) return;
+    state.open = true;
+    document.body.setAttribute('data-mc-open', '1');
+    els.panel.classList.add('mc-panel-open');
+    els.panel.setAttribute('aria-hidden', 'false');
+    els.fab.classList.add('mc-fab-hidden');
+    requestAnimationFrame(function () {
+        scheduleScrollToBottom();
+        initComposer();
+        focusComposer();
+    });
+    // Mark all as seen
+    var latest = state.messages[state.messages.length - 1];
+    if (latest) {
+        var ts = latest.date instanceof Date ? latest.date.getTime() : new Date(latest.date).getTime();
+        state.lastSeenAt = ts;
+        state.unread = 0;
+        saveLastSeen(ts);
+        renderUnreadBadge();
     }
+}
     function applyGrouping(canonical) {
         var lastUid = null, lastTs = 0;
         canonical.forEach(function (msg) {
@@ -826,9 +844,12 @@ var ModernChat = (function () {
                 toast('Send failed', 'error');
                 return;
             }
-            clearComposer();
-            scheduleScrollToBottom();
-            debug('sent:', bb);
+                    clearComposer();
+        scheduleScrollToBottom();
+        if (typeof ForumEventBus !== 'undefined') {
+            ForumEventBus.trigger('chat:sent', { bbcode: bb });
+        }
+        debug('sent:', bb);
         } catch (e) {
             warn('Send error:', e);
             toast('Send failed', 'error');
@@ -952,6 +973,10 @@ var ModernChat = (function () {
             saveLastSeen(ts);
             renderUnreadBadge();
         }
+           if (typeof ForumEventBus !== 'undefined') {
+        ForumEventBus.trigger('chat:opened', { unreadCleared: state.unread === 0 });
+    }
+}
     }
     function close() {
         if (!state.open) return;
@@ -961,6 +986,10 @@ var ModernChat = (function () {
         els.panel.setAttribute('aria-hidden', 'true');
         els.fab.classList.remove('mc-fab-hidden');
         els.emojiPicker.hidden = true;
+           if (typeof ForumEventBus !== 'undefined') {
+        ForumEventBus.trigger('chat:closed', {});
+    }
+}
     }
     function toggle() { state.open ? close() : open(); }
 
@@ -1082,9 +1111,39 @@ var ModernChat = (function () {
     return API;
 })();
 
-// Auto-boot when DOM is ready
-if (document.readyState === 'complete' || document.readyState === 'interactive') {
-    setTimeout(function () { ModernChat.boot(); }, 0);
-} else {
-    document.addEventListener('DOMContentLoaded', function () { ModernChat.boot(); }, { once: true });
+// Enhance the public API with a module-compatible initialize()
+// and an event-bus hook. Kept separate from the API object above
+// so the boot section stays self-contained.
+ModernChat.initialize = function () {
+    // Do NOT block other enhancer modules while we wait for
+    // <hello-box> to appear — boot() already polls for up to
+    // CONFIG.MOUNT_TIMEOUT_MS and resolves when mounted. The
+    // enhancer's per-round retry loop would not retry us anyway
+    // if we were the only module still failing.
+    if (state.mounted) return Promise.resolve(true);
+    boot();
+    return Promise.resolve(true);
+};
+
+ModernChat.destroy = function () {
+    stopPolling();
+    if (els.mutationObserver) { els.mutationObserver.disconnect(); els.mutationObserver = null; }
+    if (els.fab && els.fab.parentNode) els.fab.parentNode.removeChild(els.fab);
+    if (els.panel && els.panel.parentNode) els.panel.parentNode.removeChild(els.panel);
+    var hideStyle = document.getElementById('mc-native-hide');
+    if (hideStyle) hideStyle.remove();
+    state.mounted = false;
+    state.open = false;
+    state.messages = [];
+    state.dom.clear();
+};
+
+// Auto-boot only when the enhancer is NOT driving us.
+// The enhancer sets window.ForumEnhancer before we run.
+if (!window.ForumEnhancer) {
+    if (document.readyState === 'complete' || document.readyState === 'interactive') {
+        setTimeout(function () { ModernChat.boot(); }, 0);
+    } else {
+        document.addEventListener('DOMContentLoaded', function () { ModernChat.boot(); }, { once: true });
+    }
 }
