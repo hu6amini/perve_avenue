@@ -231,22 +231,66 @@ var ModernChat = (function () {
         return html;
     }
 
-    // ─── TIME HELPERS ─────────────────────────────────────────────────────
+        // ─── TIME HELPERS ─────────────────────────────────────────────────────
+    // Matches posts.js: Intl.RelativeTimeFormat, negative-diff convention,
+    // locale-aware ("3 days ago" / "3 giorni fa"). The chat is short-lived
+    // enough that this stays readable even when a burst of messages arrives
+    // in the same minute — they all read "now" together, which is the
+    // intended signal for chat.
     function relativeTime(date) {
-        if (!(date instanceof Date) || isNaN(date)) return '';
-        var diff = Date.now() - date.getTime();
-        if (diff < 60000) return 'just now';
-        if (diff < 3600000) return Math.floor(diff / 60000) + 'm';
-        if (diff < 86400000) return Math.floor(diff / 3600000) + 'h';
-        if (diff < 7 * 86400000) return Math.floor(diff / 86400000) + 'd';
-        return date.toLocaleDateString(undefined, { day: '2-digit', month: 'short' });
+        if (!(date instanceof Date) || isNaN(date.getTime())) return '';
+        var diff = date.getTime() - Date.now();   // negative = past
+        var absDiff = Math.abs(diff) / 1000;
+        var locale = document.documentElement.lang || 'en';
+        var rtf;
+        try {
+            rtf = new Intl.RelativeTimeFormat(locale, { numeric: 'auto' });
+        } catch (e) {
+            rtf = new Intl.RelativeTimeFormat('en', { numeric: 'auto' });
+        }
+        if (absDiff < 60)       return rtf.format(Math.round(diff / 1000), 'second');
+        if (absDiff < 3600)     return rtf.format(Math.round(diff / 60000), 'minute');
+        if (absDiff < 86400)    return rtf.format(Math.round(diff / 3600000), 'hour');
+        if (absDiff < 2592000)  return rtf.format(Math.round(diff / 86400000), 'day');
+        if (absDiff < 31536000) return rtf.format(Math.round(diff / 2592000000), 'month');
+        return rtf.format(Math.round(diff / 31536000000), 'year');
     }
-    function absoluteTime(date) {
-        if (!(date instanceof Date) || isNaN(date)) return '';
+
+    // Full absolute date for the tooltip — weekday, month name, time.
+    // posts.js uses the same shape for post-time tooltips.
+    function formatFullDate(date) {
+        if (!(date instanceof Date) || isNaN(date.getTime())) return '';
+        return date.toLocaleString(undefined, {
+            weekday: 'long', year: 'numeric', month: 'long',
+            day: 'numeric', hour: '2-digit', minute: '2-digit'
+        });
+    }
+
+    // Used as the native tooltip text when tippy is unavailable.
+    // Kept shorter than formatFullDate because native tooltips truncate.
+    function formatCompactAbsolute(date) {
+        if (!(date instanceof Date) || isNaN(date.getTime())) return '';
         return date.toLocaleString(undefined, {
             year: 'numeric', month: '2-digit', day: '2-digit',
             hour: '2-digit', minute: '2-digit'
         });
+    }
+
+    // Tippy's default `appendTo: document.body` means poppers live at the
+    // body level, detached from the message node. Explicitly destroy them
+    // when a clone is replaced or removed so the poppers are cleaned up
+    // (they would otherwise linger for HISTORY_LIMIT messages).
+    function destroyMessageTippy(clone) {
+        if (!clone) return;
+        var nodes = clone.querySelectorAll('*');
+        for (var i = 0; i < nodes.length; i++) {
+            if (nodes[i]._tippy && typeof nodes[i]._tippy.destroy === 'function') {
+                try { nodes[i]._tippy.destroy(); } catch (e) {}
+            }
+        }
+        if (clone._tippy && typeof clone._tippy.destroy === 'function') {
+            try { clone._tippy.destroy(); } catch (e) {}
+        }
     }
 
     // ─── STORAGE ──────────────────────────────────────────────────────────
@@ -446,13 +490,53 @@ var ModernChat = (function () {
         });
         if (acts.length) clone.appendChild(actions);
 
-        // Modern timestamp overlay (HelloBox renders DD/MM, HH:mm).
+                // Modern timestamp: <time datetime="ISO"> + rich tooltip.
+        // Mirrors posts.js — same element semantics, same relative text
+        // engine, same tippy shape — so a user's expectations carry over
+        // between the post list and the chat.
         var timeEl = clone.querySelector('.hb-time');
         if (timeEl) {
             var date = msg.date instanceof Date ? msg.date : new Date(msg.date);
-            timeEl.textContent = relativeTime(date);
-            timeEl.setAttribute('title', absoluteTime(date));
-            timeEl.classList.add('mc-time');
+
+            var timeNode = document.createElement('time');
+            timeNode.className = 'hb-time mc-time';
+            if (!isNaN(date.getTime())) {
+                timeNode.setAttribute('datetime', date.toISOString());
+            }
+            timeNode.textContent = relativeTime(date);
+
+            var fullDate = formatFullDate(date);
+
+            if (typeof window.tippy === 'function' && !document.body.classList.contains('guest')) {
+                var tipHtml =
+                    '<div class="tip-info">' +
+                        '<div class="tip-info-title">' +
+                            '<i class="fa-regular fa-calendar" aria-hidden="true"></i>' +
+                            escapeHtml(fullDate) +
+                        '</div>' +
+                        '<div class="tip-info-text">Posted ' + escapeHtml(relativeTime(date)) + '</div>' +
+                    '</div>';
+                timeNode.setAttribute('data-tippy-content', tipHtml);
+                try {
+                    window.tippy(timeNode, {
+                        allowHTML: true,
+                        theme: 'emerald',
+                        animation: 'fade',
+                        placement: 'bottom',
+                        offset: [0, 8],
+                        arrow: true,
+                        appendTo: document.body,
+                        delay: [200, 80],
+                        touch: false
+                    });
+                } catch (e) { /* fall through to native title */ }
+            } else {
+                // Guest or tippy not loaded — graceful degradation with the
+                // browser-native tooltip. Compact to avoid truncation.
+                timeNode.setAttribute('title', formatCompactAbsolute(date));
+            }
+
+            timeEl.parentNode.replaceChild(timeNode, timeEl);
         }
 
         // Wire quote refs inside the content.
@@ -484,9 +568,10 @@ var ModernChat = (function () {
         var lastInserted = null;
         var wasAtBottom = isNearBottom();
 
-        // Remove stale
+                // Remove stale
         state.dom.forEach(function (entry, id) {
             if (!canonical.some(function (m) { return m.id === id; })) {
+                destroyMessageTippy(entry.clone);
                 entry.clone.remove();
                 state.dom.delete(id);
             }
@@ -499,9 +584,10 @@ var ModernChat = (function () {
             var hash = msgHash(srcNode);
             var existing = state.dom.get(msg.id);
             if (existing) {
-                if (existing.hash !== hash) {
+                                if (existing.hash !== hash) {
                     var fresh = renderClone(srcNode, msg);
                     if (fresh) {
+                        destroyMessageTippy(existing.clone);
                         existing.clone.replaceWith(fresh);
                         state.dom.set(msg.id, { clone: fresh, srcNode: srcNode, hash: hash });
                         lastInserted = fresh;
@@ -1126,6 +1212,9 @@ var ModernChat = (function () {
         if (els.panel && els.panel.parentNode) els.panel.parentNode.removeChild(els.panel);
         var hideStyle = document.getElementById('mc-native-hide');
         if (hideStyle) hideStyle.remove();
+                state.dom.forEach(function (entry) {
+            destroyMessageTippy(entry.clone);
+        });
         state.mounted = false;
         state.open = false;
         state.messages = [];
