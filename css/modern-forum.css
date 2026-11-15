@@ -7045,13 +7045,13 @@ body.has-docked-editor {
     flex-shrink: 0;
     margin-left: 4px;
 }
-.mc-role-badge.group-founder    { background: #F59E0B; color: #422006; }
-.mc-role-badge.group-admin      { background: #DC2626; }
-.mc-role-badge.group-global-mod { background: #7C3AED; }
-.mc-role-badge.group-mod        { background: #2563EB; }
-.mc-role-badge.group-developer  { background: #0891B2; }
-.mc-role-badge.group-game-dev   { background: #059669; }
-.mc-role-badge.group-fan        { background: #DB2777; }
+.mc-role-badge.group-founder    { background: var(--admin-color) !important; }
+.mc-role-badge.group-admin      { background: var(--founder-color) !important; }
+.mc-role-badge.group-global-mod { background: var(--group-global-moderator) !important; }
+.mc-role-badge.group-mod        { background: var(--mod-color) !important; }
+.mc-role-badge.group-member     { background: var(--member-color) !important; }
+.mc-role-badge.group-game-dev   { background: var(--game-dev-color) !important;  }
+.mc-role-badge.group-fan        { background: var(--fan-color) !important; }
 
 /* 30.7 — Message hover actions (kept, re-anchored) ───────────── */
 .mc-message-actions {
