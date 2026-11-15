@@ -6928,7 +6928,7 @@ body.has-docked-editor {
 .mc-message .mc-time {
     font-size: 11px;
     color: var(--text-tertiary, #9CA3AF);
-    margin: 0 !important;
+    margin-left: auto;
     font-family: inherit !important;
 }
 .mc-message time.mc-time {
