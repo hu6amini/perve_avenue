@@ -125,7 +125,7 @@ var ModernChat = (function () {
         }
         return null;
     }
-    function readAllMessages() {
+        function readAllMessages() {
         var root = getHelloBoxRoot();
         if (!root) return [];
         var container = root.querySelector(CONFIG.MSG_CONTAINER);
@@ -140,7 +140,9 @@ var ModernChat = (function () {
                 while (fiber && depth < CONFIG.FIBER_MAX_DEPTH) {
                     var p = fiber.memoizedProps;
                     if (p && Array.isArray(p.messages) && p.messages.length > 0) {
-                        return p.messages.slice();
+                        // React provides Newest -> Oldest. 
+                        // We reverse it for chat (Oldest -> Newest at bottom).
+                        return p.messages.slice().reverse();
                     }
                     fiber = fiber.return;
                     depth++;
@@ -154,7 +156,7 @@ var ModernChat = (function () {
             var m = readMessageObject(nodes[i]);
             if (m) out.push(m);
         }
-        return out;
+        return out.reverse(); // Reverse DOM fallback too
     }
     function readOnlineUsers() {
         var root = getHelloBoxRoot();
@@ -715,8 +717,10 @@ var ModernChat = (function () {
             }
         }
 
-        updateUnread(wasAtBottom);
-        if (wasAtBottom || state.open) scheduleScrollToBottom();
+                updateUnread(wasAtBottom);
+        // Only auto-scroll if the user was ALREADY at the bottom.
+        // If they scrolled up to read history, leave them there.
+        if (wasAtBottom) scheduleScrollToBottom();
     }
 
     function isNearBottom() {
