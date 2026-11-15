@@ -7031,7 +7031,7 @@ body.has-docked-editor {
 /* 30.6a — Role badge (pill next to nickname) ──────────────────── */
 /* 3. The Badge next to the nickname */
 .mc-role-badge {
-    display: inline-flex;
+    display: none;
     align-items: center;
     padding: 1px 7px;
     border-radius: 999px;
