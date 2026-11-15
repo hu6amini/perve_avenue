@@ -7410,6 +7410,35 @@ body.has-docked-editor {
     background: rgba(0, 0, 0, 0.04);
     background: color-mix(in srgb, currentColor 6%, transparent);
 }
+.mc-jump-btn {
+    position: absolute;
+    bottom: 80px; /* Above the composer */
+    left: 50%;
+    transform: translateX(-50%);
+    background: var(--primary-color, #10B981);
+    color: #fff;
+    border: none;
+    border-radius: 999px;
+    padding: 6px 14px;
+    font-size: 12px;
+    font-weight: 600;
+    font-family: inherit;
+    cursor: pointer;
+    box-shadow: var(--shadow-md, 0 4px 12px rgba(0,0,0,0.15));
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    z-index: 10;
+    animation: mc-fade-in 0.2s ease;
+    transition: background 0.15s ease, transform 0.15s ease;
+}
+.mc-jump-btn:hover {
+    background: var(--primary-color-hover, #059669);
+    transform: translateX(-50%) translateY(-2px);
+}
+.mc-jump-btn i {
+    font-size: 12px;
+}
 
 /* 30.11 — Animations ──────────────────────────────────────── */
 @keyframes mc-msg-in {
