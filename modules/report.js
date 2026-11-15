@@ -158,7 +158,6 @@ const FIELD_SIZING_SUPPORTED = (function () {
     '</span>' +
 '</div>' +
                     '</div>' +
-                '</div>' +
                 '<div class="report-modal-footer">' +
                     '<div class="footer-note">' +
                         '<i class="fa-regular fa-circle-info" aria-hidden="true"></i> ' +
