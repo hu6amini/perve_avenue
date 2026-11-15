@@ -371,17 +371,13 @@ var ModernChat = (function () {
     // `avatarEl` (for the tinted ring). Both happen from the same cached
     // user object. If we already have the user cached, this is synchronous
     // — no flash. Otherwise the badge appears a few hundred ms later.
-    function applyRoleIdentity(nicknameEl, avatarEl, msg) {
-        if (!msg.user || !msg.user.id) return;
-        var mid = String(msg.user.id);
+        function applyRoleIdentity(nicknameEl, avatarEl, msg) {
+        if (!msg.user) return;
+        var mid = msg.user.id ? String(msg.user.id) : null;
 
-            function paint(user) {
+        function paint(user) {
             var role = resolveRole(user);
             if (!role) return;
-            // No isConnected check here: renderClone() calls applyRoleIdentity
-            // while the clone is still detached, so isConnected is always
-            // false during the synchronous (cached) paint. parentNode exists
-            // inside the detached subtree, so querySelector works as expected.
             if (nicknameEl && nicknameEl.parentNode && !nicknameEl.parentNode.querySelector('.mc-role-badge')) {
                 var badge = document.createElement('span');
                 badge.className = 'mc-role-badge ' + role.className;
@@ -393,6 +389,14 @@ var ModernChat = (function () {
             }
         }
 
+        // 1. Check if HelloBox's React fiber already gave us the group
+        if (msg.user.group) {
+            paint(msg.user);
+            return;
+        }
+
+        // 2. Fallback to API
+        if (!mid) return;
         if (userDataCache.has(mid)) {
             paint(userDataCache.get(mid));
             return;
