@@ -156,7 +156,7 @@ const FIELD_SIZING_SUPPORTED = (function () {
         'Minimum ' + REPORT_MIN + ' characters, maximum ' + REPORT_MAX + '. ' +
         'Press Control or Command plus Enter to submit, Escape to cancel.' +
     '</span>' +
-'</div>' + ' characters)\u2026"></textarea>' +
+'</div>' +
                     '</div>' +
                 '</div>' +
                 '<div class="report-modal-footer">' +
