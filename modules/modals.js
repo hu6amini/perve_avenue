@@ -231,18 +231,25 @@ var ModalsModule = (function() {
     }
 
     function storeProfileLinks(legacyModal) {
-        var userLinks = legacyModal.querySelectorAll('.users li a');
-        for (var i = 0; i < userLinks.length; i++) {
-            var link = userLinks[i];
-            var match = link.href.match(/MID=(\d+)/);
-            if (match) userProfileLinks.set(match[1], link.href);
-        }
+    if (!legacyModal) return;   // ← new: direct-fetch path passes null
+    var userLinks = legacyModal.querySelectorAll('.users li a');
+    for (var i = 0; i < userLinks.length; i++) {
+        var link = userLinks[i];
+        var match = link.href.match(/MID=(\d+)/);
+        if (match) userProfileLinks.set(match[1], link.href);
     }
+}
 
     function navigateToProfile(userId) {
-        var profileUrl = userProfileLinks.get(userId);
-        if (profileUrl) window.location.href = profileUrl;
+    if (!userId) return;
+    var profileUrl = userProfileLinks.get(userId);
+    if (!profileUrl) {
+        // Direct-fetch path never opened the legacy overlay, so the
+        // map wasn't populated. Build the canonical profile URL.
+        profileUrl = '/?act=Profile&MID=' + userId;
     }
+    window.location.href = profileUrl;
+}
 
     function clickOriginalCloseButton(legacyModal) {
         if (!legacyModal) return;
@@ -282,6 +289,92 @@ var ModalsModule = (function() {
             return [];
         }
     }
+
+    // Fetches the legacy overlay HTML for a post's likers and parses out
+// the MIDs. Replaces the "click count → legacy overlay opens → scrape
+// DOM → close overlay" chain with a single fetch + DOMParser pass.
+// Same data, no jQuery, no animation timing.
+async function fetchLikersFromOverlay(pid) {
+    var postEl = document.getElementById('ee' + pid);
+    if (!postEl) return [];
+
+    var pointsPos = postEl.querySelector('.points .points_pos');
+    var overlayLink = pointsPos ? pointsPos.closest('a[rel="#overlay"]') : null;
+    if (!overlayLink) return [];
+
+    var baseHref = overlayLink.getAttribute('href');
+    if (!baseHref) return [];
+
+    var allIds = [];
+    var seen = {};
+    var pageSize = 15;
+    var maxPages = 20;
+
+    for (var page = 0; page < maxPages; page++) {
+        var url = baseHref + (baseHref.indexOf('?') === -1 ? '?' : '&') + 'popup=1';
+        if (page > 0) url += '&st=' + (page * pageSize);
+
+        var r;
+        try {
+            r = await fetch(url, { credentials: 'include' });
+        } catch (e) {
+            break;
+        }
+        if (!r.ok) break;
+
+        var html = await r.text();
+        var doc = new DOMParser().parseFromString(html, 'text/html');
+        var links = doc.querySelectorAll('ol.users a[href*="MID="]');
+
+        var added = 0;
+        links.forEach(function (a) {
+            var href = a.getAttribute('href') || '';
+            var m = href.match(/MID=(\d+)/);
+            var id = m ? m[1] : null;
+            if (!id) {
+                // ForumFree stamps the MID into the class as `user<MID>`
+                // too — catches relative/rewritten hrefs.
+                var cls = (a.className || '').match(/\buser(\d+)\b/);
+                if (cls) id = cls[1];
+            }
+            if (id && !seen[id]) {
+                seen[id] = true;
+                allIds.push(id);
+                added++;
+            }
+        });
+
+        // Stop when a page returns no new likers OR when the page
+        // returned fewer than pageSize items (last page). This makes
+        // the loop robust even if the server uses a different
+        // pagination param than `st` — the worst case is that
+        // `st=N` is ignored, page N matches page 1, added === 0,
+        // and we stop cleanly with whatever page 1 gave us.
+        if (added === 0 || links.length < pageSize) break;
+    }
+
+    return allIds;
+}
+    var _openLikesModalPending = false;
+
+// Public entry point for the likes modal. Replaces the observer ->
+// legacy-overlay -> scrape chain with a direct call from posts.js's
+// click handler.
+async function openLikesModal(pid, triggerEl) {
+    if (!pid) return;
+    if (currentModal || _openLikesModalPending) return;
+
+    _openLikesModalPending = true;
+    var userIds;
+    try {
+        userIds = await fetchLikersFromOverlay(pid);
+    } finally {
+        _openLikesModalPending = false;
+    }
+
+    if (!userIds || userIds.length === 0) return;
+    showModernModal(userIds, null, triggerEl || document.activeElement);
+}
 
     // ========== REPORTING API (ffp.) ==========
     // Same endpoint script 51 (the "Reporting System" forum add-on) posts to.
@@ -1453,8 +1546,9 @@ var ModalsModule = (function() {
     }
 
     return {
-        initialize: initialize,
-        name: 'modals',
-        dependencies: ['forumObserver']
-    };
+    initialize: initialize,
+    openLikesModal: openLikesModal,
+    name: 'modals',
+    dependencies: ['forumObserver']
+};
 })();
