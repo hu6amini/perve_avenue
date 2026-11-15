@@ -1,7 +1,12 @@
-/* Optimised Boot Loader – v8 */
+/* Optimised Boot Loader – v9 */
 "use strict";
 (function () {
-  let logBuffer = "[Bypass Active]:";
+  // Debug logging is opt-in. Set localStorage["avn-debug"] = "1" to enable.
+  const DEBUG = (() => {
+    try { return localStorage.getItem("avn-debug") === "1"; } catch (e) { return false; }
+  })();
+
+  const logEntries = [];
 
   // =========================================================================
   // DYNAMIC SCRIPT PRELOADS (Bypasses ForumCommunity attribute mangling)
@@ -20,7 +25,7 @@
       link.rel = 'preload';
       link.as = 'script'; // Safe from the platform's HTML parser
       link.href = url;
-      link.crossOrigin = 'anonymous'; // Match the loaders to avoid double-fetch
+      link.crossOrigin = 'anonymous'; // Match loadScript() to avoid a double-fetch
       document.head.appendChild(link);
     });
   })();
@@ -96,6 +101,7 @@
   const isSafeAsset = (fileName) => config.safeList.some((item) => fileName.includes(item));
   const getFileName = (url) => url.split("/").pop().split("?")[0];
   const shouldSkipRelease = (src) => config.skipRelease.some((item) => src.includes(item));
+  const record = (line) => { if (DEBUG) logEntries.push(line); };
 
   // ---------------------------------------------------------------
   // <script> / <link> processing — unchanged
@@ -117,7 +123,7 @@
         el.type = "text/plain";
         el.dataset.original = src;
         el.removeAttribute("src");
-        logBuffer += "\n- Forced Trap (Loader): " + fileName;
+        record("- Forced Trap (Loader): " + fileName);
         return;
       }
 
@@ -127,7 +133,7 @@
         el.type = "text/plain";
         el.dataset.original = src;
         el.removeAttribute("src");
-        logBuffer += "\n- Forced Trap (reCAPTCHA): " + fileName;
+        record("- Forced Trap (reCAPTCHA): " + fileName);
         return;
       }
 
@@ -136,7 +142,7 @@
         el.type = "text/plain";
         el.dataset.original = src;
         el.removeAttribute("src");
-        logBuffer += "\n- Trapped JS: " + fileName;
+        record("- Trapped JS: " + fileName);
         return;
       }
 
@@ -152,7 +158,7 @@
         try {
           if (el.sheet && el.sheet.cssRules) activate.call(el);
         } catch (e) { /* CORS – onload will handle it */ }
-        logBuffer += "\n- Downgraded CSS: " + fileName;
+        record("- Downgraded CSS: " + fileName);
       }
     }
   };
@@ -165,8 +171,11 @@
     if (!text) return false;
 
     // Emoji-picker CSS is multi-part — accumulate, inject as one block.
+    // FIX: check emojiCSSLoaded (the flag actually set on injection) instead
+    // of state.injected[emoji] (never set), which previously allowed late
+    // emoji styles to be captured and removed but never re-injected.
     if ((styleEl.id === 'emoji-picker-css' || text.includes(".emoji-picker")) &&
-        !state.injected[config.capturedStyleKeys.emoji]) {
+        !state.emojiCSSLoaded) {
       if (!state.emojiCSSParts) state.emojiCSSParts = [];
       state.emojiCSSParts.push(text);
       styleEl.remove();
@@ -204,7 +213,7 @@
     if (styleId) style.id = styleId;
     style.textContent = state.capturedCSS[key];
     document.head.appendChild(style);
-    logBuffer += "\n- Injected CSS: " + key;
+    record("- Injected CSS: " + key);
   };
 
   const injectEmojiCSS = () => {
@@ -333,7 +342,14 @@
   }, { passive: true });
 
   // ---------------------------------------------------------------
-  // Turnstile / reCAPTCHA — unchanged
+  // Turnstile / reCAPTCHA — lazy-load on first form interaction
+  //
+  // FIX: the previous code used `{ once: true }` on the listener, which
+  // removed it after the *first* focusin event — even if that event
+  // wasn't inside a form. A user who clicked a search box or toolbar
+  // button before touching a form would never load the captcha. The
+  // listener is now kept attached until a form element is actually
+  // focused, then removed manually.
   // ---------------------------------------------------------------
   function loadTurnstile() {
     if (state.turnstileLoaded) return;
@@ -344,10 +360,6 @@
     document.head.appendChild(script);
   }
 
-  document.addEventListener("focusin", (e) => {
-    if (e.target.closest("form")) loadTurnstile();
-  }, { once: true, passive: true });
-
   function loadRecaptcha() {
     if (state.recaptchaLoaded || !state.recaptchaSrc) return;
     state.recaptchaLoaded = true;
@@ -357,15 +369,22 @@
     document.head.appendChild(script);
   }
 
-  document.addEventListener("focusin", (e) => {
-    if (e.target.closest("form")) loadRecaptcha();
-  }, { once: true, passive: true });
+  const onFirstFormFocus = (e) => {
+    if (!e.target || !e.target.closest) return;
+    if (!e.target.closest("form")) return;
+    loadTurnstile();
+    loadRecaptcha();
+    document.removeEventListener("focusin", onFirstFormFocus, true);
+  };
+  document.addEventListener("focusin", onFirstFormFocus, true);
 
   // ---------------------------------------------------------------
   // Emoji picker CSS — lazy-load on editor pages
   // ---------------------------------------------------------------
   document.addEventListener("click", function (e) {
-    const btn = e.target.closest(".ve-btn-emoji") || e.target.closest("#emoticons");
+    const t = e.target;
+    if (!t || !t.closest) return;
+    const btn = t.closest(".ve-btn-emoji") || t.closest("#emoticons");
     if (!btn) return;
     if (document.body && config.emojiEditorPages.includes(document.body.id)) {
       injectEmojiCSS();
@@ -373,17 +392,29 @@
   }, { passive: true });
 
   // ---------------------------------------------------------------
-  // Release trapped assets at idle — unchanged
+  // Release trapped assets at idle
+  //
+  // Note on `defer`/`async`: dynamically inserted scripts (created via
+  // document.createElement) are *always* executed as soon as they are
+  // available, regardless of the defer attribute. Setting `defer` here
+  // would be a no-op — that's why it has been removed. If ordered
+  // execution between released scripts is ever required, replace this
+  // forEach with a sequential await loader.
   // ---------------------------------------------------------------
   window.addEventListener("load", () => {
     const releaseAssets = () => {
-      console.log(logBuffer);
+      if (DEBUG) {
+        console.log("[Bypass Active]:\n" + logEntries.join("\n"));
+      }
 
       document.querySelectorAll('script[type="text/plain"]').forEach((oldScript) => {
         const src = oldScript.dataset.original;
         if (!src) return;
 
-        // Swap in minified variants where available
+        // Swap in minified variants where available.
+        // `type = "module"` is preserved for media-optimizer because the
+        // module graph gives us deterministic dependency ordering; the
+        // rest are classic async scripts.
         if (src.includes("media-optimizer.js") && !src.includes(".min.js")) {
           const minSrc = src.replace(/media-optimizer\.js$/, "media-optimizer.min.js");
           const newScript = document.createElement("script");
@@ -397,7 +428,6 @@
           const minSrc = src.replace(/event-bus\.js$/, "event-bus.min.js");
           const newScript = document.createElement("script");
           newScript.src = minSrc;
-          newScript.defer = false; // event-bus must run immediately
           oldScript.parentNode.replaceChild(newScript, oldScript);
           return;
         }
@@ -409,7 +439,6 @@
           setTimeout(() => {
             const newScript = document.createElement("script");
             newScript.src = src;
-            newScript.defer = true;
             oldScript.parentNode.replaceChild(newScript, oldScript);
           }, 50);
           return;
@@ -417,7 +446,6 @@
 
         const newScript = document.createElement("script");
         newScript.src = src;
-        newScript.defer = true;
         oldScript.parentNode.replaceChild(newScript, oldScript);
       });
 
@@ -429,7 +457,7 @@
         }
       });
 
-      console.log("[Bypass]: Legacy assets released during idle time.");
+      if (DEBUG) console.log("[Bypass]: Legacy assets released during idle time.");
     };
 
     if ("requestIdleCallback" in window) {
@@ -440,7 +468,7 @@
   });
 
   // ---------------------------------------------------------------
-  // Cleanup on page unload — unchanged
+  // Cleanup on page unload
   // ---------------------------------------------------------------
   window.addEventListener("beforeunload", () => {
     if (observer) observer.disconnect();
