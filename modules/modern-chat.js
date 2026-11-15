@@ -349,10 +349,10 @@ var ModernChat = (function () {
             '  <div class="mc-toolbar" hidden>',
             // Bold / Italic / Underline / Strikethrough are Solid-only in FA
             // (across every tier, including Pro). Code exists in Regular too.
-            '    <button type="button" data-cmd="bold" aria-label="Bold"><i class="fa-solid fa-bold" aria-hidden="true"></i></button>',
-            '    <button type="button" data-cmd="italic" aria-label="Italic"><i class="fa-solid fa-italic" aria-hidden="true"></i></button>',
-            '    <button type="button" data-cmd="underline" aria-label="Underline"><i class="fa-solid fa-underline" aria-hidden="true"></i></button>',
-            '    <button type="button" data-cmd="strike" aria-label="Strikethrough"><i class="fa-solid fa-strikethrough" aria-hidden="true"></i></button>',
+            '    <button type="button" data-cmd="bold" aria-label="Bold"><i class="fa-regular fa-bold" aria-hidden="true"></i></button>',
+            '    <button type="button" data-cmd="italic" aria-label="Italic"><i class="fa-regular fa-italic" aria-hidden="true"></i></button>',
+            '    <button type="button" data-cmd="underline" aria-label="Underline"><i class="fa-regular fa-underline" aria-hidden="true"></i></button>',
+            '    <button type="button" data-cmd="strike" aria-label="Strikethrough"><i class="fa-regular fa-strikethrough" aria-hidden="true"></i></button>',
             '    <button type="button" data-cmd="code" aria-label="Inline code"><i class="fa-regular fa-code" aria-hidden="true"></i></button>',
             '  </div>',
             '  <div class="mc-composer-row">',
