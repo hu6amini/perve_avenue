@@ -6882,6 +6882,10 @@ body.has-docked-editor {
     animation: mc-msg-in 0.18s ease-out;
 }
 
+.mc-message:hover {
+    background-color: rgba(255, 255, 255, 0.05);
+}
+
 .mc-message .hb-avatar {
     width: 34px !important;
     height: 34px !important;
