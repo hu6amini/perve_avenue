@@ -6893,7 +6893,6 @@ body.has-docked-editor {
     border-radius: 50% !important;
     object-fit: cover;
     flex-shrink: 0;
-    background: var(--surface-elevated, #F9FAFB);
     border: 2px solid transparent;
     transition: border-color 0.15s ease;
 }
