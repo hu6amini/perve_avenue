@@ -6886,16 +6886,13 @@ body.has-docked-editor {
     background-color: rgba(255, 255, 255, 0.05);
 }
 
+/* Base avatar ring */
 .mc-message .hb-avatar {
-    width: 34px !important;
-    height: 34px !important;
-    border-radius: 50% !important;
-    object-fit: cover;
-    flex-shrink: 0;
-    aspect-ratio: 1 / 1 !important;
+    border: 2px solid transparent;
     transition: border-color 0.15s ease;
 }
-/* Role-tinted ring — set from JS via data-role="<group class>" */
+
+/* Colored rings based on data-role */
 .mc-message .hb-avatar[data-role="admin"]        { border-color: #DC2626; }
 .mc-message .hb-avatar[data-role="founder"]      { border-color: #F59E0B; }
 .mc-message .hb-avatar[data-role="global-mod"]   { border-color: #7C3AED; }
@@ -7026,6 +7023,7 @@ body.has-docked-editor {
 }
 
 /* 30.6a — Role badge (pill next to nickname) ──────────────────── */
+/* The Badge next to the nickname */
 .mc-role-badge {
     display: inline-flex;
     align-items: center;
@@ -7040,6 +7038,7 @@ body.has-docked-editor {
     background: var(--text-tertiary, #9CA3AF);
     white-space: nowrap;
     flex-shrink: 0;
+    margin-left: 4px;
 }
 .mc-role-badge.group-founder    { background: #F59E0B; color: #422006; }
 .mc-role-badge.group-admin      { background: #DC2626; }
