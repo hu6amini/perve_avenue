@@ -3701,11 +3701,6 @@ document.addEventListener('keydown', function (e) {
     const pid = likeBtn.getAttribute('data-pid');
     const isCountClick = e.target.classList.contains('like-count-display');
 
-    // Count click → who-liked modal. Prefer the direct-fetch path
-    // (ModalsModule.openLikesModal), which skips the legacy overlay
-    // entirely. Falls back to handleLike(pid, true) — the legacy
-    // overlay proxy — if the module hasn't loaded or doesn't expose
-    // openLikesModal.
     if (isCountClick && window.ModalsModule && typeof window.ModalsModule.openLikesModal === 'function') {
         window.ModalsModule.openLikesModal(pid, likeBtn);
         return;
