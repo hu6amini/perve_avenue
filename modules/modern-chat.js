@@ -6,6 +6,9 @@
    - Send path: native value setter on hidden textarea + click
    - Per-message actions: quote / edit / delete (delegated)
    - Presence chip, unread badge, dark mode, mobile sheet
+   - Icons: Font Awesome (Regular where available, Solid for
+     bold / italic / underline / strikethrough — FA does not ship
+     Regular variants of those four glyphs)
    ============================================================ */
 'use strict';
 
@@ -38,12 +41,12 @@ var ModernChat = (function () {
         mounted: false,
         ready: false,
         open: false,
-        messages: [],              // canonical list (fiber order, oldest→newest)
-        dom: new Map(),            // msgId → { clone, srcNode, hash }
+        messages: [],
+        dom: new Map(),
         lastSeenAt: 0,
         unread: 0,
-        editor: null,              // TipTap instance
-        editorMode: null,          // 'tiptap' | 'fallback' | null
+        editor: null,
+        editorMode: null,
         tipTapDeps: null,
         mutationObserver: null,
         pollTimer: null,
@@ -129,7 +132,6 @@ var ModernChat = (function () {
         var container = root.querySelector(CONFIG.MSG_CONTAINER);
         if (!container) return [];
 
-        // Fast path: bulk fiber walk for the messages array
         var firstMsg = container.querySelector(CONFIG.MSG_SELECTOR);
         if (firstMsg) {
             var key = fiberKeyOf(firstMsg);
@@ -147,7 +149,6 @@ var ModernChat = (function () {
             }
         }
 
-        // Fallback: per-node read
         var nodes = container.querySelectorAll(CONFIG.MSG_SELECTOR);
         var out = [];
         for (var i = 0; i < nodes.length; i++) {
@@ -231,15 +232,10 @@ var ModernChat = (function () {
         return html;
     }
 
-        // ─── TIME HELPERS ─────────────────────────────────────────────────────
-    // Matches posts.js: Intl.RelativeTimeFormat, negative-diff convention,
-    // locale-aware ("3 days ago" / "3 giorni fa"). The chat is short-lived
-    // enough that this stays readable even when a burst of messages arrives
-    // in the same minute — they all read "now" together, which is the
-    // intended signal for chat.
+    // ─── TIME HELPERS ─────────────────────────────────────────────────────
     function relativeTime(date) {
         if (!(date instanceof Date) || isNaN(date.getTime())) return '';
-        var diff = date.getTime() - Date.now();   // negative = past
+        var diff = date.getTime() - Date.now();
         var absDiff = Math.abs(diff) / 1000;
         var locale = document.documentElement.lang || 'en';
         var rtf;
@@ -255,9 +251,6 @@ var ModernChat = (function () {
         if (absDiff < 31536000) return rtf.format(Math.round(diff / 2592000000), 'month');
         return rtf.format(Math.round(diff / 31536000000), 'year');
     }
-
-    // Full absolute date for the tooltip — weekday, month name, time.
-    // posts.js uses the same shape for post-time tooltips.
     function formatFullDate(date) {
         if (!(date instanceof Date) || isNaN(date.getTime())) return '';
         return date.toLocaleString(undefined, {
@@ -265,9 +258,6 @@ var ModernChat = (function () {
             day: 'numeric', hour: '2-digit', minute: '2-digit'
         });
     }
-
-    // Used as the native tooltip text when tippy is unavailable.
-    // Kept shorter than formatFullDate because native tooltips truncate.
     function formatCompactAbsolute(date) {
         if (!(date instanceof Date) || isNaN(date.getTime())) return '';
         return date.toLocaleString(undefined, {
@@ -275,11 +265,6 @@ var ModernChat = (function () {
             hour: '2-digit', minute: '2-digit'
         });
     }
-
-    // Tippy's default `appendTo: document.body` means poppers live at the
-    // body level, detached from the message node. Explicitly destroy them
-    // when a clone is replaced or removed so the poppers are cleaned up
-    // (they would otherwise linger for HISTORY_LIMIT messages).
     function destroyMessageTippy(clone) {
         if (!clone) return;
         var nodes = clone.querySelectorAll('*');
@@ -321,7 +306,7 @@ var ModernChat = (function () {
     }
 
     // ─── DOM CONSTRUCTION ─────────────────────────────────────────────────
-    var els = {}; // cached panel elements
+    var els = {};
 
     function buildFab() {
         var fab = document.createElement('button');
@@ -329,10 +314,7 @@ var ModernChat = (function () {
         fab.className = 'mc-fab';
         fab.setAttribute('aria-label', 'Open chat');
         fab.innerHTML =
-            '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" ' +
-                'stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' +
-                '<path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>' +
-            '</svg>' +
+            '<i class="fa-regular fa-comment-dots" aria-hidden="true"></i>' +
             '<span class="mc-fab-badge" hidden></span>';
         fab.addEventListener('click', toggle);
         return fab;
@@ -354,10 +336,10 @@ var ModernChat = (function () {
             '  </div>',
             '  <div class="mc-header-right">',
             '    <button type="button" class="mc-header-btn mc-btn-settings" aria-label="Settings">',
-            '      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>',
+            '      <i class="fa-regular fa-gear" aria-hidden="true"></i>',
             '    </button>',
             '    <button type="button" class="mc-header-btn mc-btn-close" aria-label="Close">',
-            '      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>',
+            '      <i class="fa-regular fa-xmark" aria-hidden="true"></i>',
             '    </button>',
             '  </div>',
             '</div>',
@@ -365,24 +347,26 @@ var ModernChat = (function () {
             '<div class="mc-presence-list" hidden></div>',
             '<div class="mc-composer">',
             '  <div class="mc-toolbar" hidden>',
-            '    <button type="button" data-cmd="bold" aria-label="Bold"><strong>B</strong></button>',
-            '    <button type="button" data-cmd="italic" aria-label="Italic"><em>I</em></button>',
-            '    <button type="button" data-cmd="underline" aria-label="Underline"><u>U</u></button>',
-            '    <button type="button" data-cmd="strike" aria-label="Strikethrough"><s>S</s></button>',
-            '    <button type="button" data-cmd="code" aria-label="Inline code">&lt;/&gt;</button>',
+            // Bold / Italic / Underline / Strikethrough are Solid-only in FA
+            // (across every tier, including Pro). Code exists in Regular too.
+            '    <button type="button" data-cmd="bold" aria-label="Bold"><i class="fa-solid fa-bold" aria-hidden="true"></i></button>',
+            '    <button type="button" data-cmd="italic" aria-label="Italic"><i class="fa-solid fa-italic" aria-hidden="true"></i></button>',
+            '    <button type="button" data-cmd="underline" aria-label="Underline"><i class="fa-solid fa-underline" aria-hidden="true"></i></button>',
+            '    <button type="button" data-cmd="strike" aria-label="Strikethrough"><i class="fa-solid fa-strikethrough" aria-hidden="true"></i></button>',
+            '    <button type="button" data-cmd="code" aria-label="Inline code"><i class="fa-regular fa-code" aria-hidden="true"></i></button>',
             '  </div>',
             '  <div class="mc-composer-row">',
             '    <button type="button" class="mc-composer-btn mc-btn-toggle-toolbar" aria-label="Formatting">',
-            '      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17 6.1H3"/><path d="M21 12.1H3"/><path d="M15.1 18H3"/></svg>',
+            '      <i class="fa-regular fa-align-left" aria-hidden="true"></i>',
             '    </button>',
             '    <button type="button" class="mc-composer-btn mc-btn-emoji" aria-label="Emoji">',
-            '      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="M8 14s1.5 2 4 2 4-2 4-2"/><line x1="9" y1="9" x2="9.01" y2="9"/><line x1="15" y1="9" x2="15.01" y2="9"/></svg>',
+            '      <i class="fa-regular fa-face-smile" aria-hidden="true"></i>',
             '    </button>',
             '    <div class="mc-editor-wrap">',
             '      <div class="mc-editor" contenteditable="true" role="textbox" aria-multiline="true" data-placeholder="Write a message..."></div>',
             '    </div>',
             '    <button type="button" class="mc-composer-btn mc-btn-send" aria-label="Send" disabled>',
-            '      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>',
+            '      <i class="fa-regular fa-paper-plane-top" aria-hidden="true"></i>',
             '    </button>',
             '  </div>',
             '  <div class="mc-emoji-picker" hidden></div>',
@@ -404,7 +388,6 @@ var ModernChat = (function () {
         els.closeBtn = panel.querySelector('.mc-btn-close');
         els.settingsBtn = panel.querySelector('.mc-btn-settings');
 
-        // Wiring
         els.closeBtn.addEventListener('click', close);
         els.settingsBtn.addEventListener('click', showSettings);
         els.presenceChip.addEventListener('click', togglePresenceList);
@@ -422,7 +405,6 @@ var ModernChat = (function () {
             applyFormat(btn.dataset.cmd);
         });
 
-        // Close emoji picker / toolbar on outside click
         document.addEventListener('click', function (e) {
             if (!state.open) return;
             if (els.emojiPicker.hidden) return;
@@ -469,31 +451,27 @@ var ModernChat = (function () {
         clone.setAttribute('data-mc-id', msg.id);
         clone.setAttribute('data-mc-uid', String(msg.user && msg.user.id || clone.getAttribute('data-uid') || ''));
 
-        // Replace HelloBox's own action buttons with a modern set.
         var nativeActions = clone.querySelector('.hb-actions');
         if (nativeActions) nativeActions.remove();
 
         var actions = document.createElement('div');
         actions.className = 'mc-message-actions';
         var acts = [];
-        if (msg.isQuotable) acts.push({ key: 'quote', label: 'Quote', icon: '↩' });
-        if (msg.isEditable) acts.push({ key: 'edit', label: 'Edit', icon: '✎' });
-        if (msg.isDeletable) acts.push({ key: 'delete', label: 'Delete', icon: '🗑' });
+        if (msg.isQuotable) acts.push({ key: 'quote',  label: 'Quote',  icon: 'fa-regular fa-quote-left' });
+        if (msg.isEditable)  acts.push({ key: 'edit',   label: 'Edit',   icon: 'fa-regular fa-pen-to-square' });
+        if (msg.isDeletable) acts.push({ key: 'delete', label: 'Delete', icon: 'fa-regular fa-trash-can' });
         acts.forEach(function (a) {
             var b = document.createElement('button');
             b.type = 'button';
             b.className = 'mc-message-action';
             b.setAttribute('data-mc-act', a.key);
             b.setAttribute('aria-label', a.label);
-            b.textContent = a.icon;
+            b.innerHTML = '<i class="' + a.icon + '" aria-hidden="true"></i>';
             actions.appendChild(b);
         });
         if (acts.length) clone.appendChild(actions);
 
-                // Modern timestamp: <time datetime="ISO"> + rich tooltip.
-        // Mirrors posts.js — same element semantics, same relative text
-        // engine, same tippy shape — so a user's expectations carry over
-        // between the post list and the chat.
+        // Modern timestamp: <time datetime="ISO"> + rich tooltip.
         var timeEl = clone.querySelector('.hb-time');
         if (timeEl) {
             var date = msg.date instanceof Date ? msg.date : new Date(msg.date);
@@ -531,15 +509,12 @@ var ModernChat = (function () {
                     });
                 } catch (e) { /* fall through to native title */ }
             } else {
-                // Guest or tippy not loaded — graceful degradation with the
-                // browser-native tooltip. Compact to avoid truncation.
                 timeNode.setAttribute('title', formatCompactAbsolute(date));
             }
 
             timeEl.parentNode.replaceChild(timeNode, timeEl);
         }
 
-        // Wire quote refs inside the content.
         clone.querySelectorAll('.hb-quote-ref').forEach(function (ref) {
             ref.addEventListener('click', function (ev) {
                 ev.preventDefault();
@@ -548,7 +523,6 @@ var ModernChat = (function () {
             });
         });
 
-        // Wire spoilers inside the content.
         clone.querySelectorAll('.hb-spoiler').forEach(function (sp) {
             sp.addEventListener('click', function () {
                 sp.classList.toggle('mc-revealed');
@@ -558,7 +532,6 @@ var ModernChat = (function () {
         return clone;
     }
     function syncMessages(canonical) {
-        // Keep only the newest HISTORY_LIMIT
         if (canonical.length > CONFIG.HISTORY_LIMIT) {
             canonical = canonical.slice(-CONFIG.HISTORY_LIMIT);
         }
@@ -568,7 +541,6 @@ var ModernChat = (function () {
         var lastInserted = null;
         var wasAtBottom = isNearBottom();
 
-                // Remove stale
         state.dom.forEach(function (entry, id) {
             if (!canonical.some(function (m) { return m.id === id; })) {
                 destroyMessageTippy(entry.clone);
@@ -584,7 +556,7 @@ var ModernChat = (function () {
             var hash = msgHash(srcNode);
             var existing = state.dom.get(msg.id);
             if (existing) {
-                                if (existing.hash !== hash) {
+                if (existing.hash !== hash) {
                     var fresh = renderClone(srcNode, msg);
                     if (fresh) {
                         destroyMessageTippy(existing.clone);
@@ -607,9 +579,6 @@ var ModernChat = (function () {
 
         applyGrouping(canonical);
 
-        // Emit BEFORE updateUnread so we diff against the OLD lastSeenAt.
-        // Skip the very first sync (lastSeenAt === 0) so a brand-new user
-        // doesn't get the whole backlog emitted as "new".
         if (typeof ForumEventBus !== 'undefined' && state.lastSeenAt > 0) {
             var prevLastSeen = state.lastSeenAt;
             var newlyArrived = canonical.filter(function (m) {
@@ -669,7 +638,6 @@ var ModernChat = (function () {
         if (!latest) return;
         var latestTs = latest.date instanceof Date ? latest.date.getTime() : new Date(latest.date).getTime();
 
-        // If panel is open and at bottom, mark as seen
         if (state.open && wasAtBottom) {
             state.lastSeenAt = latestTs;
             state.unread = 0;
@@ -680,7 +648,6 @@ var ModernChat = (function () {
                 return ts > state.lastSeenAt;
             }).length;
             if (newCount > state.unread && state.mounted) {
-                // New message(s) arrived
                 maybeNotify(latest);
             }
             state.unread = newCount;
@@ -804,7 +771,6 @@ var ModernChat = (function () {
             debug('TipTap composer ready');
         } catch (e) {
             warn('TipTap failed, falling back to contenteditable:', e);
-            // Reset the fallback editor
             wrap.innerHTML = '';
             wrap.appendChild(els.editor);
             els.editor.contentEditable = 'true';
@@ -856,7 +822,7 @@ var ModernChat = (function () {
     function onComposerKeyDown(e) {
         if (e.key !== 'Enter') return;
         var prefs = getPrefs();
-        if (e.shiftKey) return; // allow newline
+        if (e.shiftKey) return;
         if (prefs.enterToSend) {
             e.preventDefault();
             submitComposer();
@@ -886,7 +852,6 @@ var ModernChat = (function () {
         if (!nativeSetter || !nativeSetter.set) return false;
         nativeSetter.set.call(ta, text);
 
-        // React listens to `input`; also fire `change` for good measure.
         ta.dispatchEvent(new Event('input', { bubbles: true }));
         ta.dispatchEvent(new Event('change', { bubbles: true }));
         return true;
@@ -901,7 +866,6 @@ var ModernChat = (function () {
             btn.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
             return true;
         }
-        // Fallback: press Enter on the textarea
         var ta = root.querySelector(CONFIG.TEXTAREA_SELECTOR);
         if (ta) {
             ta.dispatchEvent(new KeyboardEvent('keydown', {
@@ -930,12 +894,12 @@ var ModernChat = (function () {
                 toast('Send failed', 'error');
                 return;
             }
-                    clearComposer();
-        scheduleScrollToBottom();
-        if (typeof ForumEventBus !== 'undefined') {
-            ForumEventBus.trigger('chat:sent', { bbcode: bb });
-        }
-        debug('sent:', bb);
+            clearComposer();
+            scheduleScrollToBottom();
+            if (typeof ForumEventBus !== 'undefined') {
+                ForumEventBus.trigger('chat:sent', { bbcode: bb });
+            }
+            debug('sent:', bb);
         } catch (e) {
             warn('Send error:', e);
             toast('Send failed', 'error');
@@ -971,13 +935,12 @@ var ModernChat = (function () {
         if (!msg) return;
         var nick = (msg.user && (msg.user.nickname || msg.user.name)) || 'user';
         var date = msg.date instanceof Date ? msg.date : new Date(msg.date);
-        var quoteLine = '[quote=' + nick + ', ' + absoluteTime(date) + ']' + msg.content + '[/quote]\n';
+        var quoteLine = '[quote=' + nick + ', ' + formatCompactAbsolute(date) + ']' + msg.content + '[/quote]\n';
         await initComposer();
         insertIntoComposer(quoteLine);
         focusComposer();
     }
     async function doEdit(msgId) {
-        // Best-effort: delegate to native edit button (opens HelloBox's inline editor)
         triggerHiddenAction(msgId, 'edit');
     }
     function doDelete(msgId) {
@@ -1050,7 +1013,6 @@ var ModernChat = (function () {
             initComposer();
             focusComposer();
         });
-        // Mark all as seen
         var latest = state.messages[state.messages.length - 1];
         if (latest) {
             var ts = latest.date instanceof Date ? latest.date.getTime() : new Date(latest.date).getTime();
@@ -1059,7 +1021,7 @@ var ModernChat = (function () {
             saveLastSeen(ts);
             renderUnreadBadge();
         }
-                   if (typeof ForumEventBus !== 'undefined') {
+        if (typeof ForumEventBus !== 'undefined') {
             ForumEventBus.trigger('chat:opened', { unreadCleared: state.unread === 0 });
         }
     }
@@ -1071,7 +1033,7 @@ var ModernChat = (function () {
         els.panel.setAttribute('aria-hidden', 'true');
         els.fab.classList.remove('mc-fab-hidden');
         els.emojiPicker.hidden = true;
-                   if (typeof ForumEventBus !== 'undefined') {
+        if (typeof ForumEventBus !== 'undefined') {
             ForumEventBus.trigger('chat:closed', {});
         }
     }
@@ -1110,7 +1072,6 @@ var ModernChat = (function () {
         if (!getHelloBoxRoot()) return false;
         if (document.querySelector('.mc-fab')) { state.mounted = true; return true; }
 
-        // Hide the native HelloBox but keep it mounted (WS + React state must live)
         injectNativeHideStyle();
 
         els.fab = buildFab();
@@ -1119,17 +1080,13 @@ var ModernChat = (function () {
         els.panel = buildPanel();
         document.body.appendChild(els.panel);
 
-        // Delegated action clicks inside the messages list
         els.messages.addEventListener('click', onMessageActionsClick);
-
-        // Stop clicks inside the panel from bubbling weirdly
         els.panel.addEventListener('click', function (e) { e.stopPropagation(); });
 
         state.lastSeenAt = loadLastSeen();
         state.mounted = true;
         startPolling();
 
-        // Post-mount sync
         setTimeout(syncNow, 200);
         debug('mounted');
         return true;
@@ -1192,10 +1149,6 @@ var ModernChat = (function () {
         }
     };
 
-    // Attach module-compatible lifecycle methods INSIDE the IIFE so
-    // they can reach the private state, els, boot and stopPolling.
-    // The enhancer calls API.initialize(); the auto-boot below only
-    // runs when no enhancer is present.
     API.initialize = function () {
         if (state.mounted) return Promise.resolve(true);
         boot();
@@ -1212,7 +1165,7 @@ var ModernChat = (function () {
         if (els.panel && els.panel.parentNode) els.panel.parentNode.removeChild(els.panel);
         var hideStyle = document.getElementById('mc-native-hide');
         if (hideStyle) hideStyle.remove();
-                state.dom.forEach(function (entry) {
+        state.dom.forEach(function (entry) {
             destroyMessageTippy(entry.clone);
         });
         state.mounted = false;
@@ -1224,8 +1177,6 @@ var ModernChat = (function () {
     return API;
 })();
 
-// Auto-boot only when the enhancer is NOT driving us.
-// The enhancer sets window.ForumEnhancer before we run.
 if (!window.ForumEnhancer) {
     if (document.readyState === 'complete' || document.readyState === 'interactive') {
         setTimeout(function () { ModernChat.boot(); }, 0);
