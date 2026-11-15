@@ -2657,22 +2657,43 @@ body.modal-open {
 }
 .report-textarea {
   width: 100%;
+  min-height: 120px;
+  max-height: clamp(200px, 40vh, 400px);
+  padding: var(--pad-4) var(--pad-5);
   background: var(--bg-color);
   border: 1px solid var(--border-color);
   border-radius: var(--radius);
-  padding: 0.85rem;
   font-family: var(--font-primary);
-  font-size: 0.9rem;
+  font-size: var(--text-base);
+  line-height: 1.6;
   color: var(--text-primary);
+  caret-color: var(--primary-light);
   resize: none;
-  transition: all 0.2s;
-  line-height: 1.5;
-  overflow-y: hidden;
+  overflow-y: auto;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease, background 0.2s ease;
 }
+
+.report-textarea::placeholder {
+  color: var(--text-tertiary);
+  opacity: 0.75;
+}
+
 .report-textarea:focus {
   outline: none;
   border-color: var(--primary-color);
   box-shadow: 0 0 0 3px var(--focus-ring);
+  background: var(--surface-color);
+}
+
+/* Modern CSS auto-grow — the "2026" way. The textarea grows to fit
+   its content, capped by max-height, with scroll only past the cap.
+   autoGrow() in report.js is a no-op when this is supported, so
+   there's no double-resize or height fighting. */
+@supports (field-sizing: content) {
+  .report-textarea {
+    field-sizing: content;
+    height: auto !important;
+  }
 }
 .counter-value {
   font-size: 0.7rem;
