@@ -460,8 +460,7 @@ var ModernChat = (function () {
             '  </div>',
             '</div>',
             '<div class="mc-messages" role="log" aria-live="polite"></div>',
-            </button>',
-                            '<button type="button" class="mc-jump-btn" hidden>',
+            '<button type="button" class="mc-jump-btn" hidden>',
             '  <i class="fa-regular fa-arrow-down" aria-hidden="true"></i>',
             '  <span class="mc-jump-text">New messages</span>',
             '</button>',
@@ -510,7 +509,6 @@ var ModernChat = (function () {
         els.settingsBtn = panel.querySelector('.mc-btn-settings');
         els.jumpBtn = panel.querySelector('.mc-jump-btn');
         els.closeBtn.addEventListener('click', close);
-        els.jumpBtn = panel.querySelector('.mc-jump-btn');
         els.jumpText = panel.querySelector('.mc-jump-text');
                 // Track when the user manually scrolls up
         els.messages.addEventListener('scroll', function() {
@@ -784,6 +782,7 @@ var ModernChat = (function () {
         if (els.jumpBtn) {
             els.jumpBtn.hidden = !state.userScrolledUp || state.unread === 0;
         }
+    }
 
     function isNearBottom() {
         if (!els.messages) return true;
@@ -1193,7 +1192,8 @@ var ModernChat = (function () {
         els.panel.setAttribute('aria-hidden', 'false');
         els.fab.classList.add('mc-fab-hidden');
         requestAnimationFrame(function () {
-            scheduleScrollToBottom();
+            state.userScrolledUp = false;
+            scheduleScrollToBottom(true);
             initComposer();
             focusComposer();
         });
