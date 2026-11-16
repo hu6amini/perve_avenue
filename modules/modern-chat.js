@@ -572,9 +572,14 @@ var ModernChat = (function () {
     }
 
     // ─── MESSAGE RENDERING ────────────────────────────────────────────────
-    function msgHash(srcNode) {
-        return srcNode ? srcNode.textContent : '';
+        function msgHash(msg) {
+        if (!msg) return '';
+        // Only change hash if the actual message content or state changes.
+        // Do NOT include textContent, or the relative time updating will 
+        // destroy the node and reload its images every minute.
+        return msg.id + '|' + (msg.content || '') + '|' + (msg.date ? new Date(msg.date).getTime() : '') + '|' + (msg.isEditable ? '1' : '0');
     }
+   
     function renderClone(srcNode, msg) {
         if (!srcNode || !msg) return null;
         var clone = srcNode.cloneNode(true);
@@ -696,7 +701,7 @@ var ModernChat = (function () {
             seen.add(msg.id);
             var srcNode = findSourceNodeById(msg.id);
             if (!srcNode) return;
-            var hash = msgHash(srcNode);
+            var hash = msgHash(msg);
             var existing = state.dom.get(msg.id);
             if (existing) {
                 if (existing.hash !== hash) {
@@ -734,12 +739,7 @@ var ModernChat = (function () {
             }
         }
 
-        updateUnread(wasAtBottom);
-
-               // Show/hide the jump button
-        if (els.jumpBtn) {
-            els.jumpBtn.hidden = wasAtBottom || state.unread === 0 || !state.open;
-        }
+                updateUnread(wasAtBottom);
         
         // If we were at the bottom, stay at the bottom.
         // If we were scrolled up reading, lock us exactly where we were.
@@ -747,6 +747,10 @@ var ModernChat = (function () {
             scheduleScrollToBottom();
         } else if (els.messages) {
             els.messages.scrollTop = prevScrollTop;
+        }
+        
+        if (els.jumpBtn) {
+            els.jumpBtn.hidden = wasAtBottom || state.unread === 0 || !state.open;
         }
     }
 
