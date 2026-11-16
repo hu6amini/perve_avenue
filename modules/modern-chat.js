@@ -513,11 +513,26 @@ var ModernChat = (function () {
         els.jumpBtn = panel.querySelector('.mc-jump-btn');
         els.jumpText = panel.querySelector('.mc-jump-text');
                 // Track when the user manually scrolls up
-                els.messages.addEventListener('scroll', function() {
-            state.userScrolledUp = !isNearBottom();
-            // If we scrolled to the bottom, hide the button
-            if (!state.userScrolledUp && els.jumpBtn) {
-                els.jumpBtn.hidden = true;
+        els.messages.addEventListener('scroll', function() {
+            var nearBottom = isNearBottom();
+            state.userScrolledUp = !nearBottom;
+
+            // If we just scrolled to the bottom manually...
+            if (nearBottom) {
+                // Hide the button immediately
+                if (els.jumpBtn) els.jumpBtn.hidden = true;
+
+                // Clear the unread state immediately
+                if (state.unread > 0) {
+                    var latest = state.messages[state.messages.length - 1];
+                    if (latest) {
+                        var ts = latest.date instanceof Date ? latest.date.getTime() : new Date(latest.date).getTime();
+                        state.lastSeenAt = ts;
+                        state.unread = 0;
+                        saveLastSeen(ts);
+                        renderUnreadBadge();
+                    }
+                }
             }
         });
         els.settingsBtn.addEventListener('click', showSettings);
