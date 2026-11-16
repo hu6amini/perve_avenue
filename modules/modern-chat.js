@@ -476,7 +476,7 @@ var ModernChat = (function () {
             '  </div>',
             '  <div class="mc-composer-row">',
             '    <button type="button" class="mc-composer-btn mc-btn-toggle-toolbar" aria-label="Formatting">',
-            '      <i class="fa-regular fa-align-left" aria-hidden="true"></i>',
+            '      <i class="fa-regular fa-ellipsis" aria-hidden="true"></i>',
             '    </button>',
             '    <button type="button" class="mc-composer-btn mc-btn-emoji" aria-label="Emoji">',
             '      <i class="fa-regular fa-face-smile" aria-hidden="true"></i>',
