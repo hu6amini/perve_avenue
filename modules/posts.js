@@ -137,6 +137,7 @@ const ForumPostsModule = (function () {
     const userDataCache = new Map();
     let currentAbortController = null;
     let _relativeTimeTicker = null; 
+    let _forceBustOnNextFetch = false;
 
     // ============================================================================
     // BASIC HTML ESCAPE
@@ -5036,9 +5037,13 @@ function buildPostDataFromApi({ message, topicData, apiUser, viewerContext, post
 async function fetchTopicPage(topicId, st) {
     const params = new URLSearchParams({ t: String(topicId) });
     if (st && st > 0) params.set('st', String(st));
+    if (_forceBustOnNextFetch) {
+        params.set('_t', String(Date.now()));
+        _forceBustOnNextFetch = false;
+    }
     const url = '/api.php?' + params.toString();
     try {
-                const r = await fetch(url, {
+        const r = await fetch(url, {
             credentials: 'same-origin',
             cache: 'no-store'
         });
@@ -5648,6 +5653,9 @@ const postStartOffset = (() => {
                 hideOnClick: false
             });
         },
+            forceCacheBust: function () {
+    _forceBustOnNextFetch = true;
+},
                 reset: function () {
             convertedPostIds.clear();
             postReactions.clear();
