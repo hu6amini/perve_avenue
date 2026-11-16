@@ -7413,7 +7413,7 @@ body.has-docked-editor {
 }
 .mc-jump-btn {
     position: absolute;
-    bottom: 80px; /* Above the composer */
+    bottom: 80px;
     left: 50%;
     transform: translateX(-50%);
     background: var(--primary-color, #10B981);
@@ -7433,6 +7433,12 @@ body.has-docked-editor {
     animation: mc-fade-in 0.2s ease;
     transition: background 0.15s ease, transform 0.15s ease;
 }
+
+/* THIS IS THE CRITICAL FIX */
+.mc-jump-btn[hidden] {
+    display: none !important;
+}
+
 .mc-jump-btn:hover {
     background: var(--primary-color-hover, #059669);
     transform: translateX(-50%) translateY(-2px);
