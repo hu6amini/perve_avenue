@@ -788,13 +788,20 @@ var ModernChat = (function () {
         if (!els.messages) return true;
         return els.messages.scrollHeight - els.messages.scrollTop - els.messages.clientHeight < 80;
     }
-        function scheduleScrollToBottom(force) {
+   
+    function scheduleScrollToBottom(force) {
         requestAnimationFrame(function () {
             if (!els.messages) return;
-            // Only scroll if we are forced to (e.g., sending a message), 
-            // OR if the user hasn't manually scrolled up.
             if (force || !state.userScrolledUp) {
                 els.messages.scrollTop = els.messages.scrollHeight;
+                
+                // Secondary scroll to catch late-loading images (avatars)
+                setTimeout(function() {
+                    if (!els.messages) return;
+                    if (force || !state.userScrolledUp) {
+                        els.messages.scrollTop = els.messages.scrollHeight;
+                    }
+                }, 100);
             }
         });
     }
@@ -1077,7 +1084,7 @@ var ModernChat = (function () {
                 return;
             }
             clearComposer();
-            state.userScrolledUp = false;
+            state.userScrolledUp = false; // <--- Ensure this is here
             scheduleScrollToBottom(true);
             if (typeof ForumEventBus !== 'undefined') {
                 ForumEventBus.trigger('chat:sent', { bbcode: bb });
