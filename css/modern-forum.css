@@ -6861,6 +6861,7 @@ body.has-docked-editor {
     scrollbar-width: thin;
     scrollbar-color: var(--border-color-strong, #D1D5DB) transparent;
     overscroll-behavior: contain;
+    overflow-anchor: none;
 }
 .mc-messages::-webkit-scrollbar { width: 8px; }
 .mc-messages::-webkit-scrollbar-thumb {
