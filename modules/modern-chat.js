@@ -812,6 +812,17 @@ var ModernChat = (function () {
         }
     }
 
+    function renderUnreadBadge() {
+        var badge = els.fab && els.fab.querySelector('.mc-fab-badge');
+        if (!badge) return;
+        if (state.unread > 0 && !state.open) {
+            badge.textContent = state.unread > 99 ? '99+' : String(state.unread);
+            badge.hidden = false;
+        } else {
+            badge.hidden = true;
+        }
+    }
+   
     function maybeNotify(msg) {
         var prefs = getPrefs();
         if (!prefs.notifications) return;
