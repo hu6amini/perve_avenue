@@ -515,9 +515,14 @@ var ModernChat = (function () {
             var nearBottom = isNearBottom();
             state.userScrolledUp = !nearBottom;
 
-            if (nearBottom) {
-                if (els.jumpBtn) els.jumpBtn.hidden = true;
+            if (els.jumpBtn) {
+                els.jumpBtn.hidden = !state.userScrolledUp;
+                if (state.userScrolledUp && state.unread === 0 && els.jumpText) {
+                    els.jumpText.textContent = 'Jump to bottom';
+                }
+            }
 
+            if (nearBottom) {
                 if (state.unread > 0) {
                     var latest = state.messages[state.messages.length - 1];
                     if (latest) {
@@ -772,9 +777,8 @@ var ModernChat = (function () {
 
         updateUnread(wasAtBottom);
         
-        // If the user hasn't manually scrolled up, ALWAYS stick to the bottom.
-        // (Using 'true' forces the scroll even if images changed the height)
-        if (!state.userScrolledUp) {
+        // If the user is at the bottom, or we just sent a message, force scroll.
+        if (!state.userScrolledUp || wasAtBottom) {
             scheduleScrollToBottom(true);
         }
         
@@ -782,7 +786,6 @@ var ModernChat = (function () {
         if (els.jumpBtn) {
             els.jumpBtn.hidden = !state.userScrolledUp || state.unread === 0;
         }
-    }
 
     function isNearBottom() {
         if (!els.messages) return true;
@@ -790,20 +793,28 @@ var ModernChat = (function () {
     }
    
     function scheduleScrollToBottom(force) {
+        if (!els.messages) return;
+        
+        // Immediate scroll
+        if (force || !state.userScrolledUp) {
+            els.messages.scrollTop = els.messages.scrollHeight;
+        }
+
+        // Frame-by-frame scroll
         requestAnimationFrame(function () {
             if (!els.messages) return;
             if (force || !state.userScrolledUp) {
                 els.messages.scrollTop = els.messages.scrollHeight;
-                
-                // Secondary scroll to catch late-loading images (avatars)
-                setTimeout(function() {
-                    if (!els.messages) return;
-                    if (force || !state.userScrolledUp) {
-                        els.messages.scrollTop = els.messages.scrollHeight;
-                    }
-                }, 100);
             }
         });
+
+        // Delayed scroll for late-loading images
+        setTimeout(function() {
+            if (!els.messages) return;
+            if (force || !state.userScrolledUp) {
+                els.messages.scrollTop = els.messages.scrollHeight;
+            }
+        }, 150);
     }
    
     function scrollToMessage(msgId, flash) {
@@ -843,16 +854,19 @@ var ModernChat = (function () {
 
         // Show/Hide the jump button
         if (els.jumpBtn && els.jumpText) {
-            var shouldShow = state.userScrolledUp && state.unread > 0;
+            var shouldShow = state.userScrolledUp;
             els.jumpBtn.hidden = !shouldShow;
             
             if (shouldShow) {
-                els.jumpText.textContent = state.unread === 1 
-                    ? '1 new message' 
-                    : state.unread + ' new messages';
+                if (state.unread > 0) {
+                    els.jumpText.textContent = state.unread === 1 
+                        ? '1 new message' 
+                        : state.unread + ' new messages';
+                } else {
+                    els.jumpText.textContent = 'Jump to bottom';
+                }
             }
         }
-    }
     function maybeNotify(msg) {
         var prefs = getPrefs();
         if (!prefs.notifications) return;
@@ -1084,7 +1098,7 @@ var ModernChat = (function () {
                 return;
             }
             clearComposer();
-            state.userScrolledUp = false; // <--- Ensure this is here
+            state.userScrolledUp = false; 
             scheduleScrollToBottom(true);
             if (typeof ForumEventBus !== 'undefined') {
                 ForumEventBus.trigger('chat:sent', { bbcode: bb });
