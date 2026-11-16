@@ -227,7 +227,7 @@ async function bootSystem() {
                 loadScript("https://cdn.jsdelivr.net/gh/hu6amini/perve_avenue@7ff3fff75dfe269a166cd374fb3cbe9abfb58acd/modules/boards.min.js"),
                 loadScript("https://cdn.jsdelivr.net/gh/hu6amini/perve_avenue@9e7be5d157a28b96ddfb27497c8e6a11baaf1767/modules/posts.min.js"),
                 loadScript("https://cdn.jsdelivr.net/gh/hu6amini/perve_avenue@6a84d4d102192c98c13f4d6b2f1df381396de33e/modules/modals.min.js"),
-                loadScript("https://cdn.jsdelivr.net/gh/hu6amini/perve_avenue@0d652fb2ccc294c8c277821735d3ca2ac5b593d0/modules/editor-module.min.js"),
+                loadScript("https://cdn.jsdelivr.net/gh/hu6amini/perve_avenue@2f926f6ecf1b9c93cf8068a9154f3d085519b70a/modules/editor-module.min.js"),
                 loadScript("https://cdn.jsdelivr.net/gh/hu6amini/perve_avenue@4b6c36ab3cde44f79c3ddb4f7dfbeed8b98a83b6/modules/quote-queue.min.js"),
                 loadScript("https://cdn.jsdelivr.net/gh/hu6amini/perve_avenue@c265d1b599b303bf77d85a6d1c84cbd168f9bc1f/modules/similar-topics.min.js"),
                 loadScript("https://cdn.jsdelivr.net/gh/hu6amini/perve_avenue@f9795272564a920b5d282749729e6a03ab727603/modules/report.min.js"),
