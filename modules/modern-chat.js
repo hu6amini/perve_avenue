@@ -458,8 +458,9 @@ var ModernChat = (function () {
             '    <button type="button" class="mc-header-btn mc-btn-close" aria-label="Close">',
             '      <i class="fa-regular fa-xmark" aria-hidden="true"></i>',
             '    </button>',
-                '<button type="button" class="mc-jump-btn" hidden>',
-            '  <i class="fa-regular fa-arrow-down" aria-hidden="true"></i> New messages',
+                            '<button type="button" class="mc-jump-btn" hidden>',
+            '  <i class="fa-regular fa-arrow-down" aria-hidden="true"></i>',
+            '  <span class="mc-jump-text">New messages</span>',
             '</button>',
             '  </div>',
             '</div>',
@@ -509,11 +510,14 @@ var ModernChat = (function () {
         els.settingsBtn = panel.querySelector('.mc-btn-settings');
         els.jumpBtn = panel.querySelector('.mc-jump-btn');
         els.closeBtn.addEventListener('click', close);
+        els.jumpBtn = panel.querySelector('.mc-jump-btn');
+        els.jumpText = panel.querySelector('.mc-jump-text');
                 // Track when the user manually scrolls up
-        els.messages.addEventListener('scroll', function() {
+                els.messages.addEventListener('scroll', function() {
             state.userScrolledUp = !isNearBottom();
-            if (els.jumpBtn) {
-                els.jumpBtn.hidden = !state.userScrolledUp || state.unread === 0;
+            // If we scrolled to the bottom, hide the button
+            if (!state.userScrolledUp && els.jumpBtn) {
+                els.jumpBtn.hidden = true;
             }
         });
         els.settingsBtn.addEventListener('click', showSettings);
@@ -524,19 +528,28 @@ var ModernChat = (function () {
         });
         els.emojiBtn.addEventListener('click', toggleEmojiPicker);
         els.sendBtn.addEventListener('click', function () { submitComposer(); });
-        els.jumpBtn.addEventListener('click', function() {
-            scheduleScrollToBottom();
-            els.jumpBtn.hidden = true;
-            // Mark unread as seen
-            var latest = state.messages[state.messages.length - 1];
-            if (latest) {
-                var ts = latest.date instanceof Date ? latest.date.getTime() : new Date(latest.date).getTime();
-                state.lastSeenAt = ts;
-                state.unread = 0;
-                saveLastSeen(ts);
-                renderUnreadBadge();
-            }
-        });
+                if (els.jumpBtn) {
+            els.jumpBtn.addEventListener('click', function() {
+                // 1. Reset the scroll lock so auto-scroll works again
+                state.userScrolledUp = false;
+                
+                // 2. Force scroll to bottom (the 'true' bypasses the lock)
+                scheduleScrollToBottom(true);
+                
+                // 3. Mark everything as read
+                var latest = state.messages[state.messages.length - 1];
+                if (latest) {
+                    var ts = latest.date instanceof Date ? latest.date.getTime() : new Date(latest.date).getTime();
+                    state.lastSeenAt = ts;
+                    state.unread = 0;
+                    saveLastSeen(ts);
+                    renderUnreadBadge();
+                }
+                
+                // 4. Hide the button
+                els.jumpBtn.hidden = true;
+            });
+        }
         els.toolbar.addEventListener('click', function (e) {
             var btn = e.target.closest('button[data-cmd]');
             if (!btn) return;
@@ -808,15 +821,17 @@ var ModernChat = (function () {
             state.unread = newCount;
         }
         renderUnreadBadge();
-    }
-    function renderUnreadBadge() {
-        var badge = els.fab && els.fab.querySelector('.mc-fab-badge');
-        if (!badge) return;
-        if (state.unread > 0 && !state.open) {
-            badge.textContent = state.unread > 99 ? '99+' : String(state.unread);
-            badge.hidden = false;
-        } else {
-            badge.hidden = true;
+
+        // Show/Hide the jump button
+        if (els.jumpBtn && els.jumpText) {
+            var shouldShow = state.userScrolledUp && state.unread > 0;
+            els.jumpBtn.hidden = !shouldShow;
+            
+            if (shouldShow) {
+                els.jumpText.textContent = state.unread === 1 
+                    ? '1 new message' 
+                    : state.unread + ' new messages';
+            }
         }
     }
     function maybeNotify(msg) {
