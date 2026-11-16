@@ -1217,8 +1217,6 @@ var ModernChat = (function () {
         if (!getHelloBoxRoot()) return false;
         if (document.querySelector('.mc-fab')) { state.mounted = true; return true; }
 
-        injectNativeHideStyle();
-
         els.fab = buildFab();
         document.body.appendChild(els.fab);
 
@@ -1235,25 +1233,6 @@ var ModernChat = (function () {
         setTimeout(syncNow, 200);
         debug('mounted');
         return true;
-    }
-
-    function injectNativeHideStyle() {
-        if (document.getElementById('mc-native-hide')) return;
-        var style = document.createElement('style');
-        style.id = 'mc-native-hide';
-        style.textContent = [
-            'hello-box.hb-root {',
-            '  position: absolute !important;',
-            '  left: -99999px !important;',
-            '  top: 0 !important;',
-            '  width: 1px !important;',
-            '  height: 1px !important;',
-            '  overflow: hidden !important;',
-            '  visibility: hidden !important;',
-            '  pointer-events: none !important;',
-            '}'
-        ].join('\n');
-        document.head.appendChild(style);
     }
 
     function boot() {
@@ -1308,8 +1287,6 @@ var ModernChat = (function () {
         }
         if (els.fab && els.fab.parentNode) els.fab.parentNode.removeChild(els.fab);
         if (els.panel && els.panel.parentNode) els.panel.parentNode.removeChild(els.panel);
-        var hideStyle = document.getElementById('mc-native-hide');
-        if (hideStyle) hideStyle.remove();
         state.dom.forEach(function (entry) {
             destroyMessageTippy(entry.clone);
         });
