@@ -6881,6 +6881,7 @@ body.has-docked-editor {
     border-radius: var(--radius, 12px);
     transition: border-color 0.12s ease, background 0.12s ease;
     animation: mc-msg-in 0.18s ease-out;
+    overflow-anchor: none;
 }
 
 .mc-message:hover {
@@ -7413,7 +7414,7 @@ body.has-docked-editor {
 }
 .mc-jump-btn {
     position: absolute;
-    bottom: 80px;
+    bottom: 80px; /* Floats just above the composer */
     left: 50%;
     transform: translateX(-50%);
     background: var(--primary-color, #10B981);
@@ -7434,7 +7435,7 @@ body.has-docked-editor {
     transition: background 0.15s ease, transform 0.15s ease;
 }
 
-/* THIS IS THE CRITICAL FIX */
+/* THIS IS THE CRITICAL FIX FOR THE INVISIBLE BUTTON */
 .mc-jump-btn[hidden] {
     display: none !important;
 }
