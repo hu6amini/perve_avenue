@@ -44,6 +44,7 @@ var ModernChat = (function () {
         dom: new Map(),
         lastSeenAt: 0,
         unread: 0,
+        userScrolledUp: false,
         editor: null,
         editorMode: null,
         tipTapDeps: null,
@@ -508,6 +509,13 @@ var ModernChat = (function () {
         els.settingsBtn = panel.querySelector('.mc-btn-settings');
         els.jumpBtn = panel.querySelector('.mc-jump-btn');
         els.closeBtn.addEventListener('click', close);
+                // Track when the user manually scrolls up
+        els.messages.addEventListener('scroll', function() {
+            state.userScrolledUp = !isNearBottom();
+            if (els.jumpBtn) {
+                els.jumpBtn.hidden = !state.userScrolledUp || state.unread === 0;
+            }
+        });
         els.settingsBtn.addEventListener('click', showSettings);
         els.presenceChip.addEventListener('click', togglePresenceList);
         els.toggleToolbarBtn.addEventListener('click', function () {
@@ -741,16 +749,13 @@ var ModernChat = (function () {
 
                 updateUnread(wasAtBottom);
         
-        // If we were at the bottom, stay at the bottom.
-        // If we were scrolled up reading, lock us exactly where we were.
-        if (wasAtBottom) {
+        // Only auto-scroll if they were at the bottom AND haven't scrolled up
+        if (wasAtBottom && !state.userScrolledUp) {
             scheduleScrollToBottom();
-        } else if (els.messages) {
-            els.messages.scrollTop = prevScrollTop;
         }
         
         if (els.jumpBtn) {
-            els.jumpBtn.hidden = wasAtBottom || state.unread === 0 || !state.open;
+            els.jumpBtn.hidden = !state.userScrolledUp || state.unread === 0;
         }
     }
 
@@ -758,12 +763,17 @@ var ModernChat = (function () {
         if (!els.messages) return true;
         return els.messages.scrollHeight - els.messages.scrollTop - els.messages.clientHeight < 80;
     }
-    function scheduleScrollToBottom() {
+        function scheduleScrollToBottom(force) {
         requestAnimationFrame(function () {
             if (!els.messages) return;
-            els.messages.scrollTop = els.messages.scrollHeight;
+            // Only scroll if we are forced to (e.g., sending a message), 
+            // OR if the user hasn't manually scrolled up.
+            if (force || !state.userScrolledUp) {
+                els.messages.scrollTop = els.messages.scrollHeight;
+            }
         });
     }
+   
     function scrollToMessage(msgId, flash) {
         var entry = state.dom.get(msgId);
         if (!entry) {
@@ -1040,7 +1050,8 @@ var ModernChat = (function () {
                 return;
             }
             clearComposer();
-            scheduleScrollToBottom();
+            state.userScrolledUp = false;
+            scheduleScrollToBottom(true);
             if (typeof ForumEventBus !== 'undefined') {
                 ForumEventBus.trigger('chat:sent', { bbcode: bb });
             }
