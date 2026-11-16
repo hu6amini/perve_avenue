@@ -5038,7 +5038,10 @@ async function fetchTopicPage(topicId, st) {
     if (st && st > 0) params.set('st', String(st));
     const url = '/api.php?' + params.toString();
     try {
-        const r = await fetch(url, { credentials: 'same-origin' });
+                const r = await fetch(url, {
+            credentials: 'same-origin',
+            cache: 'no-store'
+        });
         if (!r.ok) {
             console.warn('[PostsModule] API topic fetch failed:', r.status, r.statusText);
             return null;
