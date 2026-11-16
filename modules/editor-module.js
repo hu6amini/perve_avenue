@@ -5953,15 +5953,18 @@ body.set('Post', newBbcode);
     }
 
     function triggerPostReconversion() {
-        if (typeof window.ForumPostsModule === 'undefined') return;
-        try {
-            window.ForumPostsModule.reset();
-            window.ForumPostsModule.initialize();
-            console.log('[EditorModule] Post re-conversion triggered');
-        } catch (e) {
-            console.warn('[EditorModule] Post re-conversion failed:', e);
+    if (typeof window.ForumPostsModule === 'undefined') return;
+    try {
+        if (typeof window.ForumPostsModule.forceCacheBust === 'function') {
+            window.ForumPostsModule.forceCacheBust();
         }
+        window.ForumPostsModule.reset();
+        window.ForumPostsModule.initialize();
+        console.log('[EditorModule] Post re-conversion triggered');
+    } catch (e) {
+        console.warn('[EditorModule] Post re-conversion failed:', e);
     }
+}
 
     function startQuote(postEl) {
         _quoteQueue = _quoteQueue
