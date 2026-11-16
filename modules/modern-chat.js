@@ -126,7 +126,7 @@ var ModernChat = (function () {
         }
         return null;
     }
-        function readAllMessages() {
+    function readAllMessages() {
         var root = getHelloBoxRoot();
         if (!root) return [];
         var container = root.querySelector(CONFIG.MSG_CONTAINER);
@@ -141,8 +141,6 @@ var ModernChat = (function () {
                 while (fiber && depth < CONFIG.FIBER_MAX_DEPTH) {
                     var p = fiber.memoizedProps;
                     if (p && Array.isArray(p.messages) && p.messages.length > 0) {
-                        // React provides Newest -> Oldest. 
-                        // We reverse it for chat (Oldest -> Newest at bottom).
                         return p.messages.slice().reverse();
                     }
                     fiber = fiber.return;
@@ -157,7 +155,7 @@ var ModernChat = (function () {
             var m = readMessageObject(nodes[i]);
             if (m) out.push(m);
         }
-        return out.reverse(); // Reverse DOM fallback too
+        return out.reverse();
     }
     function readOnlineUsers() {
         var root = getHelloBoxRoot();
@@ -186,7 +184,7 @@ var ModernChat = (function () {
         return null;
     }
 
-    // ─── BBCode ↔ HTML (minimal; only used for the composer) ─────────────
+    // ─── BBCode ↔ HTML ────────────────────────────────────────────────────
     function htmlToBB(html) {
         if (!html) return '';
         var div = document.createElement('div');
@@ -219,19 +217,6 @@ var ModernChat = (function () {
         var out = '';
         for (var i = 0; i < div.childNodes.length; i++) out += walk(div.childNodes[i]);
         return out.replace(/\n{3,}/g, '\n\n').trim();
-    }
-    function bbToHTML(bb) {
-        if (!bb) return '';
-        var html = escapeHtml(bb);
-        html = html.replace(/\[b\]([\s\S]*?)\[\/b\]/gi, '<strong>$1</strong>');
-        html = html.replace(/\[i\]([\s\S]*?)\[\/i\]/gi, '<em>$1</em>');
-        html = html.replace(/\[u\]([\s\S]*?)\[\/u\]/gi, '<u>$1</u>');
-        html = html.replace(/\[s\]([\s\S]*?)\[\/s\]/gi, '<s>$1</s>');
-        html = html.replace(/\[code\]([\s\S]*?)\[\/code\]/gi, '<code>$1</code>');
-        html = html.replace(/\[url=([^\]]+)\]([\s\S]*?)\[\/url\]/gi, '<a href="$1" target="_blank" rel="noopener">$2</a>');
-        html = html.replace(/\[img\]([\s\S]*?)\[\/img\]/gi, '<img src="$1" alt="" loading="lazy" decoding="async">');
-        html = html.replace(/\r?\n/g, '<br>');
-        return html;
     }
 
     // ─── TIME HELPERS ─────────────────────────────────────────────────────
@@ -307,26 +292,19 @@ var ModernChat = (function () {
         try { localStorage.setItem(CONFIG.STORAGE.LAST_SEEN, String(ts)); } catch (e) {}
     }
 
-       // ─── USER DATA (role badges) ──────────────────────────────────────────
-    // Posts.js already fetches /api.php?mid=<id> for the same purpose; we
-    // reuse the endpoint and cache results aggressively. A cached `null`
-    // marks a failed fetch so we don't retry on every poll cycle.
+    // ─── USER DATA (role badges) ──────────────────────────────────────────
     var userDataCache = new Map();
     var USER_FETCH_TIMEOUT = 8000;
 
-        function fetchUserData(mid) {
+    function fetchUserData(mid) {
         if (mid == null) return Promise.resolve(null);
-        
-        // HelloBox uses "fc11517378", but the API expects just "11517378"
         var numericId = String(mid).replace(/\D/g, '');
         if (!numericId) return Promise.resolve(null);
-
         if (userDataCache.has(numericId)) return Promise.resolve(userDataCache.get(numericId));
 
         return new Promise(function (resolve) {
             var controller = new AbortController();
             var timer = setTimeout(function () { controller.abort(); }, USER_FETCH_TIMEOUT);
-            
             fetch('/api.php?mid=' + encodeURIComponent(numericId), {
                 credentials: 'include',
                 signal: controller.signal
@@ -334,7 +312,7 @@ var ModernChat = (function () {
             .then(function (r) {
                 clearTimeout(timer);
                 if (!r.ok) return null;
-                return r.text(); // Get text first to prevent JSON parse crash on 404 HTML
+                return r.text();
             })
             .then(function (text) {
                 if (!text) return null;
@@ -355,9 +333,6 @@ var ModernChat = (function () {
         });
     }
 
-    // Mirrors posts.js resolveGroupBadge. Returns null for regular members
-    // and unknown custom groups so the chat isn't plastered with "Member"
-    // badges on every line — only elevated roles earn a pill.
     function resolveRole(user) {
         if (!user || !user.group) return null;
         var name = String(user.group.name || '').toLowerCase();
@@ -365,28 +340,17 @@ var ModernChat = (function () {
         var body = String(user.group.bodyclass || '').toLowerCase();
         var all  = name + ' ' + cls + ' ' + body;
 
-        if (all.indexOf('founder') !== -1)
-            return { className: 'group-founder',    label: 'Founder' };
-        if (all.indexOf('administrator') !== -1 || all.indexOf('amministrat') !== -1)
-            return { className: 'group-admin',      label: 'Admin' };
-        if (all.indexOf('global') !== -1 && all.indexOf('mod') !== -1)
-            return { className: 'group-global-mod', label: 'Global Mod' };
-        if (all.indexOf('moderator') !== -1 || /\bmod\b/.test(all))
-            return { className: 'group-mod',        label: 'Mod' };
-        if (all.indexOf('developer') !== -1)
-            return { className: 'group-developer',  label: 'Developer' };
-        if (all.indexOf('game dev') !== -1 || all.indexOf('game_dev') !== -1)
-            return { className: 'group-game-dev',   label: 'Game Dev' };
-        if (all.indexOf('fan') !== -1)
-            return { className: 'group-fan',        label: 'Fan' };
+        if (all.indexOf('founder') !== -1) return { className: 'group-founder', label: 'Founder' };
+        if (all.indexOf('administrator') !== -1 || all.indexOf('amministrat') !== -1) return { className: 'group-admin', label: 'Admin' };
+        if (all.indexOf('global') !== -1 && all.indexOf('mod') !== -1) return { className: 'group-global-mod', label: 'Global Mod' };
+        if (all.indexOf('moderator') !== -1 || /\bmod\b/.test(all)) return { className: 'group-mod', label: 'Mod' };
+        if (all.indexOf('developer') !== -1) return { className: 'group-developer', label: 'Developer' };
+        if (all.indexOf('game dev') !== -1 || all.indexOf('game_dev') !== -1) return { className: 'group-game-dev', label: 'Game Dev' };
+        if (all.indexOf('fan') !== -1) return { className: 'group-fan', label: 'Fan' };
         return null;
     }
 
-    // Renders the badge into `nicknameEl` and stamps a role class onto
-    // `avatarEl` (for the tinted ring). Both happen from the same cached
-    // user object. If we already have the user cached, this is synchronous
-    // — no flash. Otherwise the badge appears a few hundred ms later.
-        function applyRoleIdentity(nicknameEl, avatarEl, msg) {
+    function applyRoleIdentity(nicknameEl, avatarEl, msg) {
         if (!msg.user) return;
         var mid = msg.user.id ? String(msg.user.id) : null;
 
@@ -404,13 +368,11 @@ var ModernChat = (function () {
             }
         }
 
-        // 1. Check if HelloBox's React fiber already gave us the group
         if (msg.user.group) {
             paint(msg.user);
             return;
         }
 
-        // 2. Fallback to API
         if (!mid) return;
         if (userDataCache.has(mid)) {
             paint(userDataCache.get(mid));
@@ -436,6 +398,7 @@ var ModernChat = (function () {
         fab.addEventListener('click', toggle);
         return fab;
     }
+
     function buildPanel() {
         var panel = document.createElement('div');
         panel.className = 'mc-panel';
@@ -457,6 +420,7 @@ var ModernChat = (function () {
             '    </button>',
             '    <button type="button" class="mc-header-btn mc-btn-close" aria-label="Close">',
             '      <i class="fa-regular fa-xmark" aria-hidden="true"></i>',
+            '    </button>',
             '  </div>',
             '</div>',
             '<div class="mc-messages" role="log" aria-live="polite"></div>',
@@ -467,8 +431,6 @@ var ModernChat = (function () {
             '<div class="mc-presence-list" hidden></div>',
             '<div class="mc-composer">',
             '  <div class="mc-toolbar" hidden>',
-            // Bold / Italic / Underline / Strikethrough are Solid-only in FA
-            // (across every tier, including Pro). Code exists in Regular too.
             '    <button type="button" data-cmd="bold" aria-label="Bold"><i class="fa-regular fa-bold" aria-hidden="true"></i></button>',
             '    <button type="button" data-cmd="italic" aria-label="Italic"><i class="fa-regular fa-italic" aria-hidden="true"></i></button>',
             '    <button type="button" data-cmd="underline" aria-label="Underline"><i class="fa-regular fa-underline" aria-hidden="true"></i></button>',
@@ -508,9 +470,18 @@ var ModernChat = (function () {
         els.closeBtn = panel.querySelector('.mc-btn-close');
         els.settingsBtn = panel.querySelector('.mc-btn-settings');
         els.jumpBtn = panel.querySelector('.mc-jump-btn');
-        els.closeBtn.addEventListener('click', close);
         els.jumpText = panel.querySelector('.mc-jump-text');
-                // Track when the user manually scrolls up
+
+        els.closeBtn.addEventListener('click', close);
+        els.settingsBtn.addEventListener('click', showSettings);
+        els.presenceChip.addEventListener('click', togglePresenceList);
+        els.toggleToolbarBtn.addEventListener('click', function () {
+            els.toolbar.hidden = !els.toolbar.hidden;
+            els.toggleToolbarBtn.classList.toggle('is-active', !els.toolbar.hidden);
+        });
+        els.emojiBtn.addEventListener('click', toggleEmojiPicker);
+        els.sendBtn.addEventListener('click', function () { submitComposer(); });
+
         els.messages.addEventListener('scroll', function() {
             var nearBottom = isNearBottom();
             state.userScrolledUp = !nearBottom;
@@ -535,23 +506,12 @@ var ModernChat = (function () {
                 }
             }
         });
-        els.settingsBtn.addEventListener('click', showSettings);
-        els.presenceChip.addEventListener('click', togglePresenceList);
-        els.toggleToolbarBtn.addEventListener('click', function () {
-            els.toolbar.hidden = !els.toolbar.hidden;
-            els.toggleToolbarBtn.classList.toggle('is-active', !els.toolbar.hidden);
-        });
-        els.emojiBtn.addEventListener('click', toggleEmojiPicker);
-        els.sendBtn.addEventListener('click', function () { submitComposer(); });
-                if (els.jumpBtn) {
+
+        if (els.jumpBtn) {
             els.jumpBtn.addEventListener('click', function() {
-                // 1. Reset the scroll lock so auto-scroll works again
                 state.userScrolledUp = false;
-                
-                // 2. Force scroll to bottom (the 'true' bypasses the lock)
                 scheduleScrollToBottom(true);
                 
-                // 3. Mark everything as read
                 var latest = state.messages[state.messages.length - 1];
                 if (latest) {
                     var ts = latest.date instanceof Date ? latest.date.getTime() : new Date(latest.date).getTime();
@@ -560,11 +520,10 @@ var ModernChat = (function () {
                     saveLastSeen(ts);
                     renderUnreadBadge();
                 }
-                
-                // 4. Hide the button
                 els.jumpBtn.hidden = true;
             });
         }
+
         els.toolbar.addEventListener('click', function (e) {
             var btn = e.target.closest('button[data-cmd]');
             if (!btn) return;
@@ -581,6 +540,7 @@ var ModernChat = (function () {
 
         return panel;
     }
+
     function buildEmojiPicker() {
         var groups = [
             { name: 'Faces', items: ['😀','😃','😄','😁','😆','😅','🤣','😂','🙂','😊','😇','🥰','😍','🤩','😘','😎','🤔','🤨','🙄','😏','😢','😭','😡','🤯','🥳','😴','🤤','🤗','🤫','🙃'] },
@@ -608,14 +568,11 @@ var ModernChat = (function () {
     }
 
     // ─── MESSAGE RENDERING ────────────────────────────────────────────────
-        function msgHash(msg) {
+    function msgHash(msg) {
         if (!msg) return '';
-        // Only change hash if the actual message content or state changes.
-        // Do NOT include textContent, or the relative time updating will 
-        // destroy the node and reload its images every minute.
         return msg.id + '|' + (msg.content || '') + '|' + (msg.date ? new Date(msg.date).getTime() : '') + '|' + (msg.isEditable ? '1' : '0');
     }
-   
+
     function renderClone(srcNode, msg) {
         if (!srcNode || !msg) return null;
         var clone = srcNode.cloneNode(true);
@@ -643,17 +600,12 @@ var ModernChat = (function () {
         });
         if (acts.length) clone.appendChild(actions);
 
-               // Role badge + avatar tint. Cached data → synchronous, uncached →
-        // async paint. Safe to fire-and-forget; the clone may be replaced
-        // by a fresher one before the fetch resolves, in which case the
-        // isConnected check in applyRoleIdentity drops the update.
         applyRoleIdentity(
             clone.querySelector('.hb-nickname'),
             clone.querySelector('.hb-avatar'),
             msg
         );
 
-        // Modern timestamp: <time datetime="ISO"> + rich tooltip.
         var timeEl = clone.querySelector('.hb-time');
         if (timeEl) {
             var date = msg.date instanceof Date ? msg.date : new Date(msg.date);
@@ -713,6 +665,7 @@ var ModernChat = (function () {
 
         return clone;
     }
+
     function syncMessages(canonical) {
         if (canonical.length > CONFIG.HISTORY_LIMIT) {
             canonical = canonical.slice(-CONFIG.HISTORY_LIMIT);
@@ -722,7 +675,6 @@ var ModernChat = (function () {
         var seen = new Set();
         var lastInserted = null;
         var wasAtBottom = isNearBottom();
-        // Remember the scroll position in case we modify the DOM
         var prevScrollTop = els.messages ? els.messages.scrollTop : 0;
 
         state.dom.forEach(function (entry, id) {
@@ -777,15 +729,10 @@ var ModernChat = (function () {
 
         updateUnread(wasAtBottom);
         
-        // If the user is at the bottom, or we just sent a message, force scroll.
         if (!state.userScrolledUp || wasAtBottom) {
             scheduleScrollToBottom(true);
         }
-        
-        // Hide/Show the button based on state
-        if (els.jumpBtn) {
-            els.jumpBtn.hidden = !state.userScrolledUp || state.unread === 0;
-        }
+    }
 
     function isNearBottom() {
         if (!els.messages) return true;
@@ -795,12 +742,10 @@ var ModernChat = (function () {
     function scheduleScrollToBottom(force) {
         if (!els.messages) return;
         
-        // Immediate scroll
         if (force || !state.userScrolledUp) {
             els.messages.scrollTop = els.messages.scrollHeight;
         }
 
-        // Frame-by-frame scroll
         requestAnimationFrame(function () {
             if (!els.messages) return;
             if (force || !state.userScrolledUp) {
@@ -808,7 +753,6 @@ var ModernChat = (function () {
             }
         });
 
-        // Delayed scroll for late-loading images
         setTimeout(function() {
             if (!els.messages) return;
             if (force || !state.userScrolledUp) {
@@ -852,21 +796,22 @@ var ModernChat = (function () {
         }
         renderUnreadBadge();
 
-        // Show/Hide the jump button
         if (els.jumpBtn && els.jumpText) {
             var shouldShow = state.userScrolledUp;
             els.jumpBtn.hidden = !shouldShow;
-            
+
             if (shouldShow) {
                 if (state.unread > 0) {
-                    els.jumpText.textContent = state.unread === 1 
-                        ? '1 new message' 
+                    els.jumpText.textContent = state.unread === 1
+                        ? '1 new message'
                         : state.unread + ' new messages';
                 } else {
                     els.jumpText.textContent = 'Jump to bottom';
                 }
             }
         }
+    }
+
     function maybeNotify(msg) {
         var prefs = getPrefs();
         if (!prefs.notifications) return;
@@ -1350,7 +1295,7 @@ var ModernChat = (function () {
         state.dom.forEach(function (entry) {
             destroyMessageTippy(entry.clone);
         });
-                state.mounted = false;
+        state.mounted = false;
         state.open = false;
         state.messages = [];
         state.dom.clear();
