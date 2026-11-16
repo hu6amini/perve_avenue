@@ -6853,6 +6853,15 @@ body.has-docked-editor {
 }
 
 /* 30.5 — Messages list ────────────────────────────────────── */
+/* The wrapper keeps the button pinned to the bottom of the messages */
+.mc-messages-wrapper {
+    flex: 1 1 auto;
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    min-height: 0; /* Crucial for flexbox scrolling */
+}
+
 .mc-messages {
     flex: 1 1 auto;
     overflow-y: auto;
@@ -6861,7 +6870,7 @@ body.has-docked-editor {
     scrollbar-width: thin;
     scrollbar-color: var(--border-color-strong, #D1D5DB) transparent;
     overscroll-behavior: contain;
-    overflow-anchor: none;
+    overflow-anchor: none; /* Prevents browser scroll jump */
 }
 .mc-messages::-webkit-scrollbar { width: 8px; }
 .mc-messages::-webkit-scrollbar-thumb {
@@ -7412,9 +7421,10 @@ body.has-docked-editor {
     background: rgba(0, 0, 0, 0.04);
     background: color-mix(in srgb, currentColor 6%, transparent);
 }
+/* The button now floats at the bottom of the message area */
 .mc-jump-btn {
     position: absolute;
-    bottom: 80px; /* Floats just above the composer */
+    bottom: 16px; /* Floats 16px above the composer */
     left: 50%;
     transform: translateX(-50%);
     background: var(--primary-color, #10B981);
@@ -7435,7 +7445,6 @@ body.has-docked-editor {
     transition: background 0.15s ease, transform 0.15s ease;
 }
 
-/* THIS IS THE CRITICAL FIX FOR THE INVISIBLE BUTTON */
 .mc-jump-btn[hidden] {
     display: none !important;
 }
