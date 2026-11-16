@@ -457,14 +457,14 @@ var ModernChat = (function () {
             '    </button>',
             '    <button type="button" class="mc-header-btn mc-btn-close" aria-label="Close">',
             '      <i class="fa-regular fa-xmark" aria-hidden="true"></i>',
-            '    </button>',
+            '  </div>',
+            '</div>',
+            '<div class="mc-messages" role="log" aria-live="polite"></div>',
+            </button>',
                             '<button type="button" class="mc-jump-btn" hidden>',
             '  <i class="fa-regular fa-arrow-down" aria-hidden="true"></i>',
             '  <span class="mc-jump-text">New messages</span>',
             '</button>',
-            '  </div>',
-            '</div>',
-            '<div class="mc-messages" role="log" aria-live="polite"></div>',
             '<div class="mc-presence-list" hidden></div>',
             '<div class="mc-composer">',
             '  <div class="mc-toolbar" hidden>',
@@ -517,12 +517,9 @@ var ModernChat = (function () {
             var nearBottom = isNearBottom();
             state.userScrolledUp = !nearBottom;
 
-            // If we just scrolled to the bottom manually...
             if (nearBottom) {
-                // Hide the button immediately
                 if (els.jumpBtn) els.jumpBtn.hidden = true;
 
-                // Clear the unread state immediately
                 if (state.unread > 0) {
                     var latest = state.messages[state.messages.length - 1];
                     if (latest) {
@@ -775,17 +772,18 @@ var ModernChat = (function () {
             }
         }
 
-                updateUnread(wasAtBottom);
+        updateUnread(wasAtBottom);
         
-        // Only auto-scroll if they were at the bottom AND haven't scrolled up
-        if (wasAtBottom && !state.userScrolledUp) {
-            scheduleScrollToBottom();
+        // If the user hasn't manually scrolled up, ALWAYS stick to the bottom.
+        // (Using 'true' forces the scroll even if images changed the height)
+        if (!state.userScrolledUp) {
+            scheduleScrollToBottom(true);
         }
         
+        // Hide/Show the button based on state
         if (els.jumpBtn) {
             els.jumpBtn.hidden = !state.userScrolledUp || state.unread === 0;
         }
-    }
 
     function isNearBottom() {
         if (!els.messages) return true;
