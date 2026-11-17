@@ -6755,6 +6755,7 @@ body.has-docked-editor {
 }
 .mc-title i {
     color: var(--primary-color);
+}
 .mc-header-btn {
     width: 32px;
     height: 32px;
