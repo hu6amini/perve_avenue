@@ -408,7 +408,7 @@ var ModernChat = (function () {
         panel.innerHTML = [
             '<div class="mc-header">',
             '  <div class="mc-header-left">',
-            '    <div class="mc-title"><i class="fa-regular fa-angle-right" aria-hidden="true"></i> Terminal</div>',
+            '    <div class="mc-title"><i class="fa-regular fa-terminal" aria-hidden="true"></i> Terminal</div>',
             '    <button type="button" class="mc-presence-chip" aria-label="Online users">',
             '      <span class="mc-presence-dot"></span>',
             '      <span class="mc-presence-count">0 online</span>',
