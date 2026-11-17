@@ -6911,14 +6911,28 @@ body.has-docked-editor {
     transition: border-color 0.15s ease;
 }
 
+/* ─── Initial Avatars ───────────────────────────────────────── */
+
+.mc-initial-avatar {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #FFFFFF;
+    font-weight: 600;
+    font-size: 14px;
+    text-transform: uppercase;
+    border: 2px solid transparent;
+    /* Inherits width: 32px, height: 32px, border-radius: 50%, aspect-ratio: 1/1 from .hb-avatar */
+}
+
 /* 2. Apply the colored rings */
-.mc-message .hb-avatar[data-role="admin"]        { border-color: var(--admin-color) !important; }
-.mc-message .hb-avatar[data-role="founder"]      { border-color: var(--founder-color) !important; }
-.mc-message .hb-avatar[data-role="global-mod"]   { border-color: var(--group-global-moderator) !important; }
-.mc-message .hb-avatar[data-role="mod"]          { border-color: var(--mod-color) !important; }
-.mc-message .hb-avatar[data-role="member"]       { border-color: var(--member-color) !important; }
-.mc-message .hb-avatar[data-role="game-dev"]     { border-color: var(--game-dev-color) !important; }
-.mc-message .hb-avatar[data-role="fan"]          { border-color: var(--fan-color) !important; }
+.mc-message .hb-avatar[data-role="admin"], .mc-initial-avatar[data-role="admin"]       { border-color: var(--admin-color) !important; }
+.mc-message .hb-avatar[data-role="founder"], .mc-initial-avatar[data-role="founder"]       { border-color: var(--founder-color) !important; }
+.mc-message .hb-avatar[data-role="global-mod"], .mc-initial-avatar[data-role="global-mod"]   { border-color: var(--group-global-moderator) !important; }
+.mc-message .hb-avatar[data-role="mod"], .mc-initial-avatar[data-role="mod"]         { border-color: var(--mod-color) !important; }
+.mc-message .hb-avatar[data-role="member"], .mc-initial-avatar[data-role="member"]      { border-color: var(--member-color) !important; }
+.mc-message .hb-avatar[data-role="game-dev"], .mc-initial-avatar[data-role="game-dev"]    { border-color: var(--game-dev-color) !important; }
+.mc-message .hb-avatar[data-role="fan"], .mc-initial-avatar[data-role="fan"]         { border-color: var(--fan-color) !important; }
 
 .mc-message .hb-body   { flex: 1; min-width: 0; }
 .mc-message .hb-header {
