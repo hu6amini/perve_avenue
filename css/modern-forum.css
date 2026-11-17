@@ -6919,7 +6919,7 @@ body.has-docked-editor {
     justify-content: center;
     color: #FFFFFF;
     font-weight: 600;
-    font-size: 14px;
+    font-size: 19.776px;
     text-transform: uppercase;
     border: 2px solid transparent;
     /* Inherits width: 32px, height: 32px, border-radius: 50%, aspect-ratio: 1/1 from .hb-avatar */
