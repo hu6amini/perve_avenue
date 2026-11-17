@@ -913,7 +913,7 @@ var ModernChat = (function () {
             var mount = document.createElement('div');
             wrap.innerHTML = '';
             wrap.appendChild(mount);
-            var placeholderExt = deps.Placeholder.configure({ placeholder: 'Write a message...' });
+            var placeholderExt = deps.Placeholder.configure({ placeholder: '> type a message...' });
             state.editor = new deps.Editor({
                 element: mount,
                 extensions: [
