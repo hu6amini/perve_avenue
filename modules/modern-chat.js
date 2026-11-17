@@ -296,6 +296,33 @@ var ModernChat = (function () {
     var userDataCache = new Map();
     var USER_FETCH_TIMEOUT = 8000;
 
+       // ─── AVATAR FALLBACKS (from posts.js) ─────────────────────────────────
+    var AVATAR_COLORS = [
+        '059669', '10B981', '34D399', '6EE7B7', 'A7F3D0',
+        '0D9488', '14B8A6', '2DD4BF', '5EEAD4', '99F6E4',
+        '3B82F6', '60A5FA', '93C5FD', '2563EB', '1D4ED8',
+        '6366F1', '818CF8', 'A5B4FC', '4F46E5', '4338CA',
+        '8B5CF6', 'A78BFA', 'C4B5FD', '7C3AED', '6D28D9',
+        'D97706', 'F59E0B', 'FBBF24', 'FCD34D', 'B45309',
+        '64748B', '94A3B8', 'CBD5E1', '475569', '334155'
+    ];
+
+    function getColorFromNickname(nickname, userId) {
+        var hash = 0;
+        var str = nickname || userId || 'user';
+        for (var i = 0; i < str.length; i++) {
+            hash = ((hash << 5) - hash) + str.charCodeAt(i);
+            hash = hash & hash;
+        }
+        return AVATAR_COLORS[Math.abs(hash) % AVATAR_COLORS.length];
+    }
+
+    function isDefaultAvatar(url) {
+        if (!url) return true;
+        return url.indexOf('style_images/default_avatar.png') !== -1 ||
+               url.indexOf('default_avatar') !== -1;
+    }
+
     function fetchUserData(mid) {
         if (mid == null) return Promise.resolve(null);
         var numericId = String(mid).replace(/\D/g, '');
@@ -363,8 +390,10 @@ var ModernChat = (function () {
                 badge.textContent = role.label;
                 nicknameEl.insertAdjacentElement('afterend', badge);
             }
-            if (avatarEl) {
-                avatarEl.setAttribute('data-role', role.className.replace('group-', ''));
+            // Target both the original image and the new initial div
+            var targetAvatar = nicknameEl.closest('.mc-message')?.querySelector('.hb-avatar');
+            if (targetAvatar) {
+                targetAvatar.setAttribute('data-role', role.className.replace('group-', ''));
             }
         }
 
@@ -575,6 +604,25 @@ var ModernChat = (function () {
         clone.classList.add('mc-message');
         clone.setAttribute('data-mc-id', msg.id);
         clone.setAttribute('data-mc-uid', String(msg.user && msg.user.id || clone.getAttribute('data-uid') || ''));
+
+               // ─── NEW: Replace default avatar with initials ───
+        var avatarImg = clone.querySelector('.hb-avatar');
+        if (avatarImg) {
+            var src = avatarImg.getAttribute('src') || avatarImg.getAttribute('data-original') || '';
+            if (isDefaultAvatar(src)) {
+                var nick = (msg.user && (msg.user.nickname || msg.user.name)) || '?';
+                var initial = nick.charAt(0).toUpperCase();
+                var bgColor = getColorFromNickname(nick, msg.user?.id);
+                
+                var initialDiv = document.createElement('div');
+                initialDiv.className = 'mc-initial-avatar hb-avatar'; // keep .hb-avatar for CSS layout
+                initialDiv.textContent = initial;
+                initialDiv.style.backgroundColor = '#' + bgColor;
+                
+                avatarImg.parentNode.replaceChild(initialDiv, avatarImg);
+            }
+        }
+        // ─────────────────────────────────────────────────
 
         var nativeActions = clone.querySelector('.hb-actions');
         if (nativeActions) nativeActions.remove();
