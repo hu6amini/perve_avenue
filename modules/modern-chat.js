@@ -450,7 +450,7 @@ var ModernChat = (function () {
             '      <div class="mc-editor" contenteditable="true" role="textbox" aria-multiline="true" data-placeholder="Write a message..."></div>',
             '    </div>',
             '    <button type="button" class="mc-composer-btn mc-btn-send" aria-label="Send" disabled>',
-            '      <i class="fa-regular fa-paper-plane-top" aria-hidden="true"></i>',
+            '      <i class="fa-regular fa-paper-plane" aria-hidden="true"></i>',
             '    </button>',
             '  </div>',
             '  <div class="mc-emoji-picker" hidden></div>',
