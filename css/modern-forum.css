@@ -6970,8 +6970,15 @@ body.has-docked-editor {
 .mc-message .mc-time {
     font-size: 11px;
     color: var(--text-tertiary, #9CA3AF);
-    margin-left: auto;
     flex-shrink: 0;
+    margin: 0 !important;
+    white-space: nowrap;
+}
+.mc-message .mc-time::before {
+    content: "·";
+    margin: 0 6px;
+    color: var(--text-tertiary, #9CA3AF);
+    font-weight: bold;
 }
 .mc-message time.mc-time {
     cursor: help;
@@ -7143,10 +7150,10 @@ body.has-docked-editor {
 }
 .mc-message-action > i { font-size: 12px; line-height: 1; }
 
-/* 30.7 — Message hover actions ────────────────────────────── */
+/* 30.7 — Message hover actions (Consolidated) ───────────── */
 .mc-message-actions {
     position: absolute;
-    top: -2px;
+    top: 4px;
     right: 8px;
     display: flex;
     gap: 2px;
@@ -7154,6 +7161,10 @@ body.has-docked-editor {
     transform: translateY(2px);
     transition: opacity 0.12s ease, transform 0.12s ease;
     pointer-events: none;
+    background: var(--surface-color, #FFFFFF);
+    border-radius: var(--radius-sm, 8px);
+    padding: 2px;
+    box-shadow: var(--shadow-sm, 0 1px 2px rgba(0, 0, 0, 0.05));
 }
 .mc-message:hover .mc-message-actions {
     opacity: 1;
@@ -7164,8 +7175,8 @@ body.has-docked-editor {
     width: 26px;
     height: 26px;
     border-radius: var(--radius-sm, 8px);
-    border: 1px solid var(--border-color, #E5E7EB);
-    background: var(--surface-color, #FFFFFF);
+    border: 1px solid transparent;
+    background: transparent;
     color: var(--text-secondary, #6B7280);
     cursor: pointer;
     display: flex;
@@ -7205,7 +7216,6 @@ body.has-docked-editor {
     border-bottom: 1px solid var(--border-color, #E5E7EB);
     align-items: center;
 }
-.mc-toolbar[hidden] { display: none; }
 .mc-toolbar button {
     width: 28px;
     height: 28px;
@@ -7293,7 +7303,7 @@ body.has-docked-editor {
     background: color-mix(in srgb, currentColor 6%, transparent);
     color: var(--text-primary, #111827);
 }
-.mc-composer-btn:disabled { opacity: 0.4; cursor: default; }
+.mc-composer-btn:disabled { opacity: 0.5; cursor: default; }
 .mc-composer-btn.is-active {
     background: var(--primary-color-soft,
                 color-mix(in srgb, var(--primary-color, #10B981) 12%, transparent));
@@ -7302,12 +7312,14 @@ body.has-docked-editor {
 .mc-composer-btn > i { font-size: 16px; line-height: 1; }
 
 .mc-btn-send {
-    background: var(--primary-color, #10B981);
-    color: #FFFFFF;
+    background: var(--primary-color, #10B981) !important;
+    color: #FFFFFF !important;
+    box-shadow: 0 2px 6px rgba(16, 185, 129, 0.2);
 }
 .mc-btn-send:hover:not(:disabled) {
-    background: var(--primary-color-hover, #059669);
-    color: #FFFFFF;
+    background: var(--primary-color-hover, #059669) !important;
+    box-shadow: 0 4px 10px rgba(16, 185, 129, 0.3);
+    transform: translateY(-1px);
 }
 
 /* 30.8c — Editor surface */
@@ -7332,7 +7344,8 @@ body.has-docked-editor {
 .mc-editor:empty::before,
 .mc-editor .mc-tiptap p.is-editor-empty:first-child::before {
     content: attr(data-placeholder);
-    color: var(--text-tertiary, #9CA3AF);
+    color: var(--text-secondary, #6B7280) !important;
+    opacity: 0.8;
     pointer-events: none;
     float: left;
     height: 0;
