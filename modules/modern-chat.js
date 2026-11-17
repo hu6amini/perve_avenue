@@ -447,7 +447,7 @@ var ModernChat = (function () {
             '      <i class="fa-regular fa-face-smile" aria-hidden="true"></i>',
             '    </button>',
             '    <div class="mc-editor-wrap">',
-            '      <div class="mc-editor" contenteditable="true" role="textbox" aria-multiline="true" data-placeholder="Write a message..."></div>',
+            '      <div class="mc-editor" contenteditable="true" role="textbox" aria-multiline="true" data-placeholder="> type a message..."></div>',
             '    </div>',
             '    <button type="button" class="mc-composer-btn mc-btn-send" aria-label="Send" disabled>',
             '      <i class="fa-regular fa-paper-plane" aria-hidden="true"></i>',
