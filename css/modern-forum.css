@@ -6753,6 +6753,8 @@ body.has-docked-editor {
     color: var(--text-primary, #111827);
     white-space: nowrap;
 }
+.mc-title i {
+    color: var(--primary-color);
 .mc-header-btn {
     width: 32px;
     height: 32px;
