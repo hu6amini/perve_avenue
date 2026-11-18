@@ -33,17 +33,35 @@
 
   const config = {
     safeList: [
-      "jq.js",
-      "plugin_v3.js",
-      "script-loader",
-      "boot-loader.min.js",
-      "dynamic-loader.min.js",
-      "media-optimizer.min.js",
-      "event-bus.min.js",
-      "forum-enhancer.min.js",
-      "modern-forum.css",
-      "all.css"
-    ],
+  "jq.js",
+  "plugin_v3.js",
+  "script-loader",
+  "boot-loader.min.js",
+  "dynamic-loader.min.js",
+  "user-msg-loader.min.js",          // ← add
+  "media-optimizer.min.js",
+  "event-bus.min.js",
+  "forum_core_observer.min.js",      // ← add
+  "dom-utils.min.js",                // ← add
+  "media-dimensions.min.js",         // ← add
+  "breadcrumbs.min.js",              // ← add
+  "boards.min.js",                   // ← add
+  "posts.min.js",                    // ← add
+  "modals.min.js",                   // ← add
+  "quote-queue.min.js",              // ← add
+  "twemoji.min.js",                  // ← add
+  "slick-carousel.min.js",           // ← add
+  "theme.min.js",                    // ← add
+  "lite-embed.min.js",               // ← add
+  "messenger.min.js",                // ← add
+  "editor-module.min.js",            // ← add
+  "similar-topics.min.js",           // ← add
+  "report.min.js",                   // ← add
+  "modern-chat.min.js",              // ← add
+  "forum-enhancer.min.js",
+  "modern-forum.css",
+  "all.css"
+],
     skipRelease: [
       "challenges.cloudflare.com",
       "turnstile",
