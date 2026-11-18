@@ -411,43 +411,42 @@
         const src = oldScript.dataset.original;
         if (!src) return;
 
-        if (shouldSkipRelease(src)) return;
-
-        // Generalise the min-swap to every plain .js on jsdelivr. Released
-        // URLs then match what dynamic-loader / user-msg-loader fetch, so
-        // the browser reuses one response instead of downloading the .js
-        // and .min.js pair that Lighthouse flags as duplicate bytes.
-        let finalSrc = src;
-        if (src.includes("cdn.jsdelivr.net") &&
-            /\.js$/.test(src) &&
-            !/\.min\.js$/.test(src)) {
-          finalSrc = src.replace(/\.js$/, ".min.js");
-        }
-
-        // media-optimizer stays type="module" for deterministic ordering.
-        const isModule = src.includes("media-optimizer");
-
-        const release = () => {
+        // Swap in minified variants where available.
+        // `type = "module"` is preserved for media-optimizer because the
+        // module graph gives us deterministic dependency ordering; the
+        // rest are classic async scripts.
+        if (src.includes("media-optimizer.js") && !src.includes(".min.js")) {
+          const minSrc = src.replace(/media-optimizer\.js$/, "media-optimizer.min.js");
           const newScript = document.createElement("script");
-          newScript.src = finalSrc;
-          // Match loadScript() so the cache entry (and credentials mode)
-          // is identical and the fetch is reused.
-          newScript.crossOrigin = "anonymous";
-          if (isModule) newScript.type = "module";
+          newScript.src = minSrc;
+          newScript.type = "module";
           oldScript.parentNode.replaceChild(newScript, oldScript);
-          if (finalSrc !== src) {
-            record("- Released minified (jsdelivr): " + getFileName(finalSrc));
-          }
-        };
-
-        // Popper.js guard: delay tippy if Popper isn't ready. Check the
-        // final URL, since tippy may be rewritten to .min.js above.
-        if (finalSrc.includes("tippy.js") && !window.Popper) {
-          setTimeout(release, 50);
           return;
         }
 
-        release();
+        if (src.includes("event-bus.js") && !src.includes(".min.js")) {
+          const minSrc = src.replace(/event-bus\.js$/, "event-bus.min.js");
+          const newScript = document.createElement("script");
+          newScript.src = minSrc;
+          oldScript.parentNode.replaceChild(newScript, oldScript);
+          return;
+        }
+
+        if (shouldSkipRelease(src)) return;
+
+        // Popper.js guard: delay tippy if Popper isn't ready
+        if (src.includes("tippy.js") && !window.Popper) {
+          setTimeout(() => {
+            const newScript = document.createElement("script");
+            newScript.src = src;
+            oldScript.parentNode.replaceChild(newScript, oldScript);
+          }, 50);
+          return;
+        }
+
+        const newScript = document.createElement("script");
+        newScript.src = src;
+        oldScript.parentNode.replaceChild(newScript, oldScript);
       });
 
       // Activate downgraded CSS
