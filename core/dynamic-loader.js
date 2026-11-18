@@ -63,6 +63,7 @@ whenBodyReady(() => {
     const PAGE_GATES = Object.freeze({
         mediaContent: ['topic', 'send', 'blog', 'msg'],
         editor:       ['topic', 'blog', 'send'],
+        topicAndBlog: ['topic', 'blog'],  
         topicOnly:    ['topic']
     });
     const onPage = (gates) => gates.includes(PAGE_ID);
@@ -310,7 +311,6 @@ whenBodyReady(() => {
                     loadScript("https://cdn.jsdelivr.net/gh/hu6amini/perve_avenue@c3354d99d0652f4e94408f094ae0879d2be83e9b/modules/twemoji.min.js"),
                     loadScript("https://cdn.jsdelivr.net/gh/hu6amini/perve_avenue@7ff3fff75dfe269a166cd374fb3cbe9abfb58acd/modules/boards.min.js"),
                     loadScript("https://cdn.jsdelivr.net/gh/hu6amini/perve_avenue@6a84d4d102192c98c13f4d6b2f1df381396de33e/modules/modals.min.js"),
-                    loadScript("https://cdn.jsdelivr.net/gh/hu6amini/perve_avenue@c265d1b599b303bf77d85a6d1c84cbd168f9bc1f/modules/similar-topics.min.js"),
                     loadScript("https://cdn.jsdelivr.net/gh/hu6amini/perve_avenue@d83090be867b950ab69113bf0ac039f401ae3d44/modules/modern-chat.min.js")
                 ];
 
@@ -335,6 +335,13 @@ whenBodyReady(() => {
                         loadScript("https://cdn.jsdelivr.net/gh/hu6amini/perve_avenue@f9795272564a920b5d282749729e6a03ab727603/modules/report.min.js")
                     );
                 }
+
+                // Gated: similar-topics → topic / blog
+                if (onPage(PAGE_GATES.topicAndBlog)) {
+                    enhTasks.push(
+                       loadScript("https://cdn.jsdelivr.net/gh/hu6amini/perve_avenue@c265d1b599b303bf77d85a6d1c84cbd168f9bc1f/modules/similar-topics.min.js")
+                   );
+               }
 
                 const results = await Promise.allSettled(enhTasks);
                 const failed = results.filter(r => r.status === 'rejected');
