@@ -3,15 +3,14 @@
 document.documentElement.lang = "en";
 
 // ============================================================================
-// SHARED DEDUPE REGISTRY (Fix 2)
+// SHARED DEDUPE REGISTRY
 //
 // All URLs loaded through loadScript() are registered here. The Set is
 // attached to `window` so that `boot-loader.js`'s releaseAssets() can
-// also consult it as a defence-in-depth check (that change lives in
-// boot-loader.js, not here).
+// also consult it as a defence-in-depth check.
 //
-// Additionally, every script element created below is given `async=""`
-// so that boot-loader.js's trap condition
+// Every script element created below is given `async=""` so that
+// boot-loader.js's trap condition
 //     (!el.hasAttribute("async") && !el.hasAttribute("defer"))
 // fails and the element is left alone. Dynamic scripts are force-async
 // per spec, so this attribute is semantically a no-op for execution;
@@ -29,16 +28,14 @@ function whenBodyReady(callback) {
 
 whenBodyReady(() => {
     // ========================================================================
-    // Fix 1: PAGE GUARD
+    // PAGE GUARD
     //
-    // user-msg-loader.js owns msg/user pages and loads the same core
-    // scripts (forum_core_observer, media-dimensions, breadcrumbs,
-    // boards, posts, modals, quote-queue, twemoji, forum-enhancer, ...).
-    // Without this guard both loaders execute on msg/user pages,
-    // evaluating every module twice and throwing
-    //     "Identifier 'X' has already been declared"
-    // for each lexical declaration. We also skip so that the slick
-    // stylesheet isn't injected twice (user-msg-loader injects it too).
+    // user-msg-loader.js owns msg/user pages and loads the same core scripts
+    // (forum_core_observer, media-dimensions, breadcrumbs, boards, posts,
+    // modals, quote-queue, twemoji, forum-enhancer, ...). Without this guard
+    // both loaders execute on msg/user pages, evaluating every module twice
+    // and throwing "Identifier 'X' has already been declared" for each
+    // lexical declaration.
     // ========================================================================
     if (document.body && (document.body.id === 'msg' || document.body.id === 'user')) {
         console.debug('[Boot] dynamic-loader skipping — user-msg-loader handles this page');
@@ -46,10 +43,33 @@ whenBodyReady(() => {
     }
 
     // ========================================================================
+    // PAGE GATES
+    //
+    // Every conditional script in this file reads its gate from here so the
+    // rules are visible in one place. `PAGE_ID` is the <body> id.
+    //
+    //   mediaContent : topic / send / blog / msg
+    //                  → lightgallery, lite-embed, posts
+    //   editor       : topic / blog / send
+    //                  → editor-module
+    //   topicOnly    : topic
+    //                  → quote-queue, report
+    //
+    // Note: this file never runs on `msg` (see guard above), so `msg` in
+    // mediaContent is only meaningful once user-msg-loader.js is updated
+    // to match.
+    // ========================================================================
+    const PAGE_ID = (document.body && document.body.id) || '';
+    const PAGE_GATES = Object.freeze({
+        mediaContent: ['topic', 'send', 'blog', 'msg'],
+        editor:       ['topic', 'blog', 'send'],
+        topicOnly:    ['topic']
+    });
+    const onPage = (gates) => gates.includes(PAGE_ID);
+
+    // ========================================================================
     // CONSTANTS
     // ========================================================================
-    const CONTENT_PAGE_IDS = Object.freeze(['topic', 'send', 'search', 'blog']);
-
     const STYLESHEETS = Object.freeze([
         "https://cdnjs.cloudflare.com/ajax/libs/slick-carousel/1.9.0/slick.min.css"
     ]);
@@ -70,7 +90,7 @@ whenBodyReady(() => {
     });
 
     // ========================================================================
-    // 2. SCRIPT LOADER ENGINE (Fix 2 applied)
+    // 2. SCRIPT LOADER ENGINE
     //
     // Notes on loading semantics:
     //  - Scripts inserted via document.createElement are always executed
@@ -83,8 +103,8 @@ whenBodyReady(() => {
     //    fetch is reused instead of performed twice.
     // ========================================================================
     function loadScript(src, isModule = false) {
-        // Fix 2a: dedupe by URL. If boot-loader.js or another loader has
-        // already requested this URL, we short-circuit.
+        // Dedupe by URL. If another loader has already requested this
+        // URL, short-circuit.
         if (__loadedScriptUrls.has(src)) {
             return Promise.resolve();
         }
@@ -102,7 +122,7 @@ whenBodyReady(() => {
                 script.type = 'module';
             }
 
-            // Fix 2b: make boot-loader.js's trap condition fail.
+            // Make boot-loader.js's trap condition fail.
             // `async` on a dynamically created script is a semantic
             // no-op (force-async already applies) — this attribute
             // exists solely to keep boot-loader from trapping the
@@ -164,7 +184,8 @@ whenBodyReady(() => {
     }
 
     // ========================================================================
-    // 5. CONDITIONAL LIGHTGALLERY LOADING (only on content pages)
+    // 5. CONDITIONAL LIGHTGALLERY LOADING
+    //    Gated on PAGE_GATES.mediaContent
     // ========================================================================
     function injectStylesheet(url) {
         const preload = document.createElement("link");
@@ -204,7 +225,7 @@ whenBodyReady(() => {
     }
 
     // ========================================================================
-    // 6. PHASED EXECUTION (NO TIPTAP – messenger loads it via import)
+    // 6. PHASED EXECUTION
     // ========================================================================
     async function bootSystem() {
         try {
@@ -239,12 +260,18 @@ whenBodyReady(() => {
             }
             console.debug(`[Boot] Phase B completed in ${(performance.now() - phaseBStart).toFixed(2)}ms`);
 
-            // PHASE C: Third‑party libraries (twemoji, lite-embed)
+            // PHASE C: Third‑party libraries.
+            // twemoji lib always; lite-embed only on media content pages.
+            const phaseCTasks = [
+                loadScript("https://cdn.jsdelivr.net/npm/twemoji@14.0.2/dist/twemoji.min.js")
+            ];
+            if (onPage(PAGE_GATES.mediaContent)) {
+                phaseCTasks.push(
+                    loadScript("https://cdn.jsdelivr.net/gh/hu6amini/perve_avenue@9cdcc6c87d99bfce1f64f07fb1523b8b28f5a516/modules/lite-embed.min.js")
+                );
+            }
             const phaseCStart = performance.now();
-            const resultsC = await Promise.allSettled([
-                loadScript("https://cdn.jsdelivr.net/npm/twemoji@14.0.2/dist/twemoji.min.js"),
-                loadScript("https://cdn.jsdelivr.net/gh/hu6amini/perve_avenue@9cdcc6c87d99bfce1f64f07fb1523b8b28f5a516/modules/lite-embed.min.js")
-            ]);
+            const resultsC = await Promise.allSettled(phaseCTasks);
             const failedC = resultsC.filter(r => r.status === 'rejected');
             if (failedC.length > 0) {
                 console.warn('[Boot] Phase C had failures:', failedC);
@@ -270,31 +297,51 @@ whenBodyReady(() => {
             scheduleWork(initSlick, IDLE_TIMEOUT_SLICK);
 
             // ============================================================
-            // IDLE LOAD: All remaining enhancement modules (including messenger)
-            // Messenger will load TipTap dynamically via ES modules.
+            // IDLE LOAD: remaining enhancement modules.
+            // Unconditional modules first; page-gated modules pushed onto
+            // the same batch so they still resolve in parallel.
             // ============================================================
             const loadEnhancements = async () => {
                 const enhStart = performance.now();
 
-                const results = await Promise.allSettled([
+                const enhTasks = [
                     loadScript("https://cdn.jsdelivr.net/gh/hu6amini/perve_avenue@5a7d1490dba45edf8b683d83836e00cf6a6a0186/modules/media-dimensions.min.js"),
                     loadScript("https://cdn.jsdelivr.net/gh/hu6amini/perve_avenue@a15b399bcc86755a59a752e15e2821ae73c4c12a/modules/breadcrumbs.min.js"),
                     loadScript("https://cdn.jsdelivr.net/gh/hu6amini/perve_avenue@c3354d99d0652f4e94408f094ae0879d2be83e9b/modules/twemoji.min.js"),
                     loadScript("https://cdn.jsdelivr.net/gh/hu6amini/perve_avenue@7ff3fff75dfe269a166cd374fb3cbe9abfb58acd/modules/boards.min.js"),
-                    loadScript("https://cdn.jsdelivr.net/gh/hu6amini/perve_avenue@9e7be5d157a28b96ddfb27497c8e6a11baaf1767/modules/posts.min.js"),
                     loadScript("https://cdn.jsdelivr.net/gh/hu6amini/perve_avenue@6a84d4d102192c98c13f4d6b2f1df381396de33e/modules/modals.min.js"),
-                    loadScript("https://cdn.jsdelivr.net/gh/hu6amini/perve_avenue@2f926f6ecf1b9c93cf8068a9154f3d085519b70a/modules/editor-module.min.js"),
-                    loadScript("https://cdn.jsdelivr.net/gh/hu6amini/perve_avenue@4b6c36ab3cde44f79c3ddb4f7dfbeed8b98a83b6/modules/quote-queue.min.js"),
                     loadScript("https://cdn.jsdelivr.net/gh/hu6amini/perve_avenue@c265d1b599b303bf77d85a6d1c84cbd168f9bc1f/modules/similar-topics.min.js"),
-                    loadScript("https://cdn.jsdelivr.net/gh/hu6amini/perve_avenue@f9795272564a920b5d282749729e6a03ab727603/modules/report.min.js"),
                     loadScript("https://cdn.jsdelivr.net/gh/hu6amini/perve_avenue@d83090be867b950ab69113bf0ac039f401ae3d44/modules/modern-chat.min.js")
-                ]);
+                ];
 
+                // Gated: posts → topic / send / blog / msg
+                if (onPage(PAGE_GATES.mediaContent)) {
+                    enhTasks.push(
+                        loadScript("https://cdn.jsdelivr.net/gh/hu6amini/perve_avenue@9e7be5d157a28b96ddfb27497c8e6a11baaf1767/modules/posts.min.js")
+                    );
+                }
+
+                // Gated: editor-module → topic / blog / send
+                if (onPage(PAGE_GATES.editor)) {
+                    enhTasks.push(
+                        loadScript("https://cdn.jsdelivr.net/gh/hu6amini/perve_avenue@2f926f6ecf1b9c93cf8068a9154f3d085519b70a/modules/editor-module.min.js")
+                    );
+                }
+
+                // Gated: quote-queue + report → topic only
+                if (onPage(PAGE_GATES.topicOnly)) {
+                    enhTasks.push(
+                        loadScript("https://cdn.jsdelivr.net/gh/hu6amini/perve_avenue@4b6c36ab3cde44f79c3ddb4f7dfbeed8b98a83b6/modules/quote-queue.min.js"),
+                        loadScript("https://cdn.jsdelivr.net/gh/hu6amini/perve_avenue@f9795272564a920b5d282749729e6a03ab727603/modules/report.min.js")
+                    );
+                }
+
+                const results = await Promise.allSettled(enhTasks);
                 const failed = results.filter(r => r.status === 'rejected');
                 if (failed.length > 0) {
                     console.warn('[Boot] Enhancement load had failures:', failed);
                 }
-                console.debug(`[Boot] Enhancements loaded in ${(performance.now() - enhStart).toFixed(2)}ms`);
+                console.debug(`[Boot] Enhancements loaded in ${(performance.now() - enhStart).toFixed(2)}ms (${enhTasks.length} module(s))`);
 
                 // Finally, load the Forum Enhancer which registers everything
                 loadScript("https://cdn.jsdelivr.net/gh/hu6amini/perve_avenue@0eb381cb6757ee78d778cdc320c3747f777eb463/core/forum-enhancer.min.js")
@@ -305,46 +352,12 @@ whenBodyReady(() => {
             scheduleWork(loadEnhancements, IDLE_TIMEOUT_ENHANCEMENTS);
 
             // ============================================================
-            // LAZY LOAD: Social widgets (Twitter/Instagram) when they become visible
+            // LightGallery — media content pages only.
+            // (dynamic-loader never runs on body#msg; user-msg-loader owns
+            // that path. See note at the top of the file.)
             // ============================================================
-            const tweetEl = document.querySelector('.twitter-tweet, .twitter-timeline, [data-twitter]');
-            if (tweetEl) {
-                const tweetObserver = new IntersectionObserver((entries) => {
-                    entries.forEach(entry => {
-                        if (entry.isIntersecting) {
-                            const s = document.createElement('script');
-                            s.src = 'https://platform.twitter.com/widgets.js';
-                            s.async = true;
-                            document.head.appendChild(s);
-                            tweetObserver.disconnect();
-                            console.debug('[Boot] Twitter widgets loaded');
-                        }
-                    });
-                }, { rootMargin: '200px' });
-                tweetObserver.observe(tweetEl);
-            }
-
-            const instagramEl = document.querySelector('.instagram-media, .instagram-embed, [data-instagram]');
-            if (instagramEl) {
-                const instagramObserver = new IntersectionObserver((entries) => {
-                    entries.forEach(entry => {
-                        if (entry.isIntersecting) {
-                            const s = document.createElement("script");
-                            s.src = "https://platform.instagram.com/en_US/embeds.js";
-                            s.async = true;
-                            document.head.appendChild(s);
-                            instagramObserver.disconnect();
-                            console.debug('[Boot] Instagram embeds loaded');
-                        }
-                    });
-                }, { rootMargin: '200px' });
-                instagramObserver.observe(instagramEl);
-            }
-
-            // Load LightGallery only on content pages (topic, send, search, blog)
             const checkAndLoadLightGallery = () => {
-                const id = document.body?.id;
-                if (CONTENT_PAGE_IDS.includes(id)) {
+                if (onPage(PAGE_GATES.mediaContent)) {
                     loadLightGallery().catch(err => console.error('[Boot] LightGallery failed:', err));
                 }
             };
