@@ -7201,6 +7201,10 @@ body.has-docked-editor {
     position: relative;
 }
 
+.mc-composer .ProseMirror {
+   padding: 0;
+}
+
 /* 30.8a — Formatting toolbar */
 .mc-toolbar {
     display: flex;
