@@ -311,7 +311,7 @@ whenBodyReady(() => {
                     loadScript("https://cdn.jsdelivr.net/gh/hu6amini/perve_avenue@c3354d99d0652f4e94408f094ae0879d2be83e9b/modules/twemoji.min.js"),
                     loadScript("https://cdn.jsdelivr.net/gh/hu6amini/perve_avenue@7ff3fff75dfe269a166cd374fb3cbe9abfb58acd/modules/boards.min.js"),
                     loadScript("https://cdn.jsdelivr.net/gh/hu6amini/perve_avenue@6a84d4d102192c98c13f4d6b2f1df381396de33e/modules/modals.min.js"),
-                    loadScript("https://cdn.jsdelivr.net/gh/hu6amini/perve_avenue@d83090be867b950ab69113bf0ac039f401ae3d44/modules/modern-chat.min.js")
+                    loadScript("https://cdn.jsdelivr.net/gh/hu6amini/perve_avenue@c37454f58a50657423a7db186f96aa8ee8e6c7b6/modules/modern-chat.min.js")
                 ];
 
                 // Gated: posts → topic / send / blog / msg
