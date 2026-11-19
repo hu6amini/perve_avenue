@@ -707,6 +707,28 @@ var ModernChat = (function () {
             });
         });
 
+               // 1. Wire up spoilers
+        clone.querySelectorAll('.hb-spoiler').forEach(function (sp) {
+            sp.addEventListener('click', function () {
+                sp.classList.toggle('mc-revealed');
+            });
+        });
+
+        // ─── ADD THIS BLOCK ───
+        // Ensure dynamically added messages get parsed for Twemoji
+        if (window.twemoji && typeof window.twemoji.parse === 'function') {
+            window.twemoji.parse(clone, {
+                folder: 'svg',
+                ext: '.svg',
+                base: 'https://twemoji.maxcdn.com/v/latest/',
+                className: 'twemoji'
+            });
+        }
+        // ──────────────────────
+
+        return clone;
+    }
+
         return clone;
     }
 
