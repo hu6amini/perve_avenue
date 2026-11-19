@@ -7323,6 +7323,12 @@ body.has-docked-editor {
     max-height: 160px;
     overflow-y: auto;
     padding: 4px 6px;
+    
+    /* ADD THESE: Lock the height */
+    min-height: 32px; 
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
 }
 .mc-editor,
 .mc-editor .mc-tiptap {
@@ -7344,7 +7350,16 @@ body.has-docked-editor {
     float: left;
     height: 0;
 }
-.mc-editor .mc-tiptap p      { margin: 0; }
+.mc-editor .mc-tiptap p {
+    margin: 0 !important;
+    padding: 0 !important;
+    min-height: 22px;
+}
+/* Prevent the trailing break from adding phantom height */
+.mc-editor .mc-tiptap br.ProseMirror-trailingBreak {
+    line-height: 0;
+    font-size: 0;
+}
 .mc-editor .mc-tiptap p + p  { margin-top: 4px; }
 .mc-editor .mc-tiptap strong { font-weight: 700; }
 .mc-editor .mc-tiptap em     { font-style: italic; }
