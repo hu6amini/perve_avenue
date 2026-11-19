@@ -729,9 +729,6 @@ var ModernChat = (function () {
         return clone;
     }
 
-        return clone;
-    }
-
     function syncMessages(canonical) {
         if (canonical.length > CONFIG.HISTORY_LIMIT) {
             canonical = canonical.slice(-CONFIG.HISTORY_LIMIT);
