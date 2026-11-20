@@ -7326,10 +7326,12 @@ body.has-docked-editor {
     min-width: 0;
     max-height: 160px;
     overflow-y: auto;
-    padding: 4px 6px;
     
-    /* ADD THESE: Lock the height */
-    min-height: 32px; 
+    /* Remove the old vertical padding and min-height */
+    padding: 0 6px; 
+    min-height: 36px; 
+    
+    /* Use Flexbox to vertically center the text */
     display: flex;
     flex-direction: column;
     justify-content: center;
@@ -7354,10 +7356,15 @@ body.has-docked-editor {
     float: left;
     height: 0;
 }
+/* Kill the invisible height added by TipTap's trailing break */
+.mc-editor .mc-tiptap br.ProseMirror-trailingBreak {
+    display: none !important;
+}
 .mc-editor .mc-tiptap p {
     margin: 0 !important;
     padding: 0 !important;
     min-height: 22px;
+    line-height: 22px;
 }
 /* Prevent the trailing break from adding phantom height */
 .mc-editor .mc-tiptap br.ProseMirror-trailingBreak {
