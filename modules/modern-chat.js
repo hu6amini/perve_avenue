@@ -207,7 +207,21 @@ var ModernChat = (function () {
                 case 'u': return '[u]' + inner + '[/u]';
                 case 's': case 'strike': case 'del': return '[s]' + inner + '[/s]';
                 case 'code': return '[code]' + inner + '[/code]';
-                case 'a': return '[url=' + (node.getAttribute('href') || '') + ']' + inner + '[/url]';
+                case 'a': 
+                    var href = node.getAttribute('href') || '';
+                    // If the link text is exactly the URL, use the shorthand format
+                    if (inner === href || !inner) return '[url]' + href + '[/url]';
+                    return '[url=' + href + ']' + inner + '[/url]';
+                case 'span':
+                    if (node.hasAttribute('data-spoiler')) {
+                        return '[SPOILER]' + inner + '[/SPOILER]';
+                    }
+                    var style = node.getAttribute('style') || '';
+                    var colorMatch = style.match(/color:\s*([^;]+)/i);
+                    if (colorMatch) {
+                        return '[color=' + colorMatch[1].trim() + ']' + inner + '[/color]';
+                    }
+                    return inner;
                 case 'blockquote': return '[quote]' + inner + '[/quote]';
                 case 'p': return inner + (node.nextSibling ? '\n' : '');
                 case 'div': return inner + (node.nextSibling ? '\n' : '');
@@ -462,13 +476,13 @@ var ModernChat = (function () {
             '<div class="mc-presence-list" hidden></div>',
             '<div class="mc-composer">',
             '  <div class="mc-toolbar">',
-            // Bold / Italic / Underline / Strikethrough are Solid-only in FA
             '    <button type="button" data-cmd="bold" aria-label="Bold"><i class="fa-regular fa-bold" aria-hidden="true"></i></button>',
             '    <button type="button" data-cmd="italic" aria-label="Italic"><i class="fa-regular fa-italic" aria-hidden="true"></i></button>',
             '    <button type="button" data-cmd="underline" aria-label="Underline"><i class="fa-regular fa-underline" aria-hidden="true"></i></button>',
             '    <button type="button" data-cmd="strike" aria-label="Strikethrough"><i class="fa-regular fa-strikethrough" aria-hidden="true"></i></button>',
-            '    <button type="button" data-cmd="code" aria-label="Inline code"><i class="fa-regular fa-code" aria-hidden="true"></i></button>',
-            // Emoji button moved here, with margin-left: auto to push it to the right
+            '    <button type="button" data-cmd="link" aria-label="Insert Link"><i class="fa-regular fa-link" aria-hidden="true"></i></button>',
+            '    <button type="button" data-cmd="color" aria-label="Text Color"><i class="fa-regular fa-palette" aria-hidden="true"></i></button>',
+            '    <button type="button" data-cmd="spoiler" aria-label="Spoiler"><i class="fa-regular fa-eye-slash" aria-hidden="true"></i></button>',
             '    <button type="button" class="mc-btn-emoji" style="margin-left: auto;" aria-label="Emoji">',
             '      <i class="fa-regular fa-face-smile" aria-hidden="true"></i>',
             '    </button>',
@@ -952,13 +966,20 @@ var ModernChat = (function () {
             import(base + 'core' + v),
             import(base + 'starter-kit' + v),
             import(base + 'extension-placeholder' + v),
-            import(base + 'extension-underline' + v)
+            import(base + 'extension-underline' + v),
+            import(base + 'extension-link' + v),
+            import(base + 'extension-text-style' + v),
+            import(base + 'extension-color' + v)
         ]).then(function (mods) {
             return {
                 Editor: mods[0].Editor || (mods[0].default && mods[0].default.Editor),
+                Mark: mods[0].Mark || (mods[0].default && mods[0].default.Mark),
                 StarterKit: mods[1].StarterKit || mods[1].default,
                 Placeholder: mods[2].Placeholder || mods[2].default,
-                Underline: mods[3].Underline || mods[3].default
+                Underline: mods[3].Underline || mods[3].default,
+                Link: mods[4].Link || (mods[4].default && mods[4].default.Link),
+                TextStyle: mods[5].TextStyle || (mods[5].default && mods[5].default.TextStyle),
+                Color: mods[6].Color || (mods[6].default && mods[6].default.Color)
             };
         });
         state.tipTapDeps = await Promise.race([load, timeout]);
@@ -967,6 +988,9 @@ var ModernChat = (function () {
     async function initComposer() {
         if (state.editor || state.editorMode) return;
         var wrap = els.editorWrap;
+        
+        wrap.style.opacity = '0'; 
+
         try {
             var deps = await loadTipTap();
             els.editor.textContent = '';
@@ -975,12 +999,27 @@ var ModernChat = (function () {
             wrap.innerHTML = '';
             wrap.appendChild(mount);
             var placeholderExt = deps.Placeholder.configure({ placeholder: '> type a message...' });
+
+            // Custom Spoiler Mark for TipTap
+            var SpoilerMark = deps.Mark.create({
+                name: 'spoiler',
+                inclusive: true,
+                parseHTML: function() { return [{ tag: 'span[data-spoiler]' }]; },
+                renderHTML: function(ref) {
+                    return ['span', Object.assign({}, ref.HTMLAttributes, { 'data-spoiler': 'true', class: 'mc-rendered-spoiler' }), 0];
+                }
+            });
+
             state.editor = new deps.Editor({
                 element: mount,
                 extensions: [
                     deps.StarterKit.configure({ heading: false, codeBlock: false, bulletList: false, orderedList: false, blockquote: false, horizontalRule: false }),
                     deps.Underline,
-                    placeholderExt
+                    placeholderExt,
+                    deps.Link.configure({ openOnClick: false }),
+                    deps.TextStyle,
+                    deps.Color,
+                    SpoilerMark
                 ],
                 content: '',
                 editorProps: {
@@ -999,6 +1038,11 @@ var ModernChat = (function () {
             els.editor.addEventListener('input', onComposerUpdate);
             els.editor.addEventListener('keydown', onComposerKeyDown);
             state.editorMode = 'fallback';
+        } finally {
+            requestAnimationFrame(function() {
+                wrap.style.opacity = '1';
+                wrap.style.transition = 'opacity 0.15s ease';
+            });
         }
     }
     function getComposerHtml() {
@@ -1031,11 +1075,30 @@ var ModernChat = (function () {
                 case 'italic':    c.toggleItalic().run(); break;
                 case 'underline': c.toggleUnderline().run(); break;
                 case 'strike':    c.toggleStrike().run(); break;
-                case 'code':      c.toggleCode().run(); break;
+                case 'spoiler':   c.toggleMark('spoiler').run(); break;
+                case 'link':      
+                    var url = prompt('Enter URL:', 'https://');
+                    if (url) c.extendMarkRange('link').setLink({ href: url }).run();
+                    break;
+                case 'color':     
+                    var color = prompt('Enter color (e.g., red, #10B981):', 'red');
+                    if (color) c.setColor(color).run();
+                    break;
             }
         } else if (state.editorMode === 'fallback') {
             var map = { bold: 'bold', italic: 'italic', underline: 'underline', strike: 'strikeThrough' };
-            if (map[cmd]) document.execCommand(map[cmd]);
+            if (map[cmd]) {
+                document.execCommand(map[cmd]);
+            } else if (cmd === 'link') {
+                var url = prompt('Enter URL:', 'https://');
+                if (url) document.execCommand('createLink', false, url);
+            } else if (cmd === 'color') {
+                var color = prompt('Enter color (e.g., red, #10B981):', 'red');
+                if (color) document.execCommand('foreColor', false, color);
+            } else if (cmd === 'spoiler') {
+                var text = window.getSelection().toString();
+                if (text) document.execCommand('insertHTML', false, '<span data-spoiler="true">' + text + '</span>');
+            }
         }
     }
     function onComposerUpdate() {
