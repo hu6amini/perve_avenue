@@ -7637,8 +7637,7 @@ body.has-docked-editor {
 }
 
 /* Restore visibility on child elements */
-.footer_links > a,
-.footer_links > em {
+.footer_links * {
   font-size: var(--text-xs) !important;
   color: var(--text-tertiary) !important;
   font-weight: 400 !important;
