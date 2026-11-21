@@ -7557,6 +7557,11 @@ body.has-docked-editor {
     padding: 0 !important;
     margin: 0 !important;
 }
+.FFA-element:hover {
+transform: translateY(-2px);
+    box-shadow: var(--shadow-md);
+    border-color: var(--primary-color);
+}
 .FFA-row-elements {
     display: grid !important;
     grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)) !important;
