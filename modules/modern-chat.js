@@ -184,7 +184,7 @@ var ModernChat = (function () {
         return null;
     }
 
-    // ─── BBCode ↔ HTML ────────────────────────────────────────────────────
+       // ─── BBCode ↔ HTML ────────────────────────────────────────────────────
     function htmlToBB(html) {
         if (!html) return '';
         var div = document.createElement('div');
@@ -209,7 +209,6 @@ var ModernChat = (function () {
                 case 'code': return '[code]' + inner + '[/code]';
                 case 'a': 
                     var href = node.getAttribute('href') || '';
-                    // If the link text is exactly the URL, use the shorthand format
                     if (inner === href || !inner) return '[url]' + href + '[/url]';
                     return '[url=' + href + ']' + inner + '[/url]';
                 case 'span':
@@ -231,6 +230,28 @@ var ModernChat = (function () {
         var out = '';
         for (var i = 0; i < div.childNodes.length; i++) out += walk(div.childNodes[i]);
         return out.replace(/\n{3,}/g, '\n\n').trim();
+    }
+
+    function bbToHTML(bb) {
+        if (!bb) return '';
+        var html = escapeHtml(bb);
+        html = html.replace(/\[b\]([\s\S]*?)\[\/b\]/gi, '<strong>$1</strong>');
+        html = html.replace(/\[i\]([\s\S]*?)\[\/i\]/gi, '<em>$1</em>');
+        html = html.replace(/\[u\]([\s\S]*?)\[\/u\]/gi, '<u>$1</u>');
+        html = html.replace(/\[s\]([\s\S]*?)\[\/s\]/gi, '<s>$1</s>');
+        html = html.replace(/\[code\]([\s\S]*?)\[\/code\]/gi, '<code>$1</code>');
+        
+        // URL handling (both shorthand and custom names)
+        html = html.replace(/\[url\]([\s\S]*?)\[\/url\]/gi, '<a href="$1" target="_blank" rel="noopener">$1</a>');
+        html = html.replace(/\[url=([^\]]+)\]([\s\S]*?)\[\/url\]/gi, '<a href="$1" target="_blank" rel="noopener">$2</a>');
+        
+        // Color and Spoiler
+        html = html.replace(/\[color=([^\]]+)\]([\s\S]*?)\[\/color\]/gi, '<span style="color:$1">$2</span>');
+        html = html.replace(/\[SPOILER\]([\s\S]*?)\[\/SPOILER\]/gi, '<span data-spoiler="true">$1</span>');
+        
+        html = html.replace(/\[img\]([\s\S]*?)\[\/img\]/gi, '<img src="$1" alt="" loading="lazy" decoding="async">');
+        html = html.replace(/\r?\n/g, '<br>');
+        return html;
     }
 
     // ─── TIME HELPERS ─────────────────────────────────────────────────────
@@ -1221,9 +1242,23 @@ var ModernChat = (function () {
         if (!msg) return;
         var nick = (msg.user && (msg.user.nickname || msg.user.name)) || 'user';
         var date = msg.date instanceof Date ? msg.date : new Date(msg.date);
-        var quoteLine = '[quote=' + nick + ', ' + formatCompactAbsolute(date) + ']' + msg.content + '[/quote]\n';
+        
+        // Convert the raw BBCode content into HTML so it formats properly in TipTap
+        var formattedContent = bbToHTML(msg.content);
+        
+        // Build the quote string. Since TipTap is rich text, we inject HTML.
+        // (The legacy HelloBox will receive this back as BBCode on send).
+        var quoteLine = '<blockquote>[quote=' + nick + ', ' + formatCompactAbsolute(date) + ']' + msg.content + '[/quote]</blockquote><p></p>';
+        
         await initComposer();
-        insertIntoComposer(quoteLine);
+        
+        // Insert the HTML block into TipTap
+        if (state.editorMode === 'tiptap' && state.editor) {
+            state.editor.commands.insertContent(quoteLine);
+        } else {
+            insertIntoComposer(quoteLine);
+        }
+        
         focusComposer();
     }
     async function doEdit(msgId) {
