@@ -191,6 +191,12 @@ if (typeof window !== 'undefined') {
                 pageTypes: ['topic', 'blog', 'search', 'forum']
             });
             globalThis.forumObserver.register({
+               id: 'emoji-replacer-ads',
+               callback: function(node) { replaceCustomEmojis(node, false); },
+               selector: '#ffAdStart, #FFA-box',
+               priority: 'low'
+            });
+            globalThis.forumObserver.register({
                 id: 'emoji-replacer-quotes',
                 callback: function(node) { replaceCustomEmojis(node, false); },
                 selector: '.quote, .code, .spoiler, .modern-quote, .modern-spoiler',
