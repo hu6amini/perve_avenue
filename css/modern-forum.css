@@ -7583,3 +7583,174 @@ body.has-docked-editor {
     .mc-emoji-picker { left: 8px; right: 8px; max-height: 45dvh; }
     .mc-editor-wrap  { max-height: 30dvh; }
 }
+
+
+
+
+
+/* ============================================================
+   FFA — ForumFree ad block (`#ffAdStart`)
+   Scoped override: re-themes the block with the emerald
+   tokens, adds a Sponsored marker, and keeps it visually
+   distinct from `.modern-card` community content.
+   Do NOT hide it — this is the forum's ad revenue.
+   ============================================================ */
+
+/* --- outer wrapper ---------------------------------------- */
+#ffAdStart .container.skin_tbl_width {
+    display: block !important;
+    width: 100% !important;
+    max-width: 1200px;
+    margin: var(--space-xl) auto;
+    padding: 0 var(--pad-4);
+}
+
+/* --- box -------------------------------------------------- */
+#FFA-box {
+    background: var(--surface-color);
+    border: 1px dashed var(--border-color);
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-sm);
+    overflow: hidden !important; /* beats inline overflow:visible */
+    padding: 0;
+}
+
+/* --- header: "You might be interested in" + Sponsored ---- */
+#FFA-box .FFA-head {
+    display: flex;
+    align-items: center;
+    gap: var(--space-sm);
+    padding: var(--space-sm) var(--space-lg);
+    background: var(--surface-light);
+    border-bottom: 1px solid var(--border-color);
+    font-family: var(--font-primary);
+    font-size: var(--text-xs);
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    color: var(--text-tertiary);
+}
+
+#FFA-box .FFA-head > span { flex: 1 1 auto; }
+
+#FFA-box .FFA-head::after {
+    content: "Sponsored";
+    padding: 0.15em 0.55em;
+    font-size: 0.65rem;
+    font-weight: 700;
+    color: var(--text-secondary);
+    background: var(--surface-color);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-full);
+    letter-spacing: 0.05em;
+}
+
+/* --- card grid ------------------------------------------- */
+#FFA-box .FFA-row-elements {
+    display: grid !important;
+    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+    gap: var(--space-md);
+    padding: var(--space-md);
+}
+
+/* --- individual ad card ---------------------------------- */
+#FFA-box .FFA-element {
+    display: flex;
+    flex-direction: column;
+    background: var(--surface-color);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius);
+    overflow: hidden;
+    transition: border-color .2s ease, box-shadow .2s ease, transform .2s ease;
+}
+
+#FFA-box .FFA-element:hover {
+    border-color: var(--primary-color);
+    box-shadow: var(--shadow-md);
+    transform: translateY(-1px);
+}
+
+/* --- thumbnail ------------------------------------------- */
+#FFA-box .FFA-image {
+    aspect-ratio: 4 / 3;
+    overflow: hidden;
+    background: var(--surface-light);
+}
+
+#FFA-box .FFA-image a,
+#FFA-box .FFA-image .FFA-contianer { /* sic — ForumFree typo */
+    display: block;
+    width: 100%;
+    height: 100%;
+}
+
+#FFA-box .FFA-image img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: block;
+    border-radius: 0;
+}
+
+/* --- text ------------------------------------------------ */
+#FFA-box .FFA-text {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-xs);
+    padding: var(--space-sm) var(--space-md) var(--space-md);
+}
+
+#FFA-box .FFA-title {
+    font-family: var(--font-heading);
+    font-size: var(--text-md);
+    line-height: 1.3;
+}
+
+#FFA-box .FFA-title a {
+    color: var(--text-primary);
+    text-decoration: none;
+}
+
+#FFA-box .FFA-title a:hover {
+    color: var(--primary-light);
+    text-decoration: underline;
+}
+
+/* cap twemoji inside ad titles */
+#FFA-box .FFA-title .twemoji {
+    width: 1em;
+    height: 1em;
+    vertical-align: -0.1em;
+}
+
+#FFA-box .FFA-desc {
+    font-size: var(--text-sm);
+    line-height: 1.55;
+    color: var(--text-secondary);
+}
+
+#FFA-box .FFA-desc a {
+    display: -webkit-box;
+    -webkit-line-clamp: 4;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+    color: inherit;
+    text-decoration: none;
+}
+
+#FFA-box .FFA-desc a:hover {
+    color: var(--text-primary);
+    text-decoration: none;
+}
+
+/* --- responsive ----------------------------------------- */
+@media (max-width: 680px) {
+    #FFA-box .FFA-row-elements {
+        grid-template-columns: 1fr;
+        padding: var(--space-sm);
+    }
+    #FFA-box .FFA-head {
+        padding: var(--space-xs) var(--space-md);
+        font-size: 0.6875rem;
+    }
+}
