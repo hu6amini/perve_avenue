@@ -538,6 +538,18 @@ const ForumTopMenuModule = (function () {
                 return;
             }
 
+            // Append a search toggle button for mobile
+const searchToggle = document.createElement('button');
+searchToggle.className = 'mfn-action mfn-search-toggle';
+searchToggle.setAttribute('aria-label', 'Toggle search');
+searchToggle.innerHTML = '<i class="fa-regular fa-magnifying-glass"></i>';
+searchToggle.style.display = 'none'; // shown via CSS media query
+document.querySelector('.mfn-actions').prepend(searchToggle);
+
+searchToggle.addEventListener('click', () => {
+    document.querySelector('.mfn-search').classList.toggle('mfn-search--mobile-open');
+});           
+
             // Social login click → replicate legacy cookie + redirect
             const social = e.target.closest('.mfn-social-btn[data-service][data-url]');
             if (social) {
