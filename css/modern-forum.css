@@ -6626,25 +6626,6 @@ body.has-docked-editor {
    Theme contract — every color, radius, shadow and font is
    consumed from the parent theme. Fallbacks preserve the
    previous look if a token is absent.
-
-   Colors       --surface-color          panel / cards background
-                --surface-elevated       header / raised areas
-                --text-primary           body text
-                --text-secondary         muted UI
-                --text-tertiary          timestamps
-                --border-color           subtle borders
-                --border-color-strong    emphasized borders
-                --primary-color          accent (FAB, links, focus)
-                --primary-color-hover    accent hover
-                --primary-color-soft     12 % accent tint
-                --danger                 destructive / badge
-   Radii        --radius-sm, --radius, --radius-lg
-   Shadows      --shadow-sm, --shadow-md, --shadow-lg
-   Typography   --font-mono               inline code (falls back
-                                          to system mono)
-
-   Fonts inherit from <body>. No :root. No colour-scheme media
-   query. Dark mode is whatever the theme currently resolves to.
    ------------------------------------------------------------ */
 
 /* 30.1 — Floating action button ───────────────────────────── */
@@ -6753,9 +6734,7 @@ body.has-docked-editor {
     color: var(--text-primary, #111827);
     white-space: nowrap;
 }
-.mc-title i {
-    color: var(--primary-color);
-}
+.mc-title i { color: var(--primary-color); }
 .mc-header-btn {
     width: 32px;
     height: 32px;
@@ -6785,8 +6764,7 @@ body.has-docked-editor {
     gap: 6px;
     padding: 4px 10px;
     border-radius: 999px;
-    background: var(--primary-color-soft,
-                color-mix(in srgb, var(--primary-color, #10B981) 12%, transparent));
+    background: var(--primary-color-soft, color-mix(in srgb, var(--primary-color, #10B981) 12%, transparent));
     color: var(--primary-color, #10B981);
     font-size: 11px;
     font-weight: 500;
@@ -6839,8 +6817,7 @@ body.has-docked-editor {
     width: 22px;
     height: 22px;
     border-radius: 50%;
-    background: var(--primary-color-soft,
-                color-mix(in srgb, var(--primary-color, #10B981) 12%, transparent));
+    background: var(--primary-color-soft, color-mix(in srgb, var(--primary-color, #10B981) 12%, transparent));
     color: var(--primary-color, #10B981);
     display: flex;
     align-items: center;
@@ -6856,13 +6833,12 @@ body.has-docked-editor {
 }
 
 /* 30.5 — Messages list ────────────────────────────────────── */
-/* The wrapper keeps the button pinned to the bottom of the messages */
 .mc-messages-wrapper {
     flex: 1 1 auto;
     position: relative;
     display: flex;
     flex-direction: column;
-    min-height: 0; /* Crucial for flexbox scrolling */
+    min-height: 0;
 }
 
 .mc-messages {
@@ -6873,7 +6849,7 @@ body.has-docked-editor {
     scrollbar-width: thin;
     scrollbar-color: var(--border-color-strong, #D1D5DB) transparent;
     overscroll-behavior: contain;
-    overflow-anchor: none; /* Prevents browser scroll jump */
+    overflow-anchor: none;
 }
 .mc-messages::-webkit-scrollbar { width: 8px; }
 .mc-messages::-webkit-scrollbar-thumb {
@@ -6883,7 +6859,7 @@ body.has-docked-editor {
 }
 .mc-messages::-webkit-scrollbar-track { background: transparent; }
 
-/* 30.6 — Message card (iMessage/Telegram-style content bubble) ──── */
+/* 30.6 — Message card ─────────────────────────────────────── */
 .mc-message {
     display: flex;
     gap: 10px;
@@ -6895,12 +6871,10 @@ body.has-docked-editor {
     animation: mc-msg-in 0.18s ease-out;
     overflow-anchor: none;
 }
-
 .mc-message:hover {
     background-color: rgba(255, 255, 255, 0.05);
 }
 
-/* 1. Force the avatar back to a reasonable size */
 .mc-message .hb-avatar {
     width: 32px !important;
     height: 32px !important;
@@ -6911,8 +6885,7 @@ body.has-docked-editor {
     transition: border-color 0.15s ease;
 }
 
-/* ─── Initial Avatars ───────────────────────────────────────── */
-
+/* Initial Avatars */
 .mc-initial-avatar {
     display: flex;
     align-items: center;
@@ -6922,19 +6895,18 @@ body.has-docked-editor {
     font-size: 19.776px;
     text-transform: uppercase;
     border: 2px solid transparent;
-    /* Inherits width: 32px, height: 32px, border-radius: 50%, aspect-ratio: 1/1 from .hb-avatar */
 }
 
-/* 2. Apply the colored rings */
+/* Role Colored Rings */
 .mc-message .hb-avatar[data-role="admin"], .mc-initial-avatar[data-role="admin"]       { border-color: var(--admin-color) !important; }
-.mc-message .hb-avatar[data-role="founder"], .mc-initial-avatar[data-role="founder"]       { border-color: var(--founder-color) !important; }
-.mc-message .hb-avatar[data-role="global-mod"], .mc-initial-avatar[data-role="global-mod"]   { border-color: var(--group-global-moderator) !important; }
-.mc-message .hb-avatar[data-role="mod"], .mc-initial-avatar[data-role="mod"]         { border-color: var(--mod-color) !important; }
-.mc-message .hb-avatar[data-role="member"], .mc-initial-avatar[data-role="member"]      { border-color: var(--member-color) !important; }
-.mc-message .hb-avatar[data-role="game-dev"], .mc-initial-avatar[data-role="game-dev"]    { border-color: var(--game-dev-color) !important; }
-.mc-message .hb-avatar[data-role="fan"], .mc-initial-avatar[data-role="fan"]         { border-color: var(--fan-color) !important; }
+.mc-message .hb-avatar[data-role="founder"], .mc-initial-avatar[data-role="founder"]   { border-color: var(--founder-color) !important; }
+.mc-message .hb-avatar[data-role="global-mod"], .mc-initial-avatar[data-role="global-mod"] { border-color: var(--group-global-moderator) !important; }
+.mc-message .hb-avatar[data-role="mod"], .mc-initial-avatar[data-role="mod"]           { border-color: var(--mod-color) !important; }
+.mc-message .hb-avatar[data-role="member"], .mc-initial-avatar[data-role="member"]     { border-color: var(--member-color) !important; }
+.mc-message .hb-avatar[data-role="game-dev"], .mc-initial-avatar[data-role="game-dev"] { border-color: var(--game-dev-color) !important; }
+.mc-message .hb-avatar[data-role="fan"], .mc-initial-avatar[data-role="fan"]           { border-color: var(--fan-color) !important; }
 
-.mc-message .hb-body   { flex: 1; min-width: 0; }
+.mc-message .hb-body { flex: 1; min-width: 0; }
 .mc-message .hb-header {
     display: flex;
     align-items: center;
@@ -6950,7 +6922,7 @@ body.has-docked-editor {
     color: var(--text-primary, #111827);
     margin: 0;
     flex: 0 1 auto;
-    min-width: 0; /* Crucial: allows the flex item to shrink below its content size */
+    min-width: 0;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
@@ -6974,6 +6946,12 @@ body.has-docked-editor {
     margin: 0 !important;
     white-space: nowrap;
 }
+.mc-message .mc-time::before {
+    content: "·";
+    margin: 0 6px;
+    color: var(--text-tertiary, #9CA3AF);
+    font-weight: bold;
+}
 .mc-message time.mc-time {
     cursor: help;
     border-bottom: 1px dotted transparent;
@@ -6984,7 +6962,7 @@ body.has-docked-editor {
     color: var(--text-secondary, #6B7280);
 }
 
-/* ── Content bubble ─────────────────────────────────────────── */
+/* Content bubble */
 .mc-message .hb-text-content {
     margin: 0 !important;
     padding: 0 !important;
@@ -7023,12 +7001,11 @@ body.has-docked-editor {
     background: var(--surface-color, #FFFFFF);
     border: 1px solid var(--border-color, #E5E7EB);
     border-radius: 4px;
-    font-family: var(--font-mono,
-                 ui-monospace, "SF Mono", Monaco, "Cascadia Code", monospace);
+    font-family: var(--font-mono, ui-monospace, "SF Mono", Monaco, "Cascadia Code", monospace);
     font-size: 0.9em;
 }
 
-/* Nested quote refs — inside the bubble */
+/* Nested quote refs */
 .mc-message .hb-quote-ref {
     display: inline-flex;
     align-items: center;
@@ -7036,8 +7013,7 @@ body.has-docked-editor {
     width: 18px;
     height: 18px;
     border-radius: 4px;
-    background: var(--primary-color-soft,
-                color-mix(in srgb, var(--primary-color, #10B981) 12%, transparent));
+    background: var(--primary-color-soft, color-mix(in srgb, var(--primary-color, #10B981) 12%, transparent));
     color: var(--primary-color, #10B981);
     cursor: pointer;
     margin-right: 4px;
@@ -7047,7 +7023,7 @@ body.has-docked-editor {
 .mc-message .hb-quote-ref:hover { background: var(--primary-color, #10B981); }
 .mc-message .hb-quote-ref img    { width: 12px; height: 12px; border-radius: 0; }
 
-/* Spoilers */
+/* Spoilers (Read View) */
 .mc-message .hb-spoiler {
     background: var(--surface-color, #FFFFFF);
     border-radius: 4px;
@@ -7059,21 +7035,17 @@ body.has-docked-editor {
 }
 .mc-message .hb-spoiler.mc-revealed { filter: none; user-select: text; }
 
-/* Flash when jumping to a quoted message */
-.mc-message.mc-flash {
-    animation: mc-flash 1.2s ease;
-}
+/* Flash animation */
+.mc-message.mc-flash { animation: mc-flash 1.2s ease; }
 @keyframes mc-flash {
     0%, 100% { border-color: var(--border-color, #E5E7EB); }
     20%      { border-color: var(--primary-color, #10B981);
-               background: var(--primary-color-soft,
-                           color-mix(in srgb, var(--primary-color, #10B981) 14%, transparent)); }
+               background: var(--primary-color-soft, color-mix(in srgb, var(--primary-color, #10B981) 14%, transparent)); }
 }
 
-/* 30.6a — Role badge (pill next to nickname) ──────────────────── */
-/* 3. The Badge next to the nickname */
+/* 30.6a — Role badge ──────────────────────────────────────── */
 .mc-role-badge {
-    display: none;
+    display: none; /* Hidden in favor of rings */
     align-items: center;
     padding: 1px 7px;
     border-radius: 999px;
@@ -7093,58 +7065,10 @@ body.has-docked-editor {
 .mc-role-badge.group-global-mod { background: var(--group-global-moderator) !important; }
 .mc-role-badge.group-mod        { background: var(--mod-color) !important; }
 .mc-role-badge.group-member     { background: var(--member-color) !important; }
-.mc-role-badge.group-game-dev   { background: var(--game-dev-color) !important;  }
+.mc-role-badge.group-game-dev   { background: var(--game-dev-color) !important; }
 .mc-role-badge.group-fan        { background: var(--fan-color) !important; }
 
-/* 30.7 — Message hover actions (kept, re-anchored) ───────────── */
-.mc-message-actions {
-    position: absolute;
-    top: 4px;
-    right: 8px;
-    display: flex;
-    gap: 2px;
-    opacity: 0;
-    transform: translateY(2px);
-    transition: opacity 0.12s ease, transform 0.12s ease;
-    pointer-events: none;
-    background: var(--surface-color, #FFFFFF);
-    border-radius: var(--radius-sm, 8px);
-    padding: 2px;
-    box-shadow: var(--shadow-sm, 0 1px 2px rgba(0, 0, 0, 0.05));
-}
-.mc-message:hover .mc-message-actions {
-    opacity: 1;
-    transform: translateY(0);
-    pointer-events: auto;
-}
-.mc-message-action {
-    width: 26px;
-    height: 26px;
-    border-radius: var(--radius-sm, 8px);
-    border: 1px solid transparent;
-    background: transparent;
-    color: var(--text-secondary, #6B7280);
-    cursor: pointer;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    padding: 0;
-    font-family: inherit;
-    transition: background 0.12s ease, color 0.12s ease, border-color 0.12s ease;
-}
-.mc-message-action:hover {
-    background: var(--primary-color, #10B981);
-    color: #FFFFFF;
-    border-color: var(--primary-color, #10B981);
-}
-.mc-message-action[data-mc-act="delete"]:hover {
-    background: var(--danger, #EF4444);
-    border-color: var(--danger, #EF4444);
-    color: #FFFFFF;
-}
-.mc-message-action > i { font-size: 12px; line-height: 1; }
-
-/* 30.7 — Message hover actions (Consolidated) ───────────── */
+/* 30.7 — Message hover actions ───────────────────────────── */
 .mc-message-actions {
     position: absolute;
     top: 4px;
@@ -7201,10 +7125,6 @@ body.has-docked-editor {
     position: relative;
 }
 
-.mc-composer .ProseMirror {
-   padding: 0;
-}
-
 /* 30.8a — Formatting toolbar */
 .mc-toolbar {
     display: flex;
@@ -7236,8 +7156,6 @@ body.has-docked-editor {
     color: var(--text-primary, #111827);
 }
 .mc-toolbar button > i { font-size: 13px; line-height: 1; }
-
-/* Styles the emoji button to match the formatting buttons */
 .mc-toolbar .mc-btn-emoji {
     width: 28px;
     height: 28px;
@@ -7252,36 +7170,28 @@ body.has-docked-editor {
     padding: 0;
     transition: background 0.12s ease, color 0.12s ease;
 }
-
 .mc-toolbar .mc-btn-emoji:hover {
     background: rgba(0, 0, 0, 0.04);
     background: color-mix(in srgb, currentColor 6%, transparent);
     color: var(--text-primary, #111827);
 }
-
-.mc-toolbar .mc-btn-emoji > i {
-    font-size: 16px;
-    line-height: 1;
-}
+.mc-toolbar .mc-btn-emoji > i { font-size: 16px; line-height: 1; }
 
 /* 30.8b — Composer row */
 .mc-composer-row {
     display: flex;
-    align-items: flex-end; /* Anchors the button to the bottom */
+    align-items: flex-end;
     gap: 6px;
     background: var(--surface-color, #FFFFFF);
     border: 1px solid var(--border-color, #E5E7EB);
     border-radius: var(--radius, 12px);
     padding: 4px;
     transition: border-color 0.15s ease, box-shadow 0.15s ease;
-    
-    /* Lock the minimum height of the capsule (32px button + 4px padding top/bottom) */
     min-height: 40px; 
 }
 .mc-composer-row:focus-within {
     border-color: var(--primary-color, #10B981);
-    box-shadow: 0 0 0 3px var(--primary-color-soft,
-                            color-mix(in srgb, var(--primary-color, #10B981) 18%, transparent));
+    box-shadow: 0 0 0 3px var(--primary-color-soft, color-mix(in srgb, var(--primary-color, #10B981) 18%, transparent));
 }
 .mc-composer-btn {
     width: 32px;
@@ -7306,8 +7216,7 @@ body.has-docked-editor {
 }
 .mc-composer-btn:disabled { opacity: 0.5; cursor: default; }
 .mc-composer-btn.is-active {
-    background: var(--primary-color-soft,
-                color-mix(in srgb, var(--primary-color, #10B981) 12%, transparent));
+    background: var(--primary-color-soft, color-mix(in srgb, var(--primary-color, #10B981) 12%, transparent));
     color: var(--primary-color, #10B981);
 }
 .mc-composer-btn > i { font-size: 16px; line-height: 1; }
@@ -7327,22 +7236,15 @@ body.has-docked-editor {
 }
 
 /* 30.8c — Editor surface */
-/* The editor wrap */
 .mc-editor-wrap {
     flex: 1;
     min-width: 0;
     max-height: 160px;
     overflow-y: auto;
-    
-    /* Match the button height exactly so there is no jump */
     min-height: 32px; 
-    
-    /* Center the text vertically within the 32px */
     display: flex;
     flex-direction: column;
     justify-content: center;
-    
-    /* Remove vertical padding, rely on flexbox centering */
     padding: 0 6px; 
 }
 .mc-editor,
@@ -7365,20 +7267,18 @@ body.has-docked-editor {
     float: left;
     height: 0;
 }
-/* Kill the invisible height added by TipTap's trailing break */
+
+/* CLS fix for TipTap */
 .mc-editor .mc-tiptap br.ProseMirror-trailingBreak {
     display: none !important;
+    line-height: 0;
+    font-size: 0;
 }
 .mc-editor .mc-tiptap p {
     margin: 0 !important;
     padding: 0 !important;
     min-height: 22px;
     line-height: 22px;
-}
-/* Prevent the trailing break from adding phantom height */
-.mc-editor .mc-tiptap br.ProseMirror-trailingBreak {
-    line-height: 0;
-    font-size: 0;
 }
 .mc-editor .mc-tiptap p + p  { margin-top: 4px; }
 .mc-editor .mc-tiptap strong { font-weight: 700; }
@@ -7390,9 +7290,24 @@ body.has-docked-editor {
     background: var(--surface-elevated, var(--surface-color, #FFFFFF));
     border: 1px solid var(--border-color, #E5E7EB);
     border-radius: 4px;
-    font-family: var(--font-mono,
-                 ui-monospace, "SF Mono", Monaco, "Cascadia Code", monospace);
+    font-family: var(--font-mono, ui-monospace, "SF Mono", Monaco, "Cascadia Code", monospace);
     font-size: 0.9em;
+}
+
+/* Composer Spoiler Mark */
+.mc-editor .mc-tiptap span[data-spoiler],
+.mc-rendered-spoiler {
+    background: var(--surface-light, #2D3238);
+    border-radius: 4px;
+    padding: 0 4px;
+    cursor: pointer;
+    filter: blur(4px);
+    transition: filter 0.15s ease;
+    user-select: none;
+}
+.mc-editor .mc-tiptap span[data-spoiler]:hover,
+.mc-editor .mc-tiptap span[data-spoiler]:focus {
+    filter: none;
 }
 
 /* 30.9 — Emoji picker ─────────────────────────────────────── */
@@ -7443,7 +7358,7 @@ body.has-docked-editor {
     transform: scale(1.15);
 }
 
-/* 30.10 — Settings modal ──────────────────────────────────── */
+/* 30.10 — Settings & Color Modal ──────────────────────────── */
 .mc-modal-backdrop {
     position: fixed;
     inset: 0;
@@ -7508,10 +7423,31 @@ body.has-docked-editor {
     background: rgba(0, 0, 0, 0.04);
     background: color-mix(in srgb, currentColor 6%, transparent);
 }
-/* The button now floats at the bottom of the message area */
+
+/* Color Picker Grid */
+.mc-color-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 8px;
+    padding: 8px 0 16px 0;
+}
+.mc-color-swatch {
+    width: 100%;
+    height: 40px;
+    border-radius: 8px;
+    cursor: pointer;
+    transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+.mc-color-swatch:hover {
+    transform: scale(1.05);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+    z-index: 1;
+}
+
+/* Jump Button */
 .mc-jump-btn {
     position: absolute;
-    bottom: 16px; /* Floats 16px above the composer */
+    bottom: 16px;
     left: 50%;
     transform: translateX(-50%);
     background: var(--primary-color, #10B981);
@@ -7531,18 +7467,12 @@ body.has-docked-editor {
     animation: mc-fade-in 0.2s ease;
     transition: background 0.15s ease, transform 0.15s ease;
 }
-
-.mc-jump-btn[hidden] {
-    display: none !important;
-}
-
+.mc-jump-btn[hidden] { display: none !important; }
 .mc-jump-btn:hover {
     background: var(--primary-color-hover, #059669);
     transform: translateX(-50%) translateY(-2px);
 }
-.mc-jump-btn i {
-    font-size: 12px;
-}
+.mc-jump-btn i { font-size: 12px; }
 
 /* 30.11 — Animations ──────────────────────────────────────── */
 @keyframes mc-msg-in {
