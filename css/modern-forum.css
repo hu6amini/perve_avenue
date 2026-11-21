@@ -7512,52 +7512,52 @@ body.has-docked-editor {
 }
 
 .FFA-element {
-    background: var(--surface-color);
-    border: 1px solid var(--border-color);
-    border-radius: var(--radius);
-    box-shadow: var(--shadow);
-    overflow: hidden;
-    transition: transform 0.2s, box-shadow 0.2s;
-    display: flex;
-    flex-direction: column;
-    max-width: 450px;
-    justify-self: center;
-    width: 100%;
-    padding: 0;
+    background: var(--surface-color) !important;
+    border: 1px solid var(--border-color) !important;
+    border-radius: var(--radius) !important;
+    box-shadow: var(--shadow) !important;
+    overflow: hidden !important;
+    transition: transform 0.2s, box-shadow 0.2s !important;
+    display: flex !important;
+    flex-direction: column !important;
+    max-width: 450px !important;
+    justify-self: center !important;
+    width: 100% !important;
+    padding: 0 !important;
 }
 .FFA-row-elements {
     display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
-    gap: var(--space-md);
-    justify-content: start;
+    grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)) !important;
+    gap: var(--space-md) !important;
+    justify-content: start !important;
 }
 .FFA-image {
-    width: 100%;
-    aspect-ratio: 2 / 1;
-    overflow: hidden;
-    background-color: var(--surface-light);
-    background-size: cover;
-    background-position: center;
-    background-repeat: no-repeat;
-    position: relative;
-    border-radius: 0;
+    width: 100% !important;
+    aspect-ratio: 2 / 1 !important;
+    overflow: hidden !important;
+    background-color: var(--surface-light) !important;
+    background-size: cover !important;
+    background-position: center !important;
+    background-repeat: no-repeat !important;
+    position: relative !important;
+    border-radius: 0 !important;
 }
 .FFA-contianer {
-   display:flex;
-   max-height:100%
+   display:flex !important;
+   max-height:100% !important;
 }
 #ffAdStart img[src^="https://img.forumfree.net/html/emoticons/"] {
-    width: 1.25em;
-    height: 1.25em;
-    vertical-align: -0.1em;
-    display: inline-block;
-    opacity: 0;
+    width: 1.25em !important;
+    height: 1.25em !important;
+    vertical-align: -0.1em !important;
+    display: inline-block !important;
+    opacity: 0 !important;
 }
 .FFA-text {
-    padding: var(--pad-5);
-    flex: 1;
-    display: flex;
-    flex-direction: column;
-    gap: var(--space-sm);
-    justify-content: space-between;
+    padding: var(--pad-5) !important;
+    flex: 1 !important;
+    display: flex !important;
+    flex-direction: column !important;
+    gap: var(--space-sm) !important;
+    justify-content: space-between !important;
 }
