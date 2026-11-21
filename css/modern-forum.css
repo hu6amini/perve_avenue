@@ -7722,25 +7722,57 @@ body.has-docked-editor {
     border-radius: 4px;
 }
 
-/* ── Search (central, prominent) ────────────── */
-.mfn-search {
-    position: relative;
-    flex: 1 1 300px;
-    min-width: 200px;
-    max-width: 600px;
-    margin: 0 16px;
+.mfn-search-wrap {
     display: flex;
     align-items: center;
+    flex: 1 1 300px;
+    min-width: 250px;
+    max-width: 600px;
+    margin: 0 16px;
     background: var(--mfn-bg-elev);
     border: 1px solid var(--mfn-border);
     border-radius: var(--mfn-radius);
-    transition: border-color .18s var(--mfn-ease),
-                box-shadow .18s var(--mfn-ease),
-                background .18s var(--mfn-ease);
+    transition: border-color .18s var(--mfn-ease), box-shadow .18s var(--mfn-ease);
 }
-.mfn-search:focus-within {
+.mfn-search-wrap:focus-within {
     border-color: var(--mfn-accent);
     box-shadow: 0 0 0 3px var(--mfn-accent-soft);
+}
+
+/* The Select */
+.mfn-search-scope {
+    background: transparent;
+    border: none;
+    color: var(--mfn-fg-muted);
+    font: inherit;
+    font-size: .875rem;
+    padding: 0 8px 0 14px;
+    height: 42px;
+    cursor: pointer;
+    outline: none;
+    border-right: 1px solid var(--mfn-border);
+    -webkit-appearance: none;
+    appearance: none;
+}
+.mfn-search-scope:hover {
+    color: var(--mfn-fg);
+}
+
+/* The Form (no longer needs its own border/bg) */
+.mfn-search {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    position: relative;
+    margin: 0;
+    border: none;
+    box-shadow: none;
+    background: transparent;
+}
+/* Remove old focus-within from .mfn-search as it's now on the wrap */
+.mfn-search:focus-within {
+    border-color: transparent;
+    box-shadow: none;
 }
 .mfn-search-icon {
     position: absolute;
