@@ -7547,25 +7547,26 @@ body.has-docked-editor {
     margin: 0 !important;
 }
 .FFA-row-elements {
-    display: grid;
+    display: grid !important;
     grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)) !important;
     gap: var(--space-md) !important;
     justify-content: start !important;
 }
-.FFA-title a {
+.FFA-text .FFA-title a {
     color: var(--text-primary) !important;
     text-decoration: none !important;
     max-height: 100% !important;
     font-family: var(--font-heading) !important;
     font-size: var(--text-md) !important;
     margin: 0 !important;
-    display: flex !important;
+    display: block !important;
     align-items: center !important;
-    gap: var(--space-xs) !important;
-    flex-wrap: wrap !important;
     font-weight: 400 !important;
     text-align: left !important;
     padding: 0 !important;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
 }
 .FFA-image {
     width: 100% !important;
@@ -7596,4 +7597,12 @@ body.has-docked-editor {
     flex-direction: column !important;
     gap: var(--space-sm) !important;
     justify-content: space-between !important;
+}
+.FFA-desc {
+    margin: 0 !important;
+    padding: 0 !important;
+    display: flex !important;
+    gap: var(--space-lg) !important;
+    color: var(--text-tertiary) !important;
+    width: 100% !important;
 }
