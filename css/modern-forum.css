@@ -7579,6 +7579,10 @@ body.has-docked-editor {
     overflow: hidden;
     text-overflow: ellipsis;
 }
+.FFA-title a::before {
+   content: "\f07b";
+   display: inline-block;
+}
 .FFA-image {
     width: 100% !important;
     aspect-ratio: 2 / 1 !important;
