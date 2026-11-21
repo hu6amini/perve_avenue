@@ -6624,7 +6624,7 @@ body.has-docked-editor {
   pointer-events: none;
 }
 
-#blog .nav ~ div[style*="overflow"][style*="hidden"]  {
+#blog .nav ~ div[style*="overflow"][style*="hidden"], #forum .navsub.bottom.Justify  {
  display: none
 }
 
