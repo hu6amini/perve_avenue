@@ -7575,9 +7575,10 @@ body.has-docked-editor {
     font-weight: 400 !important;
     text-align: left !important;
     padding: 0 !important;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
+    white-space: nowrap !important;
+    overflow: hidden !important;
+    text-overflow: ellipsis !important;
+    line-height: 1.618 !important;
 }
 .FFA-title a::before {
    content: "\f07b";
@@ -7624,8 +7625,10 @@ body.has-docked-editor {
     width: 100% !important;
     line-height: 1.618 !important;
 }
-.FFA-text .FFA-desc a {
+.FFA-text .FFA-desc a, .FFA-desc span {
     margin: 0 !important;
     color: var(--text-tertiary) !important;
-    font-size: var(--text-xs);
+    font-size: var(--text-xs) !important;
+    text-align: left !important;
+    font-style: normal !important;
 }
