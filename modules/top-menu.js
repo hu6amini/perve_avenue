@@ -446,19 +446,78 @@ const ForumTopMenuModule = (function () {
         );
 
         // Search
+        // ── Scoped Search Setup ──────────────────────────────────
+        const searchWrap = h('div', { className: 'mfn-search-wrap' });
+
+        // 1. Scope Selector
+        const scopeSelect = h('select', {
+            className: 'mfn-search-scope',
+            'aria-label': 'Search scope'
+        });
+        scopeSelect.innerHTML = `
+            <option value="forum" selected>Forum</option>
+            <option value="google">Google</option>
+            <option value="user">Users</option>
+        `;
+        searchWrap.appendChild(scopeSelect);
+
+        // 2. The Form (defaults to Forum Search based on the selected option)
         const form = h('form', {
             className: 'mfn-search',
-            action: data.search.action,
-            method: data.search.method,
+            action: 'https://perveavenue.forumcommunity.net/', // Default Forum action
+            method: 'post',
             role: 'search'
         });
+        
         form.innerHTML =
             '<label class="mfn-search-label" for="mfn-search-input">Search</label>' +
             '<i class="fa-regular fa-magnifying-glass mfn-search-icon" aria-hidden="true"></i>' +
-            '<input id="mfn-search-input" type="search" name="q" ' +
-                'placeholder="Search the forum…" autocomplete="off" maxlength="150" required>' +
-            '<input type="hidden" name="as_sitesearch" value="' + escapeHtml(CONFIG.SITE_FILTER) + '">';
-        inner.appendChild(form);
+            '<input id="mfn-search-input" type="search" name="keywords" ' +
+                'placeholder="Search forum threads..." autocomplete="off" maxlength="150" required>' +
+            '<input type="hidden" name="act" value="Search" data-scope-added>' +
+            '<input type="hidden" name="CODE" value="01" data-scope-added>';
+            
+        searchWrap.appendChild(form);
+
+        // 3. The Switching Logic
+        scopeSelect.addEventListener('change', (e) => {
+            const scope = e.target.value;
+            const input = form.querySelector('input[name="keywords"], input[name="q"], input[name="search"]');
+            
+            // Clear old hidden fields
+            form.querySelectorAll('input[type="hidden"]').forEach(el => el.remove());
+
+            if (scope === 'forum') {
+                form.action = 'https://perveavenue.forumcommunity.net/';
+                form.method = 'post';
+                input.name = 'keywords';
+                input.placeholder = 'Search forum threads...';
+                form.insertAdjacentHTML('beforeend', `
+                    <input type="hidden" name="act" value="Search">
+                    <input type="hidden" name="CODE" value="01">
+                `);
+            } else if (scope === 'google') {
+                form.action = 'https://www.google.com/search';
+                form.method = 'get';
+                input.name = 'q';
+                input.placeholder = 'Search on Google...';
+                form.insertAdjacentHTML('beforeend', `<input type="hidden" name="as_sitesearch" value="${CONFIG.SITE_FILTER}">`);
+            } else if (scope === 'user') {
+                // Update this to your exact user search endpoint if different
+                form.action = 'https://www.forumcommunity.net/'; 
+                form.method = 'get';
+                input.name = 'act'; // Often user search requires specific GET params
+                input.placeholder = 'Search members...';
+                // Note: You'll need to verify the exact URL params ForumCommunity uses for user search
+                form.insertAdjacentHTML('beforeend', `<input type="hidden" name="select" value="utente">`);
+            }
+            
+            // Clear input when switching modes
+            input.value = '';
+        });
+
+        inner.appendChild(searchWrap);
+        // ─────────────────────────────────────────────────────────
 
         // Actions
         const actions = h('div', { className: 'mfn-actions' });
