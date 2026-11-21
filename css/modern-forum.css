@@ -7620,7 +7620,11 @@ body.has-docked-editor {
     padding: 0 !important;
     display: flex !important;
     gap: var(--space-lg) !important;
-    color: var(--text-tertiary) !important;
     width: 100% !important;
     line-height: 1.618 !important;
+}
+.FFA-desc span {
+    margin: 0 !important;
+    color: var(--text-tertiary) !important;
+    font-size: var(--text-xs);
 }
