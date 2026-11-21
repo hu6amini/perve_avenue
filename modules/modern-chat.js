@@ -1088,6 +1088,94 @@ var ModernChat = (function () {
             document.execCommand('insertText', false, text);
         }
     }
+       // ─── MODALS (Link & Color) ────────────────────────────────────────────
+    function showLinkModal(initialText, initialHref, callback) {
+        var m = document.createElement('div');
+        m.className = 'mc-modal-backdrop';
+        m.innerHTML =
+            '<div class="mc-modal" role="dialog" aria-label="Insert Link">' +
+                '<h3><i class="fa-regular fa-link"></i> Insert Link</h3>' +
+                '<label class="mc-setting" style="flex-direction:column; align-items:flex-start; gap:4px; padding-bottom:8px;">' +
+                    '<span style="font-size:12px; color:var(--text-secondary);">Text to display</span>' +
+                    '<input type="text" id="m-link-text" class="mc-modal-input" placeholder="Link text (optional)" value="' + escapeHtml(initialText || '') + '" style="width:100%; padding:8px; border-radius:6px; border:1px solid var(--border-color); background:var(--surface-color); color:var(--text-primary);">' +
+                '</label>' +
+                '<label class="mc-setting" style="flex-direction:column; align-items:flex-start; gap:4px; padding-bottom:8px;">' +
+                    '<span style="font-size:12px; color:var(--text-secondary);">URL</span>' +
+                    '<input type="url" id="m-link-url" class="mc-modal-input" placeholder="https://example.com" value="' + escapeHtml(initialHref || '') + '" style="width:100%; padding:8px; border-radius:6px; border:1px solid var(--border-color); background:var(--surface-color); color:var(--text-primary);">' +
+                '</label>' +
+                '<div class="mc-modal-actions">' +
+                    '<button type="button" class="mc-btn-secondary" data-close>Cancel</button>' +
+                    '<button type="button" class="mc-btn-secondary" id="m-link-submit" style="background:var(--primary-color); color:#fff; border-color:var(--primary-color);">Insert Link</button>' +
+                '</div>' +
+            '</div>';
+        document.body.appendChild(m);
+
+        var textInput = m.querySelector('#m-link-text');
+        var urlInput = m.querySelector('#m-link-url');
+        urlInput.focus();
+
+        function close() { m.remove(); if (state.editor) state.editor.commands.focus(); }
+        
+        m.addEventListener('click', function (e) {
+            if (e.target === m || e.target.closest('[data-close]')) close();
+        });
+
+        m.querySelector('#m-link-submit').onclick = function () {
+            var text = textInput.value.trim();
+            var url = urlInput.value.trim();
+            if (!url) return;
+            callback(url, text);
+            close();
+        };
+        
+        urlInput.addEventListener('keypress', function (e) {
+            if (e.key === 'Enter') m.querySelector('#m-link-submit').click();
+        });
+    }
+
+    function showColorModal(callback) {
+        var colors = [
+            { name: 'Default', hex: 'inherit', border: '1px solid var(--border-color)' },
+            { name: 'Red', hex: '#ef4444' },
+            { name: 'Orange', hex: '#f59e0b' },
+            { name: 'Green', hex: '#10b981' },
+            { name: 'Blue', hex: '#3b82f6' },
+            { name: 'Purple', hex: '#8b5cf6' },
+            { name: 'Pink', hex: '#ec4899' },
+            { name: 'Gray', hex: '#6b7280' },
+            { name: 'White', hex: '#ffffff' }
+        ];
+        
+        var gridHtml = colors.map(function(c) {
+            return '<button type="button" class="mc-color-swatch" data-color="' + c.hex + '" title="' + c.name + '" style="background-color:' + c.hex + '; border:' + (c.border || 'none') + ';"></button>';
+        }).join('');
+
+        var m = document.createElement('div');
+        m.className = 'mc-modal-backdrop';
+        m.innerHTML =
+            '<div class="mc-modal" role="dialog" aria-label="Text Color" style="max-width:280px;">' +
+                '<h3><i class="fa-regular fa-palette"></i> Text Color</h3>' +
+                '<div class="mc-color-grid">' + gridHtml + '</div>' +
+                '<div class="mc-modal-actions">' +
+                    '<button type="button" class="mc-btn-secondary" data-close>Cancel</button>' +
+                '</div>' +
+            '</div>';
+        document.body.appendChild(m);
+
+        function close() { m.remove(); if (state.editor) state.editor.commands.focus(); }
+
+        m.addEventListener('click', function (e) {
+            if (e.target === m || e.target.closest('[data-close]')) close();
+        });
+
+        m.querySelectorAll('.mc-color-swatch').forEach(function(btn) {
+            btn.addEventListener('click', function() {
+                var color = this.getAttribute('data-color');
+                callback(color === 'inherit' ? null : color);
+                close();
+            });
+        });
+    }
     function applyFormat(cmd) {
         if (state.editorMode === 'tiptap' && state.editor) {
             var c = state.editor.chain().focus();
@@ -1097,13 +1185,33 @@ var ModernChat = (function () {
                 case 'underline': c.toggleUnderline().run(); break;
                 case 'strike':    c.toggleStrike().run(); break;
                 case 'spoiler':   c.toggleMark('spoiler').run(); break;
+                
                 case 'link':      
-                    var url = prompt('Enter URL:', 'https://');
-                    if (url) c.extendMarkRange('link').setLink({ href: url }).run();
+                    var { from, to } = state.editor.state.selection;
+                    var selectedText = state.editor.state.doc.textBetween(from, to, ' ');
+                    var currentHref = state.editor.getAttributes('link').href || '';
+                    
+                    showLinkModal(selectedText, currentHref, function(url, text) {
+                        var chain = state.editor.chain().focus();
+                        if (text && text !== selectedText) {
+                            // If custom text is provided, replace the selection entirely
+                            chain.insertContent('<a href="' + url + '" target="_blank">' + text + '</a>').run();
+                        } else {
+                            // Apply link to existing selection
+                            chain.extendMarkRange('link').setLink({ href: url }).run();
+                        }
+                    });
                     break;
+                    
                 case 'color':     
-                    var color = prompt('Enter color (e.g., red, #10B981):', 'red');
-                    if (color) c.setColor(color).run();
+                    showColorModal(function(color) {
+                        var chain = state.editor.chain().focus();
+                        if (color) {
+                            chain.setColor(color).run();
+                        } else {
+                            chain.unsetColor().run();
+                        }
+                    });
                     break;
             }
         } else if (state.editorMode === 'fallback') {
@@ -1111,11 +1219,18 @@ var ModernChat = (function () {
             if (map[cmd]) {
                 document.execCommand(map[cmd]);
             } else if (cmd === 'link') {
-                var url = prompt('Enter URL:', 'https://');
-                if (url) document.execCommand('createLink', false, url);
+                var selectedText = window.getSelection().toString();
+                showLinkModal(selectedText, '', function(url, text) {
+                    if (text && text !== selectedText) {
+                        document.execCommand('insertHTML', false, '<a href="' + url + '">' + text + '</a>');
+                    } else {
+                        document.execCommand('createLink', false, url);
+                    }
+                });
             } else if (cmd === 'color') {
-                var color = prompt('Enter color (e.g., red, #10B981):', 'red');
-                if (color) document.execCommand('foreColor', false, color);
+                showColorModal(function(color) {
+                    if (color) document.execCommand('foreColor', false, color);
+                });
             } else if (cmd === 'spoiler') {
                 var text = window.getSelection().toString();
                 if (text) document.execCommand('insertHTML', false, '<span data-spoiler="true">' + text + '</span>');
