@@ -6946,12 +6946,6 @@ body.has-docked-editor {
     margin: 0 !important;
     white-space: nowrap;
 }
-.mc-message .mc-time::before {
-    content: "·";
-    margin: 0 6px;
-    color: var(--text-tertiary, #9CA3AF);
-    font-weight: bold;
-}
 .mc-message time.mc-time {
     cursor: help;
     border-bottom: 1px dotted transparent;
