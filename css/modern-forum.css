@@ -7725,9 +7725,10 @@ body.has-docked-editor {
 /* ── Search (central, prominent) ────────────── */
 .mfn-search {
     position: relative;
-    flex: 1 1 auto;
-    max-width: 520px;
-    margin: 0 auto;
+    flex: 1 1 300px;
+    min-width: 200px;
+    max-width: 600px;
+    margin: 0 16px;
     display: flex;
     align-items: center;
     background: var(--mfn-bg-elev);
@@ -7782,7 +7783,7 @@ body.has-docked-editor {
 .mfn-actions {
     display: flex;
     align-items: center;
-    gap: 6px;
+    gap: 4px;
     flex: 0 0 auto;
 }
 
@@ -7790,9 +7791,9 @@ body.has-docked-editor {
 .mfn-action {
     display: inline-flex;
     align-items: center;
-    gap: 8px;
+    gap: 6px;
     height: 38px;
-    padding: 0 12px;
+    padding: 0 10px;
     background: transparent;
     border: 1px solid transparent;
     border-radius: 10px;
@@ -7815,7 +7816,15 @@ body.has-docked-editor {
 }
 .mfn-action:focus-visible { box-shadow: 0 0 0 3px var(--mfn-accent-soft); }
 .mfn-action i { font-size: 1rem; opacity: .9; }
-
+/* Style the theme toggle specifically to be a perfect square */
+.mfn-theme-toggle {
+    width: 38px;
+    padding: 0;
+    justify-content: center;
+}
+.mfn-theme-toggle i {
+    font-size: 1.15rem; /* Make the moon/sun slightly larger */
+}
 .mfn-action--primary {
     background: var(--mfn-accent);
     color: #0b1913;
@@ -8077,6 +8086,29 @@ body.has-docked-editor {
 }
 .mfn-register-link:hover { color: color-mix(in srgb, var(--mfn-accent) 80%, #fff); }
 
+/* ── Responsive Squeeze ────────────────────── */
+/* If the screen is smaller than 1450px, hide the text labels 
+   for top-level actions. This solves the Admin view overcrowding. */
+@media (max-width: 1450px) {
+    .mfn-action-label {
+        display: none; /* Hide text */
+    }
+    .mfn-chev {
+        display: none; /* Hide the chevron on dropdown triggers */
+    }
+    .mfn-action {
+        padding: 0 10px;
+    }
+    
+    /* If the user dropdown text is also taking too much space */
+    .mfn-user-name {
+        display: none;
+    }
+    .mfn-user-trigger {
+        padding: 3px;
+        border-radius: 50%;
+    }
+}
 /* ── Mobile ────────────────────────────────── */
 @media (max-width: 860px) {
     :root { --mfn-h: 56px; }
