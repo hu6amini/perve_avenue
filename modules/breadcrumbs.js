@@ -36,7 +36,7 @@ const BreadcrumbsModule = (function () {
         LEGACY_STATS_SELECTOR: '.title.bottom.Item.Justify',
         MODERN_TOPIC_HEADER_ID: 'modern-topic-header',
         MEMBER_POSTS_SELECTOR: '.topic.member_posts',
-        SKIP_TOPIC_HEADER_BODY_IDS: ['board', 'forum'],
+        SKIP_TOPIC_HEADER_BODY_IDS: ['board', 'forum', 'search', 'members', 'group'],
 
         // Page size for API-driven pagination. TOPIC_PAGE_SIZE matches
         // the 15 messages per page the API returns on ?t=; SECTION_PAGE_SIZE
