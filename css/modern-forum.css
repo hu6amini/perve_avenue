@@ -7699,7 +7699,7 @@ body.has-docked-editor {
     display: flex;
     align-items: center;
     gap: 16px;
-    max-width: 1440px;
+    max-width: 1200px;
     margin: 0 auto;
     padding: 0 20px;
     height: var(--mfn-h);
