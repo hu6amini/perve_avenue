@@ -7582,7 +7582,7 @@ body.has-docked-editor {
 .FFA-title a::before {
    content: "\f07b";
    display: inline-block;
-   font-family: "Font Awsome 6 Pro"
+   font-family: "Font Awsome 6 Pro";
    margin-right: var(--space-xs);
 }
 .FFA-image {
