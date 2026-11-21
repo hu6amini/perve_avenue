@@ -7511,6 +7511,26 @@ body.has-docked-editor {
     .mc-editor-wrap  { max-height: 30dvh; }
 }
 
+.FFA-head {
+    display: flex !important;
+    align-items: center !important;
+    justify-content: space-between !important;
+    padding-bottom: var(--space-sm) !important;
+    border-bottom: 2px solid var(--primary-color) !important;
+    margin: 0 0 var(--space-md) 0 !important;
+}
+.FFA-head span {
+    font-family: var(--font-heading) !important;
+    font-size: var(--text-xl) !important;
+    color: var(--text-primary) !important;
+    text-align: left !important;
+    margin: 0 !important;
+    display: flex !important;
+    align-items: center !important;
+    gap: var(--space-xs) !important;
+    text-transform: inherit !important;
+    font-weight: 400 !important;
+}
 .FFA-element {
     background: var(--surface-color) !important;
     border: 1px solid var(--border-color) !important;
@@ -7531,6 +7551,21 @@ body.has-docked-editor {
     grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)) !important;
     gap: var(--space-md) !important;
     justify-content: start !important;
+}
+.FFA-title a {
+    color: var(--text-primary) !important;
+    text-decoration: none !important;
+    max-height: 100% !important;
+    font-family: var(--font-heading) !important;
+    font-size: var(--text-md) !important;
+    margin: 0 !important;
+    display: flex !important;
+    align-items: center !important;
+    gap: var(--space-xs) !important;
+    flex-wrap: wrap !important;
+    font-weight: 400 !important;
+    text-align: left !important;
+    padding: 0 !important;
 }
 .FFA-image {
     width: 100% !important;
