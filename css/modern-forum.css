@@ -7632,3 +7632,36 @@ body.has-docked-editor {
     text-align: left !important;
     font-style: normal !important;
 }
+.footer_links {
+  font-size: 0 !important;
+  color: var(--text-tertiary) !important;
+  text-align: left !important;
+}
+
+/* Restore visibility on child elements */
+.footer_links > a,
+.footer_links > em {
+  font-size: var(--text-xs) !important;
+  color: var(--text-tertiary) !important;
+  font-weight: 400 !important;
+  font-style: normal !important;
+  margin: 0 !important;
+}
+
+/* "Powered by" right before the ForumCommunity link */
+.footer_links a[href="https://www.forumcommunity.net/"]::before {
+  content: "Powered by ";
+  font-size: var(--text-xs) !important;
+  color: var(--text-tertiary) !important;
+  font-weight: 400 !important;
+  font-style: normal !important;
+}
+
+/* "created by " right before the Paralizer link */
+.footer_links a[href="https://help.forumfree.it/"]:last-of-type::before {
+  content: "created by ";
+  font-size: var(--text-xs) !important;
+  color: var(--text-tertiary) !important;
+  font-weight: 400 !important;
+  font-style: normal !important;
+}
