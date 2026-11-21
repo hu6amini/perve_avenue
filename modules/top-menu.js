@@ -297,6 +297,7 @@ const ForumTopMenuModule = (function () {
                 className: 'mfn-action mfn-action--has-menu',
                 'aria-haspopup': 'true',
                 'aria-expanded': 'false',
+                title: item.label, 
                 innerHTML: icon(item.icon) +
                     '<span class="mfn-action-label">' + escapeHtml(item.label) + '</span>' +
                     (item.badge ? '<span class="mfn-badge">' + escapeHtml(item.badge) + '</span>' : '') +
@@ -461,6 +462,22 @@ const ForumTopMenuModule = (function () {
 
         // Actions
         const actions = h('div', { className: 'mfn-actions' });
+
+        // ── NEW: Theme Toggle ──────────────────────────────────
+        // theme.js uses event delegation, so it will automatically 
+        // hook into this button as long as it has [data-theme-toggle].
+        const themeToggle = h('button', {
+            type: 'button',
+            className: 'mfn-action mfn-theme-toggle',
+            'data-theme-toggle': '',
+            'aria-label': 'Toggle theme',
+            title: 'Toggle theme'
+        });
+        // theme.js will automatically sync the icon class (sun/moon) on load.
+        themeToggle.innerHTML = '<i class="fa-regular fa-sun-bright" aria-hidden="true"></i>'; 
+        
+        actions.appendChild(themeToggle);
+        // ───────────────────────────────────────────────────────
 
         if (data.loggedIn) {
             data.actions.forEach(item => actions.appendChild(buildTopAction(item)));
