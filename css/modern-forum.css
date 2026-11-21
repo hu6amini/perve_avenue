@@ -7582,8 +7582,9 @@ body.has-docked-editor {
 .FFA-title a::before {
    content: "\f07b";
    display: inline-block;
-   font-family: "Font Awsome 6 Pro";
+   font-family: "Font Awesome 6 Pro";
    margin-right: var(--space-xs);
+   color: var(--primary-light);
 }
 .FFA-image {
     width: 100% !important;
@@ -7623,7 +7624,7 @@ body.has-docked-editor {
     width: 100% !important;
     line-height: 1.618 !important;
 }
-.FFA-desc span {
+.FFA-text .FFA-desc a {
     margin: 0 !important;
     color: var(--text-tertiary) !important;
     font-size: var(--text-xs);
