@@ -3841,8 +3841,16 @@ body.modal-open {
 /* ------------------------------------------------------------
    17. MODERN STATS, ONLINE PAGE, GROUPS LEGEND
    ------------------------------------------------------------ */
-section.modern-stats { flex-direction: column; width: 100%; }
-.stats-card { display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-md); width: 100%; }
+section.modern-stats { 
+  flex-direction: column; 
+  width: 100%; }
+.stats-card { 
+  display: grid; 
+  grid-template-columns: 1fr 1fr; 
+  gap: var(--space-md); 
+  width: 100%; 
+  margin-bottom: var(--space-xl);
+}
 .stats-section {
   background: var(--surface-color);
   border: 1px solid var(--border-color);
@@ -7511,6 +7519,9 @@ body.has-docked-editor {
     .mc-editor-wrap  { max-height: 30dvh; }
 }
 
+#FFA-box {
+   margin-bottom: var(--space-xl);
+}
 .FFA-head {
     display: flex !important;
     align-items: center !important;
@@ -7605,4 +7616,5 @@ body.has-docked-editor {
     gap: var(--space-lg) !important;
     color: var(--text-tertiary) !important;
     width: 100% !important;
+    line-height: 1.618 !important;
 }
