@@ -221,7 +221,15 @@ var ModernChat = (function () {
                         return '[color=' + colorMatch[1].trim() + ']' + inner + '[/color]';
                     }
                     return inner;
-                case 'blockquote': return '[quote]' + inner + '[/quote]';
+                case 'blockquote':
+                    var author = node.getAttribute('data-author');
+                    var ts = node.getAttribute('data-timestamp');
+                    if (author) {
+                        var params = author;
+                        if (ts) params += ', ' + ts;
+                        return '[quote=' + params + ']' + inner + '[/quote]';
+                    }
+                    return '[quote]' + inner + '[/quote]';
                 case 'p': return inner + (node.nextSibling ? '\n' : '');
                 case 'div': return inner + (node.nextSibling ? '\n' : '');
                 default: return inner;
@@ -990,17 +998,20 @@ var ModernChat = (function () {
             import(base + 'extension-underline' + v),
             import(base + 'extension-link' + v),
             import(base + 'extension-text-style' + v),
-            import(base + 'extension-color' + v)
+            import(base + 'extension-color' + v),
+            import(base + 'extension-blockquote' + v) // <-- ADD THIS
         ]).then(function (mods) {
             return {
                 Editor: mods[0].Editor || (mods[0].default && mods[0].default.Editor),
                 Mark: mods[0].Mark || (mods[0].default && mods[0].default.Mark),
+                Node: mods[0].Node || (mods[0].default && mods[0].default.Node), // <-- ADD THIS
                 StarterKit: mods[1].StarterKit || mods[1].default,
                 Placeholder: mods[2].Placeholder || mods[2].default,
                 Underline: mods[3].Underline || mods[3].default,
                 Link: mods[4].Link || (mods[4].default && mods[4].default.Link),
                 TextStyle: mods[5].TextStyle || (mods[5].default && mods[5].default.TextStyle),
-                Color: mods[6].Color || (mods[6].default && mods[6].default.Color)
+                Color: mods[6].Color || (mods[6].default && mods[6].default.Color),
+                Blockquote: mods[7].Blockquote || (mods[7].default && mods[7].default.Blockquote)
             };
         });
         state.tipTapDeps = await Promise.race([load, timeout]);
@@ -1031,16 +1042,34 @@ var ModernChat = (function () {
                 }
             });
 
+            // Custom Blockquote to preserve author/date attributes
+            var CustomBlockquote = deps.Blockquote.extend({
+                addAttributes() {
+                    return {
+                        author: { default: null },
+                        timestamp: { default: null }
+                    };
+                }
+            });
+
             state.editor = new deps.Editor({
                 element: mount,
                 extensions: [
-                    deps.StarterKit.configure({ heading: false, codeBlock: false, bulletList: false, orderedList: false, blockquote: false, horizontalRule: false }),
+                    deps.StarterKit.configure({ 
+                        heading: false, 
+                        codeBlock: false, 
+                        bulletList: false, 
+                        orderedList: false, 
+                        blockquote: false, 
+                        horizontalRule: false 
+                    }),
                     deps.Underline,
                     placeholderExt,
                     deps.Link.configure({ openOnClick: false }),
                     deps.TextStyle,
                     deps.Color,
-                    SpoilerMark
+                    SpoilerMark,
+                    CustomBlockquote
                 ],
                 content: '',
                 editorProps: {
@@ -1357,21 +1386,23 @@ var ModernChat = (function () {
         if (!msg) return;
         var nick = (msg.user && (msg.user.nickname || msg.user.name)) || 'user';
         var date = msg.date instanceof Date ? msg.date : new Date(msg.date);
-        
-        // Convert the raw BBCode content into HTML so it formats properly in TipTap
-        var formattedContent = bbToHTML(msg.content);
-        
-        // Build the quote string. Since TipTap is rich text, we inject HTML.
-        // (The legacy HelloBox will receive this back as BBCode on send).
-        var quoteLine = '<blockquote>[quote=' + nick + ', ' + formatCompactAbsolute(date) + ']' + msg.content + '[/quote]</blockquote><p></p>';
-        
+        var timeStr = formatCompactAbsolute(date);
+
+        // 1. Convert raw BBCode into HTML (fixes the raw [url=...] issue)
+        var htmlContent = bbToHTML(msg.content);
+
+        // 2. Build the HTML with our custom attributes
+        var quoteHtml = '<blockquote data-author="' + escapeHtml(nick) + '" data-timestamp="' + escapeHtml(timeStr) + '"><p>' + htmlContent + '</p></blockquote><p></p>';
+
         await initComposer();
         
-        // Insert the HTML block into TipTap
+        // 3. Insert into TipTap
         if (state.editorMode === 'tiptap' && state.editor) {
-            state.editor.commands.insertContent(quoteLine);
+            state.editor.commands.insertContent(quoteHtml);
         } else {
-            insertIntoComposer(quoteLine);
+            // Fallback for non-TipTap
+            var fallbackText = '[quote=' + nick + ', ' + timeStr + ']' + msg.content + '[/quote]\n';
+            insertIntoComposer(fallbackText);
         }
         
         focusComposer();
