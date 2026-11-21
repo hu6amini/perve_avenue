@@ -228,13 +228,19 @@ whenBodyReady(() => {
     // ========================================================================
     // 6. PHASED EXECUTION
     // ========================================================================
-    async function bootSystem() {
-        try {
-            const startTime = performance.now();
+async function bootSystem() {
+    try {
+        const startTime = performance.now();
 
-            // PHASE A: Foundation (media optimizer & event bus)
-            const phaseAStart = performance.now();
-            const resultsA = await Promise.allSettled([
+        // ── Fire-and-forget: nav must render ASAP ─────────────────
+        // No dependencies on Phase A/B/C. Loaded in parallel so it
+        // doesn't extend any phase's wall-clock time.
+        loadScript("https://cdn.jsdelivr.net/gh/hu6amini/perve_avenue@bbbf462cbbabce61db7bbee55f2e0cce2b00bf77/modules/top-menu.js")
+            .catch(err => console.warn('[Boot] Top menu failed:', err));
+
+        // PHASE A: Foundation (media optimizer & event bus)
+        const phaseAStart = performance.now();
+        const resultsA = await Promise.allSettled([
                 loadScript("https://cdn.jsdelivr.net/gh/hu6amini/perve_avenue@8f6a9f7f137c8f7a9e36bce00a1c5dc937269906/media-optimizer.min.js"),
                 loadScript("https://cdn.jsdelivr.net/gh/hu6amini/perve_avenue@1977fabb5553b0f825fa92671a03b2ae26c67702/core/event-bus.min.js")
             ]);
