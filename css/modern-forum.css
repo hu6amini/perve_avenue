@@ -7193,6 +7193,9 @@ body.has-docked-editor {
     border-color: var(--primary-color, #10B981);
     box-shadow: 0 0 0 3px var(--primary-color-soft, color-mix(in srgb, var(--primary-color, #10B981) 18%, transparent));
 }
+.mc-composer .ProseMirror {
+    padding: 0;
+}
 .mc-composer-btn {
     width: 32px;
     height: 32px;
