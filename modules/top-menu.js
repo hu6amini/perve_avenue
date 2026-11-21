@@ -15,7 +15,7 @@ const ForumTopMenuModule = (function () {
         OPEN_CLASS: 'mfn--open',
         SCROLL_THRESHOLD: 80,       // px before hide-on-scroll kicks in
         SCROLL_DELTA: 8,            // px of movement to flip state
-        SITE_FILTER: 'perveavenue.forumcommunity.net',
+        SITE_FILTER: 'patestt.forumcommunity.net',
         LOGIN_URL: 'https://accounts.forumcommunity.net/?act=Login&cid=660892',
         REGISTER_URL: 'https://accounts.forumcommunity.net/?act=Reg&cid=660892'
     });
@@ -464,7 +464,7 @@ const ForumTopMenuModule = (function () {
         // 2. The Form (defaults to Forum Search based on the selected option)
         const form = h('form', {
             className: 'mfn-search',
-            action: 'https://perveavenue.forumcommunity.net/', // Default Forum action
+            action: 'https://patestt.forumcommunity.net/', // Default Forum action
             method: 'post',
             role: 'search'
         });
