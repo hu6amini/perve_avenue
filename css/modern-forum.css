@@ -7814,7 +7814,8 @@ body.has-docked-editor {
 .mfn-scope-panel {
     min-width: 160px;
     left: 0;
-    right: auto; /* Override the right-align from the user menu */
+    right: auto; /* Forces it to align to the left edge of the trigger */
+    padding: 6px; /* Adds a little breathing room around the buttons */
 }
 
 /* Individual option styling */
@@ -8093,9 +8094,17 @@ body.has-docked-editor {
     border-radius: 8px;
     color: var(--mfn-fg);
     font-size: .875rem;
-    text-align: left;
     text-decoration: none;
     transition: background .12s var(--mfn-ease), color .12s var(--mfn-ease);
+
+    /* ── ADD THESE LINES TO FIX THE BUTTONS ── */
+    background: transparent; /* Removes the white background */
+    border: none;            /* Removes the default button border */
+    width: 100%;             /* Forces the button to fill the dropdown width */
+    text-align: left;        /* Aligns the text correctly */
+    font-family: inherit;    /* Ensures it uses the forum's font, not the OS font */
+    cursor: pointer;         /* Shows the hand cursor on hover */
+    /* ─────────────────────────────────────── */
 }
 .mfn-dd-link:hover,
 .mfn-dd-link:focus-visible {
