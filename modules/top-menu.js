@@ -458,7 +458,7 @@ const ForumTopMenuModule = (function () {
             'aria-expanded': 'false'
         });
         // Default state
-        scopeTrigger.innerHTML = '<span class="mfn-scope-label"><i class="fa-regular fa-folder" aria-hidden="true"></i> Forum</span><i class="fa-regular fa-chevron-down mfn-chev" aria-hidden="true"></i>';
+        scopeTrigger.innerHTML = '<span class="mfn-scope-label"><i class="fa-regular fa-folder" aria-hidden="true"></i> Forum</span><i class="fa-regular fa-angle-down mfn-chev" aria-hidden="true"></i>';
 
         const scopePanel = h('div', { className: 'mfn-dropdown-panel mfn-scope-panel' });
         const scopeOptions = [
