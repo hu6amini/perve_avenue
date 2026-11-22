@@ -115,9 +115,30 @@ const ForumTopMenuModule = (function () {
     }
 
     // ─── Icon mapping ─────────────────────────────────────────
+// ─── Icon mapping ─────────────────────────────────────────
     function iconForLabel(label) {
         const l = (label || '').toLowerCase();
         const map = {
+            // Specific multi-word / compound labels first
+            'edit topic title': 'fa-pen-to-square',
+            'edit this topic': 'fa-pen-to-square',
+            'move selected topics': 'fa-arrows-left-right',
+            'move selected posts': 'fa-arrows-left-right',
+            'move this topic': 'fa-arrows-left-right',
+            'delete selected topics': 'fa-trash-can',
+            'delete selected posts': 'fa-trash-can',
+            'delete this topic': 'fa-trash-can',
+            'close selected topics': 'fa-lock',
+            'close this topic': 'fa-lock',
+            'open selected topics': 'fa-lock-open',
+            'unpin selected topics': 'fa-thumbtack',
+            'unpin this topic': 'fa-thumbtack',
+            'pin selected topics': 'fa-thumbtack',
+            'remove announcement': 'fa-bullhorn',
+            'create announcement': 'fa-bullhorn',
+            'mass moving/deleting': 'fa-layer-group',
+
+            // Existing user, forum, and admin labels
             'edit profile': 'fa-user-pen',
             'edit avatar': 'fa-image-portrait',
             'edit signature': 'fa-signature',
@@ -181,7 +202,18 @@ const ForumTopMenuModule = (function () {
             'topics': 'fa-list',
             'reactions': 'fa-face-smile',
             'notifications': 'fa-bell',
-            'administration': 'fa-shield-halved'
+            'administration': 'fa-shield-halved',
+
+            // Broader single-word / fallback action keywords
+            'moderation': 'fa-gavel',
+            'announcement': 'fa-bullhorn',
+            'unpin': 'fa-thumbtack',
+            'pin': 'fa-thumbtack',
+            'move': 'fa-arrows-left-right',
+            'delete': 'fa-trash-can',
+            'open': 'fa-lock-open',
+            'close': 'fa-lock',
+            'edit': 'fa-pen-to-square'
         };
         for (const k in map) if (l.includes(k)) return map[k];
         return 'fa-circle';
