@@ -61,7 +61,7 @@ whenBodyReady(() => {
     // ========================================================================
     const PAGE_ID = (document.body && document.body.id) || '';
     const PAGE_GATES = Object.freeze({
-        mediaContent: ['topic', 'send', 'blog', 'msg'],
+        mediaContent: ['topic', 'send', 'blog', 'msg', 'search'],
         editor:       ['topic', 'blog', 'send'],
         topicAndBlog: ['topic', 'blog'],  
         topicOnly:    ['topic']
@@ -320,7 +320,7 @@ async function bootSystem() {
                     loadScript("https://cdn.jsdelivr.net/gh/hu6amini/perve_avenue@02eeb0013286d890512c1f5feb957eed9219ed0d/modules/modern-chat.min.js")
                 ];
 
-                // Gated: posts → topic / send / blog / msg
+                // Gated: posts → topic / send / blog / msg / search
                 if (onPage(PAGE_GATES.mediaContent)) {
                     enhTasks.push(
                         loadScript("https://cdn.jsdelivr.net/gh/hu6amini/perve_avenue@9e7be5d157a28b96ddfb27497c8e6a11baaf1767/modules/posts.min.js")
