@@ -260,6 +260,25 @@
 .fa-clock::before {content: "\f017"; }
 .fa-sparkles::before {content: "\f890"; }
 .fa-terminal::before {content: "\f120"; }
+.fa-gavel::before {content: "\f0e3"; }
+.fa-inbox::before {content: "\f01c"; }
+.fa-folder-tree::before {content: "\f802"; }
+.fa-box-archive::before {content: "\f187"; }
+.fa-check-double::before {content: "\f560"; }
+.fa-newspaper::before {content: "\f1ea"; }
+.fa-database::before {content: "\f1c0"; }
+.fa-arrow-right-arrow-left::before {content: "\f0ec"; }
+.fa-trash::before {content: "\f1f8"; }
+.fa-ranking-star::before {content: "\e561"; }
+.fa-mobile-screen::before {content: "\f3cf"; }
+.fa-shirt::before {content: "\f553"; }
+.fa-table-columns::before {content: "\f0db"; }
+.fa-lock-open::before {content: "\f3c1"; }
+.fa-image-portrait::before {content: "\f3e0"; }
+.fa-signature::before {content: "\f5b7"; }
+.fa-images::before {content: "\f302"; }
+.fa-key::before {content: "\f084"; }
+.fa-right-from-bracket::before {content: "\f2f5"; }
 
 :root, :host {
   --fa-font-regular: normal 400 1em/1 "Font Awesome 6 Pro";
