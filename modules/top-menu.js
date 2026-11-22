@@ -373,7 +373,7 @@ const ForumTopMenuModule = (function () {
                 const det = h('details', { className: 'mfn-submenu' });
                 det.appendChild(h('summary', { className: 'mfn-submenu-summary' }, [
                     h('span', { className: 'mfn-submenu-left', innerHTML: icon(item.icon) + ' ' + escapeHtml(item.label) }),
-                    h('i', { className: 'fa-regular fa-angle-down', 'aria-hidden': 'true' })
+                    h('i', { className: 'fa-regular fa-angle-down mfn-chev', 'aria-hidden': 'true' })
                 ]));
                 const body = h('div', { className: 'mfn-submenu-body' });
                 body.appendChild(buildDropdownBody(item.items));
@@ -411,7 +411,7 @@ const ForumTopMenuModule = (function () {
                 innerHTML: icon(item.icon) +
                     '<span class="mfn-action-label">' + escapeHtml(item.label) + '</span>' +
                     (item.badge ? '<span class="mfn-badge">' + escapeHtml(item.badge) + '</span>' : '') +
-                    '<i class="fa-regular fa-angle-down" aria-hidden="true"></i>'
+                    '<i class="fa-regular fa-angle-down mfn-chev" aria-hidden="true"></i>'
             });
             const panel = h('div', { className: 'mfn-dropdown-panel' });
             panel.appendChild(buildDropdownBody(item.items));
@@ -450,7 +450,7 @@ const ForumTopMenuModule = (function () {
         trigger.innerHTML =
             '<span class="mfn-avatar">' + avatarHtml + '</span>' +
             '<span class="mfn-user-name">' + escapeHtml(user.username) + '</span>' +
-            '<i class="fa-regular fa-angle-down" aria-hidden="true"></i>';
+            '<i class="fa-regular fa-angle-down mfn-chev" aria-hidden="true"></i>';
 
         const panel = h('div', { className: 'mfn-dropdown-panel mfn-user-panel' });
         const head = h('div', { className: 'mfn-user-panel-head' });
