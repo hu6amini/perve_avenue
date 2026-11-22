@@ -63,6 +63,80 @@ const ForumTopMenuModule = (function () {
         return '<i class="fa-' + (style || 'regular') + ' ' + name + '" aria-hidden="true"></i>';
     }
 
+       // ── Avatar Utilities ──────────────────────────────────────
+    const AVATAR_COLORS = [
+        '059669', '10B981', '34D399', '6EE7B7', 'A7F3D0',
+        '0D9488', '14B8A6', '2DD4BF', '5EEAD4', '99F6E4',
+        '3B82F6', '60A5FA', '93C5FD', '2563EB', '1D4ED8',
+        '6366F1', '818CF8', 'A5B4FC', '4F46E5', '4338CA',
+        '8B5CF6', 'A78BFA', 'C4B5FD', '7C3AED', '6D28D9',
+        'D97706', 'F59E0B', 'FBBF24', 'FCD34D', 'B45309',
+        '64748B', '94A3B8', 'CBD5E1', '475569', '334155'
+    ];
+
+    function getColorFromNickname(nickname, userId) {
+        let hash = 0;
+        const str = nickname || userId || 'user';
+        for (let i = 0; i < str.length; i++) {
+            hash = ((hash << 5) - hash) + str.charCodeAt(i);
+            hash = hash & hash;
+        }
+        return AVATAR_COLORS[Math.abs(hash) % AVATAR_COLORS.length];
+    }
+
+    function optimizeImageUrl(url, width, height) {
+        if (!url || typeof url !== 'string') return null;
+        const trimmed = url.trim();
+        if (!/^(https?:)?\/\//i.test(trimmed)) return null;
+        if (trimmed.indexOf('weserv.nl') !== -1 || trimmed.indexOf('data:') === 0) return trimmed;
+        const finalUrl = trimmed.startsWith('//') ? 'https:' + trimmed : trimmed;
+        return `https://images.weserv.nl/?url=${encodeURIComponent(finalUrl)}&output=webp&maxage=1y&q=85&w=${width}&h=${height}&fit=cover&a=attention&il`;
+    }
+
+    function getGroupClass(user) {
+        if (!user || !user.group) return 'group-member';
+        const name = (user.group.name || '').toLowerCase();
+        const cls = (user.group.class || '').toLowerCase();
+        const body = (user.group.bodyclass || '').toLowerCase();
+        const all = name + ' ' + cls + ' ' + body;
+
+        if (all.includes('founder')) return 'group-founder';
+        if (all.includes('admin') || all.includes('amministrat')) return 'group-administrator';
+        if (all.includes('global') && all.includes('mod')) return 'group-global-moderator';
+        if (all.includes('moderator') || all.includes('moderat')) return 'group-moderator';
+        if (all.includes('developer')) return 'group-developer';
+        if (all.includes('game dev')) return 'group-game-dev';
+        if (all.includes('fan')) return 'group-fan';
+        return 'group-member';
+    }
+
+    function generateAvatarHtml(user, username, userId, size) {
+        const groupClass = getGroupClass(user);
+        const avatarUrl = user && user.avatar ? optimizeImageUrl(user.avatar, size, size) : null;
+        const isDefaultAvatar = user && user.avatar && user.avatar.includes('default_avatar');
+
+        if (avatarUrl && !isDefaultAvatar) {
+            return `<img class="mfn-avatar-img ${groupClass}" src="${avatarUrl}" alt="${escapeHtml(username)}" width="${size}" height="${size}" loading="lazy">`;
+        } else {
+            const initial = (username || '?').charAt(0).toUpperCase();
+            const bgColor = getColorFromNickname(username, userId);
+            return `<span class="mfn-avatar-initial ${groupClass}" style="background-color:#${bgColor}; width:${size}px; height:${size}px; font-size:${size * 0.618}px; line-height:${size}px;">${escapeHtml(initial)}</span>`;
+        }
+    }
+
+    // Fetch group data for the logged-in user
+    async function fetchUserData(mid) {
+        try {
+            const res = await fetch(`/api.php?mid=${mid}`);
+            if (!res.ok) return null;
+            const data = await res.json();
+            return data['m' + mid] || data.info || null;
+        } catch (e) {
+            console.warn('[TopMenu] Failed to fetch user data', e);
+            return null;
+        }
+    }
+
     function normalizeAvatarUrl(url) {
         if (!url || typeof url !== 'string') return '';
         const trimmed = url.trim();
@@ -465,9 +539,12 @@ const ForumTopMenuModule = (function () {
     }
 
     // ─── Build: user dropdown (logged-in) ────────────────────
-    function buildUserDropdown(user, items) {
+    function buildUserDropdown(user, items, apiUser) {
         const wrap = h('div', { className: 'mfn-dropdown mfn-user-dropdown' });
-        const avatarHtml = buildAvatarHtml(user.avatarSrc, user.username);
+        
+        // Generate avatar using the API data if available, otherwise fall back to DOM data
+        const avatarHtml = generateAvatarHtml(apiUser, user.username, user.mid, 32);
+        const groupClass = getGroupClass(apiUser);
 
         const trigger = h('button', {
             type: 'button',
@@ -476,24 +553,25 @@ const ForumTopMenuModule = (function () {
             'aria-expanded': 'false'
         });
         trigger.innerHTML =
-            '<span class="mfn-avatar">' + avatarHtml + '</span>' +
+            `<span class="mfn-avatar ${groupClass}">${avatarHtml}</span>` +
             '<span class="mfn-user-name">' + escapeHtml(user.username) + '</span>' +
-            '<i class="fa-regular fa-angle-down mfn-chev" aria-hidden="true"></i>';
+            '<i class="fa-regular fa-chevron-down mfn-chev" aria-hidden="true"></i>';
 
         const panel = h('div', { className: 'mfn-dropdown-panel mfn-user-panel' });
         const head = h('div', { className: 'mfn-user-panel-head' });
+        
+        // Use a larger 44px avatar for the dropdown header
+        const lgAvatarHtml = generateAvatarHtml(apiUser, user.username, user.mid, 44);
         head.innerHTML =
-            '<span class="mfn-avatar mfn-avatar--lg">' + avatarHtml + '</span>' +
+            `<span class="mfn-avatar mfn-avatar--lg ${groupClass}">${lgAvatarHtml}</span>` +
             '<div class="mfn-user-panel-meta">' +
-                '<a class="mfn-user-panel-name" href="' + escapeHtml(user.profileUrl) + '">' +
-                    escapeHtml(user.username) +
-                '</a>' +
+                '<a class="mfn-user-panel-name" href="' + escapeHtml(user.profileUrl) + '">' + escapeHtml(user.username) + '</a>' +
                 '<span class="mfn-user-panel-sub">Signed in</span>' +
             '</div>';
+            
         panel.appendChild(head);
         panel.appendChild(h('hr', { className: 'mfn-sep' }));
         panel.appendChild(buildDropdownBody(items));
-
         wrap.appendChild(trigger);
         wrap.appendChild(panel);
         return wrap;
@@ -676,23 +754,22 @@ const ForumTopMenuModule = (function () {
 
             acResults.forEach((user, i) => {
                 const profileUrl = `/?act=Profile&MID=${user.id}`;
+                const username = user.name || user.nickname || 'User';
                 
-                // Optimize avatar
-                let avatarHtml = '<div class="mfn-ac-avatar" style="background:var(--mfn-bg-elev)"></div>';
-                if (user.avatar && user.avatar !== 'http') {
-                    let safeAvatar = user.avatar;
-                    if (!safeAvatar.includes('weserv.nl') && !safeAvatar.startsWith('data:')) {
-                        safeAvatar = `https://images.weserv.nl/?url=${encodeURIComponent(safeAvatar)}&output=webp&w=48&h=48&fit=cover`;
-                    }
-                    avatarHtml = `<img class="mfn-ac-avatar" src="${safeAvatar}" onerror="this.outerHTML='<div class=\\'mfn-ac-avatar\\' style=\\'background:var(--mfn-bg-elev)\\'>'">`;
-                }
+                // Use the shared helper!
+                const avatarHtml = generateAvatarHtml(user, username, user.id, 26);
+                const groupClass = getGroupClass(user);
 
                 const item = h('div', {
                     className: 'mfn-ac-item',
                     'data-index': i,
                     'data-url': profileUrl
                 });
-                item.innerHTML = `${avatarHtml}<span class="mfn-ac-name">${escapeHtml(user.name || user.nickname)}</span>`;
+                
+                item.innerHTML = `
+                    <span class="mfn-ac-avatar-wrap ${groupClass}">${avatarHtml}</span>
+                    <span class="mfn-ac-name">${escapeHtml(username)}</span>
+                `;
                 
                 item.addEventListener('click', () => {
                     window.location.href = profileUrl;
@@ -834,7 +911,8 @@ const ForumTopMenuModule = (function () {
 
         if (data.loggedIn) {
             data.actions.forEach(item => actions.appendChild(buildTopAction(item)));
-            actions.appendChild(buildUserDropdown(data.user, data.userDropdown));
+            // Pass data.apiUser here
+            actions.appendChild(buildUserDropdown(data.user, data.userDropdown, data.apiUser)); 
         } else {
             actions.appendChild(buildGuestBlock(data.guest));
         }
@@ -936,45 +1014,43 @@ const ForumTopMenuModule = (function () {
     }
 
     // ─── Init ────────────────────────────────────────────────
-    function init() {
+    async function init() { // <── Make this async
         const menuWrap = document.querySelector(CONFIG.LEGACY_MENU_SELECTOR);
-        if (!menuWrap) {
-            console.warn('[TopMenu] Legacy .menuwrap not found — aborting.');
-            return;
-        }
-
-        if (document.getElementById(CONFIG.NAV_ID)) return; // already built
+        if (!menuWrap) return;
+        if (document.getElementById(CONFIG.NAV_ID)) return;
 
         const loggedIn = isLoggedIn(menuWrap);
-        const userLink = loggedIn
-            ? menuWrap.querySelector('.left .menu > a[href*="act=Profile"]')
-            : null;
+        const userLink = loggedIn ? menuWrap.querySelector('.left .menu > a[href*="act=Profile"]') : null;
+
+        // 1. Extract the basic user data from the DOM
+        const user = loggedIn ? extractUser(menuWrap) : null;
+        
+        // 2. Fetch full user data (group info) if logged in
+        let apiUser = null;
+        if (user) {
+            const midMatch = user.profileUrl.match(/MID=(\d+)/);
+            if (midMatch) {
+                user.mid = midMatch[1];
+                apiUser = await fetchUserData(user.mid);
+            }
+        }
 
         const data = {
             loggedIn,
             search: extractSearch(menuWrap),
-            user: loggedIn ? extractUser(menuWrap) : null,
-            userDropdown: loggedIn && userLink
-                ? extractItems(userLink.nextElementSibling || document.createElement('ul'))
-                : [],
+            user: user,
+            apiUser: apiUser, // <── Pass the API data
+            userDropdown: loggedIn && userLink ? extractItems(userLink.nextElementSibling || document.createElement('ul')) : [],
             actions: loggedIn ? extractTopActions(menuWrap, userLink) : [],
             guest: !loggedIn ? extractGuest(menuWrap) : null
         };
 
         navEl = buildNav(data);
-
-        // Insert BEFORE legacy menu (user hides legacy via CSS)
         menuWrap.parentNode.insertBefore(navEl, menuWrap);
-
-        // Hide from screen readers now that the modern nav is active
         menuWrap.setAttribute('aria-hidden', 'true');
 
         attachEventDelegation();
         window.addEventListener('scroll', requestScroll, { passive: true });
-
-        if (data.loggedIn && data.user?.mid) {
-            hydrateUserFromApi(data.user);
-        }
 
         console.log('[TopMenu] Modern nav built (' + (loggedIn ? 'member' : 'guest') + ')');
     }
