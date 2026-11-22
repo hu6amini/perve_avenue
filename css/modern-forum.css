@@ -8027,6 +8027,7 @@ body.has-docked-editor {
 }
 .mfn-user-trigger:focus-visible { box-shadow: 0 0 0 3px var(--mfn-accent-soft); }
 
+/* ── Avatar Container ─────────────────────── */
 .mfn-avatar {
     display: inline-flex;
     align-items: center;
@@ -8035,11 +8036,55 @@ body.has-docked-editor {
     height: 32px;
     border-radius: 50%;
     overflow: hidden;
-    background: var(--mfn-accent-soft);
-    flex: 0 0 auto;
+    flex-shrink: 0;
+    /* Default ring */
+    border: 2px solid var(--group-member); 
+    box-sizing: border-box;
 }
-.mfn-avatar--lg { width: 44px; height: 44px; }
-.mfn-avatar-img { width: 100%; height: 100%; object-fit: cover; }
+.mfn-avatar--lg {
+    width: 44px;
+    height: 44px;
+}
+
+.mfn-avatar-img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: block;
+}
+
+.mfn-avatar-initial {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: white;
+    font-weight: 600;
+    text-transform: uppercase;
+}
+
+/* ── Autocomplete Avatar Wrap ─────────────── */
+.mfn-ac-avatar-wrap {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 26px;
+    height: 26px;
+    border-radius: 50%;
+    overflow: hidden;
+    flex-shrink: 0;
+    border: 2px solid var(--group-member);
+    box-sizing: border-box;
+}
+
+/* ── Group Role Rings ─────────────────────── */
+.mfn-avatar.group-founder,           .mfn-ac-avatar-wrap.group-founder           { border-color: var(--group-founder); }
+.mfn-avatar.group-administrator,     .mfn-ac-avatar-wrap.group-administrator     { border-color: var(--group-administrator); }
+.mfn-avatar.group-global-moderator,  .mfn-ac-avatar-wrap.group-global-moderator  { border-color: var(--group-global-moderator); }
+.mfn-avatar.group-moderator,         .mfn-ac-avatar-wrap.group-moderator         { border-color: var(--group-moderator); }
+.mfn-avatar.group-developer,         .mfn-ac-avatar-wrap.group-developer         { border-color: var(--group-developer); }
+.mfn-avatar.group-game-dev,          .mfn-ac-avatar-wrap.group-game-dev          { border-color: var(--group-game-dev); }
+.mfn-avatar.group-fan,               .mfn-ac-avatar-wrap.group-fan               { border-color: var(--group-fan); }
+.mfn-avatar.group-member,            .mfn-ac-avatar-wrap.group-member            { border-color: var(--group-member); }
 .mfn-avatar-fallback {
     color: var(--mfn-accent);
     font-weight: 700;
