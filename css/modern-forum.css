@@ -7707,6 +7707,7 @@ body.has-docked-editor {
 .mfn-search-wrap {
     display: flex;
     align-items: center;
+    position: relative;
     flex: 1 1 auto;       
     max-width: 450px;     
     min-width: 250px;
@@ -7720,6 +7721,62 @@ body.has-docked-editor {
     background: var(--mfn-bg-elev);
     border-color: var(--mfn-accent);
     box-shadow: 0 0 0 3px var(--mfn-accent-soft);
+}
+/* ── Autocomplete Dropdown ─────────────────── */
+.mfn-search-autocomplete {
+    position: absolute;
+    top: calc(100% + 6px);
+    left: 0;
+    right: 0;
+    background: var(--mfn-bg-elev);
+    border: 1px solid var(--mfn-border);
+    border-radius: var(--mfn-radius);
+    box-shadow: var(--mfn-shadow);
+    max-height: 320px;
+    overflow-y: auto;
+    z-index: 100;
+    padding: 6px;
+    display: none;
+    opacity: 0;
+    transform: translateY(-4px);
+    transition: opacity 0.15s ease, transform 0.15s ease;
+}
+.mfn-search-autocomplete.is-active {
+    display: block;
+    opacity: 1;
+    transform: translateY(0);
+}
+
+.mfn-ac-item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 8px 12px;
+    border-radius: 6px;
+    cursor: pointer;
+    color: var(--mfn-fg);
+    text-decoration: none;
+    transition: background 0.15s;
+}
+.mfn-ac-item:hover, 
+.mfn-ac-item.is-focused {
+    background: rgba(255, 255, 255, 0.06);
+}
+
+.mfn-ac-avatar {
+    width: 26px;
+    height: 26px;
+    border-radius: 50%;
+    object-fit: cover;
+    flex-shrink: 0;
+}
+
+.mfn-ac-name {
+    font-size: 0.875rem;
+    font-weight: 500;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
 }
 /* The custom scope trigger */
 .mfn-scope-dropdown {
