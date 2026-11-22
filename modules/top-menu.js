@@ -137,6 +137,7 @@ const ForumTopMenuModule = (function () {
             'remove announcement': 'fa-bullhorn',
             'create announcement': 'fa-bullhorn',
             'mass moving/deleting': 'fa-layer-group',
+            'add': 'fa-plus',
 
             // Existing user, forum, and admin labels
             'edit profile': 'fa-user-pen',
@@ -180,6 +181,7 @@ const ForumTopMenuModule = (function () {
             'custom pages': 'fa-file',
             'manage blog': 'fa-newspaper',
             'logs and data': 'fa-database',
+            'logs': 'fa-database',
             'moderation queue': 'fa-list-check',
             'stats and options': 'fa-chart-line',
             'transfer sections': 'fa-arrow-right-arrow-left',
