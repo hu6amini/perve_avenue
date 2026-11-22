@@ -7707,45 +7707,66 @@ body.has-docked-editor {
 .mfn-search-wrap {
     display: flex;
     align-items: center;
-    flex: 1 1 auto;
+    flex: 1 1 auto;       
+    max-width: 450px;     
     min-width: 250px;
-    max-width: 380px;
-    margin: 0 auto;
+    margin: 0 auto;       
     background: rgba(255, 255, 255, 0.03); 
     border: 1px solid rgba(255, 255, 255, 0.08);
     border-radius: var(--mfn-radius);
-    transition: border-color .18s var(--mfn-ease), box-shadow .18s var(--mfn-ease);
+    transition: border-color .18s var(--mfn-ease), box-shadow .18s var(--mfn-ease), background .18s var(--mfn-ease);
 }
 .mfn-search-wrap:focus-within {
     background: var(--mfn-bg-elev);
     border-color: var(--mfn-accent);
     box-shadow: 0 0 0 3px var(--mfn-accent-soft);
 }
-
-/* The Select */
-.mfn-search-scope {
+/* The custom scope trigger */
+.mfn-scope-dropdown {
+    position: relative;
+    flex-shrink: 0;
+}
+.mfn-scope-trigger {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    height: 42px;
+    padding: 0 12px;
     background: transparent;
-    background-image: url("data:image/svg+xml;charset=US-ASCII,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%22292.4%22%20height%3D%22292.4%22%3E%3Cpath%20fill%3D%22%2397a8a0%22%20d%3D%22M287%2069.4a17.6%2017.6%200%200%200-13-5.4H18.4c-5%200-9.3%201.8-12.9%205.4A17.6%2017.6%200%200%200%200%2082.2c0%205%201.8%209.3%205.4%2012.9l128%20127.9c3.6%203.6%207.8%205.4%2012.8%205.4s9.2-1.8%2012.8-5.4L287%2095c3.5-3.5%205.4-7.8%205.4-12.8%200-5-1.9-9.2-5.5-12.8z%22%2F%3E%3C%2Fsvg%3E");
-    background-repeat: no-repeat;
-    background-position: right 10px center;
-    background-size: 8px;
-    padding-right: 24px;
-    border-right: none;
     border: none;
-    color: var(--mfn-fg);
+    border-right: 1px solid rgba(255, 255, 255, 0.08);
+    color: var(--mfn-fg-muted);
     font: inherit;
     font-size: .875rem;
     font-weight: 500;
-    padding: 0 4px 0 14px;
-    height: 42px;
     cursor: pointer;
-    outline: none;
-    border-right: 1px solid rgba(255, 255, 255, 0.1);
-    -webkit-appearance: none;
-    appearance: none;
+    border-radius: var(--mfn-radius) 0 0 var(--mfn-radius);
+    transition: background .15s, color .15s;
 }
-.mfn-search-scope:hover {
+
+.mfn-scope-trigger:hover {
     color: var(--mfn-fg);
+    background: rgba(255, 255, 255, 0.05);
+}
+.mfn-scope-trigger .mfn-chev {
+    font-size: 0.7rem;
+    margin-left: 2px;
+    opacity: 0.7;
+}
+/* The Dropdown Panel */
+.mfn-scope-panel {
+    min-width: 160px;
+    left: 0;
+    right: auto; /* Override the right-align from the user menu */
+}
+
+/* Individual option styling */
+.mfn-scope-option {
+    font-size: .875rem;
+}
+.mfn-scope-option i {
+    width: 16px; /* Align icons */
+    text-align: center;
 }
 
 /* The Form (no longer needs its own border/bg) */
