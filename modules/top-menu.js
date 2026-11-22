@@ -163,12 +163,10 @@ const ForumTopMenuModule = (function () {
     }
 
     // ─── Recursive menu-item extractor ────────────────────────
-    // Returns [{type:'link'|'submenu'|'separator', ...}]
     function extractItems(ul) {
         const out = [];
         for (const li of ul.children) {
             if (li.tagName !== 'LI') continue;
-            // native separator (in legacy markup: <li><hr …></li>)
             if (li.querySelector(':scope > hr')) { out.push({ type: 'separator' }); continue; }
             const a = li.querySelector(':scope > a');
             if (!a) continue;
@@ -297,7 +295,7 @@ const ForumTopMenuModule = (function () {
                 className: 'mfn-action mfn-action--has-menu',
                 'aria-haspopup': 'true',
                 'aria-expanded': 'false',
-                title: item.label, 
+                title: item.label,
                 innerHTML: icon(item.icon) +
                     '<span class="mfn-action-label">' + escapeHtml(item.label) + '</span>' +
                     (item.badge ? '<span class="mfn-badge">' + escapeHtml(item.badge) + '</span>' : '') +
@@ -310,7 +308,6 @@ const ForumTopMenuModule = (function () {
             return wrap;
         }
 
-        // Simple link — but with optional data-toggle / onclick / special classes
         const tag = (item.dataToggle || item.onclick) ? 'button' : 'a';
         const attrs = {
             type: tag === 'button' ? 'button' : undefined,
@@ -369,7 +366,6 @@ const ForumTopMenuModule = (function () {
     function buildGuestBlock(guest) {
         const frag = document.createDocumentFragment();
 
-        // Login button opens a small panel with social options
         const loginWrap = h('div', { className: 'mfn-dropdown' });
         const loginTrigger = h('button', {
             type: 'button',
@@ -430,6 +426,23 @@ const ForumTopMenuModule = (function () {
         return frag;
     }
 
+    // ─── Build: mobile search toggle ─────────────────────────
+    function buildMobileSearchToggle(searchForm) {
+        const searchToggle = h('button', {
+            type: 'button',
+            className: 'mfn-action mfn-search-toggle',
+            'aria-label': 'Toggle search',
+            innerHTML: '<i class="fa-regular fa-magnifying-glass" aria-hidden="true"></i>'
+        });
+        searchToggle.style.display = 'none'; // shown via CSS media query
+
+        searchToggle.addEventListener('click', () => {
+            searchForm.classList.toggle('mfn-search--mobile-open');
+        });
+
+        return searchToggle;
+    }
+
     // ─── Build: full nav ─────────────────────────────────────
     function buildNav(data) {
         const nav = h('nav', { id: CONFIG.NAV_ID, className: 'mfn', 'aria-label': 'Primary' });
@@ -450,15 +463,16 @@ const ForumTopMenuModule = (function () {
 
         // 1. Custom Scope Dropdown
         const scopeWrap = h('div', { className: 'mfn-dropdown mfn-scope-dropdown' });
-        
+
         const scopeTrigger = h('button', {
             type: 'button',
             className: 'mfn-scope-trigger',
             'aria-haspopup': 'true',
             'aria-expanded': 'false'
         });
-        // Default state
-        scopeTrigger.innerHTML = '<span class="mfn-scope-label"><i class="fa-regular fa-folder" aria-hidden="true"></i> Forum</span><i class="fa-regular fa-angle-down mfn-chev" aria-hidden="true"></i>';
+        scopeTrigger.innerHTML =
+            '<span class="mfn-scope-label"><i class="fa-regular fa-folder" aria-hidden="true"></i> Forum</span>' +
+            '<i class="fa-regular fa-angle-down mfn-chev" aria-hidden="true"></i>';
 
         const scopePanel = h('div', { className: 'mfn-dropdown-panel mfn-scope-panel' });
         const scopeOptions = [
@@ -473,7 +487,7 @@ const ForumTopMenuModule = (function () {
                 className: 'mfn-dd-link mfn-scope-option',
                 'data-value': opt.value
             });
-            btn.innerHTML = `<span class="mfn-dd-link-left">${opt.icon ? `<i class="${opt.icon}"></i>` : ''} ${opt.label}</span>`;
+            btn.innerHTML = `<span class="mfn-dd-link-left">${opt.icon ? `<i class="${opt.icon}" aria-hidden="true"></i>` : ''} ${escapeHtml(opt.label)}</span>`;
             scopePanel.appendChild(btn);
         });
 
@@ -488,7 +502,7 @@ const ForumTopMenuModule = (function () {
             method: 'post',
             role: 'search'
         });
-        
+
         form.innerHTML =
             '<label class="mfn-search-label" for="mfn-search-input">Search</label>' +
             '<i class="fa-regular fa-magnifying-glass mfn-search-icon" aria-hidden="true"></i>' +
@@ -496,25 +510,27 @@ const ForumTopMenuModule = (function () {
                 'placeholder="Search forum threads..." autocomplete="off" maxlength="150" required>' +
             '<input type="hidden" name="act" value="Search" data-scope-added>' +
             '<input type="hidden" name="CODE" value="01" data-scope-added>';
-            
+
         searchWrap.appendChild(form);
 
         // 3. The Switching Logic (Custom Dropdown)
         scopePanel.addEventListener('click', (e) => {
             const btn = e.target.closest('.mfn-scope-option');
             if (!btn) return;
-            
+
             e.preventDefault();
             const scope = btn.dataset.value;
             const label = btn.textContent.trim();
-            const iconHTML = btn.querySelector('i') ? btn.querySelector('i').outerHTML : '';
-            
+            const iconEl = btn.querySelector('i');
+            const iconHTML = iconEl ? iconEl.outerHTML : '';
+
             // Update trigger UI
-            scopeTrigger.querySelector('.mfn-scope-label').innerHTML = iconHTML + ' ' + label;
-            
+            scopeTrigger.querySelector('.mfn-scope-label').innerHTML = iconHTML + ' ' + escapeHtml(label);
+
             // Close dropdown
             scopeWrap.classList.remove(CONFIG.OPEN_CLASS);
             scopeTrigger.setAttribute('aria-expanded', 'false');
+            openDropdownTrigger = null;
 
             // Update Form Logic
             const input = form.querySelector('input[name="keywords"], input[name="q"], input[name="search"]');
@@ -525,23 +541,23 @@ const ForumTopMenuModule = (function () {
                 form.method = 'post';
                 input.name = 'keywords';
                 input.placeholder = 'Search forum threads...';
-                form.insertAdjacentHTML('beforeend', `<input type="hidden" name="act" value="Search"><input type="hidden" name="CODE" value="01">`);
+                form.insertAdjacentHTML('beforeend', '<input type="hidden" name="act" value="Search"><input type="hidden" name="CODE" value="01">');
             } else if (scope === 'google') {
                 form.action = 'https://www.google.com/search';
                 form.method = 'get';
                 input.name = 'q';
                 input.placeholder = 'Search on Google...';
-                form.insertAdjacentHTML('beforeend', `<input type="hidden" name="as_sitesearch" value="${CONFIG.SITE_FILTER}">`);
+                form.insertAdjacentHTML('beforeend', `<input type="hidden" name="as_sitesearch" value="${escapeHtml(CONFIG.SITE_FILTER)}">`);
             } else if (scope === 'user') {
-                form.action = 'https://www.forumcommunity.net/'; 
+                form.action = 'https://www.forumcommunity.net/';
                 form.method = 'get';
                 input.name = 'act';
                 input.placeholder = 'Search members...';
-                form.insertAdjacentHTML('beforeend', `<input type="hidden" name="select" value="utente">`);
+                form.insertAdjacentHTML('beforeend', '<input type="hidden" name="select" value="utente">');
             }
-            
+
             input.value = '';
-            input.focus(); // Keep focus in the search bar for a seamless experience
+            input.focus();
         });
 
         inner.appendChild(searchWrap);
@@ -550,9 +566,10 @@ const ForumTopMenuModule = (function () {
         // Actions
         const actions = h('div', { className: 'mfn-actions' });
 
-        // ── NEW: Theme Toggle ──────────────────────────────────
-        // theme.js uses event delegation, so it will automatically 
-        // hook into this button as long as it has [data-theme-toggle].
+        // Mobile search toggle (created once)
+        actions.appendChild(buildMobileSearchToggle(form));
+
+        // Theme Toggle
         const themeToggle = h('button', {
             type: 'button',
             className: 'mfn-action mfn-theme-toggle',
@@ -560,11 +577,9 @@ const ForumTopMenuModule = (function () {
             'aria-label': 'Toggle theme',
             title: 'Toggle theme'
         });
-        // theme.js will automatically sync the icon class (sun/moon) on load.
-        themeToggle.innerHTML = '<i class="fa-regular fa-sun-bright" aria-hidden="true"></i>'; 
-        
+        themeToggle.innerHTML = '<i class="fa-regular fa-sun-bright" aria-hidden="true"></i>';
+
         actions.appendChild(themeToggle);
-        // ───────────────────────────────────────────────────────
 
         if (data.loggedIn) {
             data.actions.forEach(item => actions.appendChild(buildTopAction(item)));
@@ -621,12 +636,11 @@ const ForumTopMenuModule = (function () {
         // Click on triggers
         navEl.addEventListener('click', (e) => {
             const trigger = e.target.closest(
-                '.mfn-user-trigger, .mfn-action--has-menu, .mfn-action--primary'
+                '.mfn-user-trigger, .mfn-action--has-menu, .mfn-action--primary, .mfn-scope-trigger'
             );
             if (trigger && navEl.contains(trigger)) {
                 const dd = trigger.closest('.mfn-dropdown');
                 if (!dd) return;
-                // Only treat these as dropdown toggles if they actually open a panel
                 if (!dd.querySelector('.mfn-dropdown-panel')) return;
                 e.preventDefault();
                 const isOpen = dd.classList.contains(CONFIG.OPEN_CLASS);
@@ -642,18 +656,6 @@ const ForumTopMenuModule = (function () {
                 return;
             }
 
-            // Append a search toggle button for mobile
-const searchToggle = document.createElement('button');
-searchToggle.className = 'mfn-action mfn-search-toggle';
-searchToggle.setAttribute('aria-label', 'Toggle search');
-searchToggle.innerHTML = '<i class="fa-regular fa-magnifying-glass"></i>';
-searchToggle.style.display = 'none'; // shown via CSS media query
-document.querySelector('.mfn-actions').prepend(searchToggle);
-
-searchToggle.addEventListener('click', () => {
-    document.querySelector('.mfn-search').classList.toggle('mfn-search--mobile-open');
-});           
-
             // Social login click → replicate legacy cookie + redirect
             const social = e.target.closest('.mfn-social-btn[data-service][data-url]');
             if (social) {
@@ -661,19 +663,24 @@ searchToggle.addEventListener('click', () => {
                 document.cookie = 'social-login=' + social.dataset.service +
                     '; expires=Wed, 1 Jan 2030 00:00:00 GMT; path=/;';
                 window.location.href = social.dataset.url;
-                return;
             }
         });
 
         // Click outside → close
         document.addEventListener('click', (e) => {
             if (!navEl) return;
-            if (!navEl.contains(e.target)) closeAllDropdowns();
+            if (!navEl.contains(e.target)) {
+                closeAllDropdowns();
+                openDropdownTrigger = null;
+            }
         });
 
         // Escape → close
         document.addEventListener('keydown', (e) => {
-            if (e.key === 'Escape') closeAllDropdowns();
+            if (e.key === 'Escape') {
+                closeAllDropdowns();
+                openDropdownTrigger = null;
+            }
         });
     }
 
@@ -708,8 +715,8 @@ searchToggle.addEventListener('click', () => {
         // Insert BEFORE legacy menu (user hides legacy via CSS)
         menuWrap.parentNode.insertBefore(navEl, menuWrap);
 
-               // Hide from screen readers now that the modern nav is active
-        menuWrap.setAttribute('aria-hidden', 'true'); // <── Add this
+        // Hide from screen readers now that the modern nav is active
+        menuWrap.setAttribute('aria-hidden', 'true');
 
         attachEventDelegation();
         window.addEventListener('scroll', requestScroll, { passive: true });
