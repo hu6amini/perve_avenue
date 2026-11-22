@@ -445,26 +445,46 @@ const ForumTopMenuModule = (function () {
             })
         );
 
-        // Search
         // ── Scoped Search Setup ──────────────────────────────────
         const searchWrap = h('div', { className: 'mfn-search-wrap' });
 
-        // 1. Scope Selector
-        const scopeSelect = h('select', {
-            className: 'mfn-search-scope',
-            'aria-label': 'Search scope'
+        // 1. Custom Scope Dropdown
+        const scopeWrap = h('div', { className: 'mfn-dropdown mfn-scope-dropdown' });
+        
+        const scopeTrigger = h('button', {
+            type: 'button',
+            className: 'mfn-scope-trigger',
+            'aria-haspopup': 'true',
+            'aria-expanded': 'false'
         });
-        scopeSelect.innerHTML = `
-            <option value="forum" selected>Forum</option>
-            <option value="google">Google</option>
-            <option value="user">Users</option>
-        `;
-        searchWrap.appendChild(scopeSelect);
+        // Default state
+        scopeTrigger.innerHTML = '<span class="mfn-scope-label"><i class="fa-regular fa-folder" aria-hidden="true"></i> Forum</span><i class="fa-regular fa-chevron-down mfn-chev" aria-hidden="true"></i>';
 
-        // 2. The Form (defaults to Forum Search based on the selected option)
+        const scopePanel = h('div', { className: 'mfn-dropdown-panel mfn-scope-panel' });
+        const scopeOptions = [
+            { value: 'forum', label: 'Forum', icon: 'fa-regular fa-folder' },
+            { value: 'google', label: 'Google', icon: 'fa-brands fa-google' },
+            { value: 'user', label: 'Users', icon: 'fa-regular fa-user' }
+        ];
+
+        scopeOptions.forEach(opt => {
+            const btn = h('button', {
+                type: 'button',
+                className: 'mfn-dd-link mfn-scope-option',
+                'data-value': opt.value
+            });
+            btn.innerHTML = `<span class="mfn-dd-link-left">${opt.icon ? `<i class="${opt.icon}"></i>` : ''} ${opt.label}</span>`;
+            scopePanel.appendChild(btn);
+        });
+
+        scopeWrap.appendChild(scopeTrigger);
+        scopeWrap.appendChild(scopePanel);
+        searchWrap.appendChild(scopeWrap);
+
+        // 2. The Search Form
         const form = h('form', {
             className: 'mfn-search',
-            action: 'https://patestt.forumcommunity.net/', // Default Forum action
+            action: 'https://perveavenue.forumcommunity.net/',
             method: 'post',
             role: 'search'
         });
@@ -479,12 +499,25 @@ const ForumTopMenuModule = (function () {
             
         searchWrap.appendChild(form);
 
-        // 3. The Switching Logic
-        scopeSelect.addEventListener('change', (e) => {
-            const scope = e.target.value;
-            const input = form.querySelector('input[name="keywords"], input[name="q"], input[name="search"]');
+        // 3. The Switching Logic (Custom Dropdown)
+        scopePanel.addEventListener('click', (e) => {
+            const btn = e.target.closest('.mfn-scope-option');
+            if (!btn) return;
             
-            // Clear old hidden fields
+            e.preventDefault();
+            const scope = btn.dataset.value;
+            const label = btn.textContent.trim();
+            const iconHTML = btn.querySelector('i') ? btn.querySelector('i').outerHTML : '';
+            
+            // Update trigger UI
+            scopeTrigger.querySelector('.mfn-scope-label').innerHTML = iconHTML + ' ' + label;
+            
+            // Close dropdown
+            scopeWrap.classList.remove(CONFIG.OPEN_CLASS);
+            scopeTrigger.setAttribute('aria-expanded', 'false');
+
+            // Update Form Logic
+            const input = form.querySelector('input[name="keywords"], input[name="q"], input[name="search"]');
             form.querySelectorAll('input[type="hidden"]').forEach(el => el.remove());
 
             if (scope === 'forum') {
@@ -492,10 +525,7 @@ const ForumTopMenuModule = (function () {
                 form.method = 'post';
                 input.name = 'keywords';
                 input.placeholder = 'Search forum threads...';
-                form.insertAdjacentHTML('beforeend', `
-                    <input type="hidden" name="act" value="Search">
-                    <input type="hidden" name="CODE" value="01">
-                `);
+                form.insertAdjacentHTML('beforeend', `<input type="hidden" name="act" value="Search"><input type="hidden" name="CODE" value="01">`);
             } else if (scope === 'google') {
                 form.action = 'https://www.google.com/search';
                 form.method = 'get';
@@ -503,17 +533,15 @@ const ForumTopMenuModule = (function () {
                 input.placeholder = 'Search on Google...';
                 form.insertAdjacentHTML('beforeend', `<input type="hidden" name="as_sitesearch" value="${CONFIG.SITE_FILTER}">`);
             } else if (scope === 'user') {
-                // Update this to your exact user search endpoint if different
                 form.action = 'https://www.forumcommunity.net/'; 
                 form.method = 'get';
-                input.name = 'act'; // Often user search requires specific GET params
+                input.name = 'act';
                 input.placeholder = 'Search members...';
-                // Note: You'll need to verify the exact URL params ForumCommunity uses for user search
                 form.insertAdjacentHTML('beforeend', `<input type="hidden" name="select" value="utente">`);
             }
             
-            // Clear input when switching modes
             input.value = '';
+            input.focus(); // Keep focus in the search bar for a seamless experience
         });
 
         inner.appendChild(searchWrap);
