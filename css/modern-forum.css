@@ -7683,6 +7683,7 @@ body.has-docked-editor {
     margin: 0 auto;
     padding: 0 20px;
     height: var(--mfn-h);
+    flex-wrap: nowrap;
 }
 
 /* ── Logo ───────────────────────────────────── */
@@ -7740,11 +7741,12 @@ body.has-docked-editor {
 
 /* The Form (no longer needs its own border/bg) */
 .mfn-search {
-    flex: 1;
+    flex: 1 1 auto;
+    min-width: 250px;
     display: flex;
     align-items: center;
     position: relative;
-    margin: 0;
+    margin: 0 20px;
     border: none;
     box-shadow: none;
     background: transparent;
@@ -7797,15 +7799,22 @@ body.has-docked-editor {
     align-items: center;
     gap: 4px;
     flex: 0 0 auto;
+    flex-shrink: 0;
 }
 
+/* Hide the text labels permanently on the top bar */
+.mfn-action-label {
+    display: none !important; 
+}
 /* ── Action buttons ────────────────────────── */
 .mfn-action {
     display: inline-flex;
     align-items: center;
     gap: 6px;
     height: 38px;
-    padding: 0 10px;
+    padding: 0 12px;
+    width: 42px;
+    justify-content: center;
     background: transparent;
     border: 1px solid transparent;
     border-radius: 10px;
@@ -7872,6 +7881,7 @@ body.has-docked-editor {
     font-size: .72rem;
     opacity: .65;
     margin-left: -2px;
+    display: none !important;
 }
 
 /* ── User trigger (logged-in) ──────────────── */
@@ -7918,10 +7928,11 @@ body.has-docked-editor {
     font-size: 1rem;
 }
 .mfn-user-name {
-    max-width: 130px;
+    max-width: 90px;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
+    display: block;
 }
 
 /* ── Dropdowns ─────────────────────────────── */
