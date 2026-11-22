@@ -521,7 +521,7 @@ const ForumTopMenuModule = (function () {
             form.querySelectorAll('input[type="hidden"]').forEach(el => el.remove());
 
             if (scope === 'forum') {
-                form.action = 'https://perveavenue.forumcommunity.net/';
+                form.action = 'https://patestt.forumcommunity.net/';
                 form.method = 'post';
                 input.name = 'keywords';
                 input.placeholder = 'Search forum threads...';
