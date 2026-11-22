@@ -680,9 +680,6 @@ searchToggle.addEventListener('click', () => {
         // Insert BEFORE legacy menu (user hides legacy via CSS)
         menuWrap.parentNode.insertBefore(navEl, menuWrap);
 
-               // Hide from screen readers now that the modern nav is active
-        menuWrap.setAttribute('aria-hidden', 'true'); // <── Add this
-
         attachEventDelegation();
         window.addEventListener('scroll', requestScroll, { passive: true });
 
