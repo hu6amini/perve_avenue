@@ -29,6 +29,7 @@ const ForumTopMenuModule = (function () {
     let lastY = 0;
     let ticking = false;
     let openDropdownTrigger = null;
+    const userApiCache = new Map();
 
     // ─── Helpers ──────────────────────────────────────────────
     const escapeHtml = (s) => {
@@ -60,6 +61,52 @@ const ForumTopMenuModule = (function () {
 
     function icon(name, style) {
         return '<i class="fa-' + (style || 'regular') + ' ' + name + '" aria-hidden="true"></i>';
+    }
+
+    function normalizeAvatarUrl(url) {
+        if (!url || typeof url !== 'string') return '';
+        const trimmed = url.trim();
+        if (!trimmed) return '';
+        if (trimmed.startsWith('//')) return 'https:' + trimmed;
+        if (trimmed.startsWith('http://') && window.location.protocol === 'https:') {
+            return trimmed.replace(/^http:\/\//i, 'https://');
+        }
+        return trimmed;
+    }
+
+    function buildAvatarHtml(avatarSrc, username) {
+        const cleanSrc = normalizeAvatarUrl(avatarSrc);
+        if (cleanSrc) {
+            return '<img src="' + escapeHtml(cleanSrc) + '" alt="" loading="lazy" class="mfn-avatar-img">';
+        }
+        const initial = (username || 'U').charAt(0).toUpperCase();
+        return '<span class="mfn-avatar-fallback">' + escapeHtml(initial) + '</span>';
+    }
+
+    // ─── API User Lookup ──────────────────────────────────────
+    async function fetchUserByMid(mid) {
+        if (mid == null) return null;
+        const key = String(mid).trim();
+        if (!/^\d+$/.test(key)) return null;
+        if (userApiCache.has(key)) return userApiCache.get(key);
+
+        try {
+            const resp = await fetch(
+                window.location.origin + '/api.php?mid=' + encodeURIComponent(key),
+                { credentials: 'same-origin' }
+            );
+            if (!resp.ok) return null;
+            const data = await resp.json();
+            const user = data['m' + key] || data.info || null;
+            if (user && (user.id || user.nickname || user.avatar)) {
+                userApiCache.set(key, user);
+                return user;
+            }
+            return null;
+        } catch (err) {
+            console.warn('[TopMenu] API user fetch failed for MID ' + key + ':', err);
+            return null;
+        }
     }
 
     // ─── Login state detection ────────────────────────────────
@@ -153,13 +200,42 @@ const ForumTopMenuModule = (function () {
     function extractUser(menuWrap) {
         const link = menuWrap.querySelector('.left .menu > a[href*="act=Profile"]');
         if (!link) return null;
+        const href = link.getAttribute('href') || '#';
+        const midMatch = href.match(/MID=(\d+)/i);
         const img = link.querySelector('.avatar img');
         const nick = link.querySelector('.nick');
         return {
+            mid: midMatch ? midMatch[1] : null,
             avatarSrc: img ? (img.getAttribute('data-original') || img.getAttribute('src') || '') : '',
             username: nick ? nick.textContent.trim() : 'User',
-            profileUrl: link.getAttribute('href') || '#'
+            profileUrl: href
         };
+    }
+
+    async function hydrateUserFromApi(user) {
+        if (!user || !user.mid || !navEl) return;
+        const apiUser = await fetchUserByMid(user.mid);
+        if (!apiUser || !navEl) return;
+
+        const nextUsername = (apiUser.nickname || '').trim() || user.username;
+        const nextAvatarSrc = normalizeAvatarUrl(apiUser.avatar) || normalizeAvatarUrl(user.avatarSrc);
+        const avatarHtml = buildAvatarHtml(nextAvatarSrc, nextUsername);
+
+        const trigger = navEl.querySelector('.mfn-user-trigger');
+        if (trigger) {
+            const triggerAvatar = trigger.querySelector('.mfn-avatar');
+            const triggerName = trigger.querySelector('.mfn-user-name');
+            if (triggerAvatar) triggerAvatar.innerHTML = avatarHtml;
+            if (triggerName) triggerName.textContent = nextUsername;
+        }
+
+        const panelHead = navEl.querySelector('.mfn-user-panel-head');
+        if (panelHead) {
+            const headAvatar = panelHead.querySelector('.mfn-avatar');
+            const headName = panelHead.querySelector('.mfn-user-panel-name');
+            if (headAvatar) headAvatar.innerHTML = avatarHtml;
+            if (headName) headName.textContent = nextUsername;
+        }
     }
 
     // ─── Recursive menu-item extractor ────────────────────────
@@ -327,10 +403,7 @@ const ForumTopMenuModule = (function () {
     // ─── Build: user dropdown (logged-in) ────────────────────
     function buildUserDropdown(user, items) {
         const wrap = h('div', { className: 'mfn-dropdown mfn-user-dropdown' });
-
-        const avatarHtml = user.avatarSrc
-            ? '<img src="' + escapeHtml(user.avatarSrc) + '" alt="" loading="lazy" class="mfn-avatar-img">'
-            : '<span class="mfn-avatar-fallback">' + escapeHtml(user.username.charAt(0).toUpperCase()) + '</span>';
+        const avatarHtml = buildAvatarHtml(user.avatarSrc, user.username);
 
         const trigger = h('button', {
             type: 'button',
@@ -720,6 +793,10 @@ const ForumTopMenuModule = (function () {
 
         attachEventDelegation();
         window.addEventListener('scroll', requestScroll, { passive: true });
+
+        if (data.loggedIn && data.user?.mid) {
+            hydrateUserFromApi(data.user);
+        }
 
         console.log('[TopMenu] Modern nav built (' + (loggedIn ? 'member' : 'guest') + ')');
     }
