@@ -7911,7 +7911,10 @@ body.has-docked-editor {
     font-size: .72rem;
     opacity: .65;
     margin-left: -2px;
-    display: none !important;
+}
+
+.mfn-chev:not(.mfn-submenu-summary .mfn-chev) {
+   display: none !important;
 }
 
 /* ── User trigger (logged-in) ──────────────── */
