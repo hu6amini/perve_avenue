@@ -7678,6 +7678,7 @@ body.has-docked-editor {
 .mfn-inner {
     display: flex;
     align-items: center;
+    justify-content: space-between;
     gap: 16px;
     max-width: 1200px;
     margin: 0 auto;
@@ -7706,10 +7707,10 @@ body.has-docked-editor {
 .mfn-search-wrap {
     display: flex;
     align-items: center;
-    flex: 1 1 300px;
+    flex: 1 1 auto;
     min-width: 250px;
-    max-width: 600px;
-    margin: 0 16px;
+    max-width: 480px;
+    margin: 0 auto;
     background: var(--mfn-bg-elev);
     border: 1px solid var(--mfn-border);
     border-radius: var(--mfn-radius);
