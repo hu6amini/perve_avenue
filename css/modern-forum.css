@@ -8036,6 +8036,7 @@ body.has-docked-editor {
     border-radius: 8px;
     color: var(--mfn-fg);
     font-size: .875rem;
+    text-align: left;
     text-decoration: none;
     transition: background .12s var(--mfn-ease), color .12s var(--mfn-ease);
 }
