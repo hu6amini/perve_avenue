@@ -161,6 +161,8 @@ const ForumTopMenuModule = (function () {
             'mark all as read': 'fa-check-double',
             'my topics': 'fa-user-pen',
             'my posts': 'fa-message',
+            'subscribe to the forum': 'fa-bell',
+            'subscribe': 'fa-bell',
             'site\'s messages': 'fa-shield-halved',
             'topics planned': 'fa-calendar-check',
             'notifications from scripts': 'fa-bell',
