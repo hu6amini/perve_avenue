@@ -7654,10 +7654,6 @@ body.has-docked-editor {
    Modern forum top menu (Emerald Theme)
    ============================================= */
 
-/* Hide the legacy menu — DO NOT remove it from DOM,
-   the module reads from it. */
-.Fixed { display: none !important; }
-
 /* ── Shell ──────────────────────────────────── */
 .mfn {
     position: sticky;
