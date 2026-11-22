@@ -7656,23 +7656,7 @@ body.has-docked-editor {
 
 /* Hide the legacy menu — DO NOT remove it from DOM,
    the module reads from it. */
-.menuwrap { display: none !important; }
-
-:root {
-    --mfn-bg:             var(--surface-base, #0f1412);
-    --mfn-bg-elev:        var(--surface-light, #1a1f1c);
-    --mfn-fg:             var(--text-primary, #e8f2ea);
-    --mfn-fg-muted:       var(--text-muted, #97a8a0);
-    --mfn-accent:         var(--primary-color, #10b981);
-    --mfn-accent-soft:    color-mix(in srgb, var(--mfn-accent) 18%, transparent);
-    --mfn-border:         color-mix(in srgb, var(--mfn-fg) 10%, transparent);
-    --mfn-radius:         12px;
-    --mfn-shadow:         0 8px 28px rgba(0, 0, 0, .28);
-    --mfn-shadow-soft:    0 2px 8px rgba(0, 0, 0, .18);
-    --mfn-logo-color:     var(--mfn-fg);
-    --mfn-h:              64px;
-    --mfn-ease:           cubic-bezier(.4, 0, .2, 1);
-}
+.Fixed { display: none !important; }
 
 /* ── Shell ──────────────────────────────────── */
 .mfn {
