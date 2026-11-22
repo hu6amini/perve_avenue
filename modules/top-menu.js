@@ -393,12 +393,16 @@ const ForumTopMenuModule = (function () {
             }
             if (item.type === 'submenu') {
                 const det = h('details', { className: 'mfn-submenu' });
-                det.appendChild(h('summary', { className: 'mfn-submenu-summary' }, [
-                    h('span', { className: 'mfn-submenu-left', innerHTML: icon(item.icon) + ' ' + escapeHtml(item.label) }),
-                    // ── ADDED BADGE HERE ──
-                    (item.badge ? '<span class="mfn-badge">' + escapeHtml(item.badge) + '</span>' : ''),
-                    '<i class="fa-regular fa-chevron-down mfn-chev" aria-hidden="true"></i>'
-                ]));
+                
+                // ── FIX: Build the summary using innerHTML ──
+                const summary = h('summary', { className: 'mfn-submenu-summary' });
+                summary.innerHTML = 
+                    '<span class="mfn-submenu-left">' + icon(item.icon) + ' ' + escapeHtml(item.label) + '</span>' +
+                    (item.badge ? '<span class="mfn-badge">' + escapeHtml(item.badge) + '</span>' : '') +
+                    '<i class="fa-regular fa-chevron-down mfn-chev" aria-hidden="true"></i>';
+                
+                det.appendChild(summary);
+                
                 const body = h('div', { className: 'mfn-submenu-body' });
                 body.appendChild(buildDropdownBody(item.items));
                 det.appendChild(body);
