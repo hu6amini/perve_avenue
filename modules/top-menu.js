@@ -484,7 +484,7 @@ const ForumTopMenuModule = (function () {
         // 2. The Search Form
         const form = h('form', {
             className: 'mfn-search',
-            action: 'https://perveavenue.forumcommunity.net/',
+            action: 'https://patestt.forumcommunity.net/',
             method: 'post',
             role: 'search'
         });
