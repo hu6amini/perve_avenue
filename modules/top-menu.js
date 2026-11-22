@@ -572,16 +572,14 @@ const ForumTopMenuModule = (function () {
 
         // 1. Custom Scope Dropdown
         const scopeWrap = h('div', { className: 'mfn-dropdown mfn-scope-dropdown' });
-
+        
         const scopeTrigger = h('button', {
             type: 'button',
             className: 'mfn-scope-trigger',
             'aria-haspopup': 'true',
             'aria-expanded': 'false'
         });
-        scopeTrigger.innerHTML =
-            '<span class="mfn-scope-label"><i class="fa-regular fa-folder" aria-hidden="true"></i> Forum</span>' +
-            '<i class="fa-regular fa-angle-down mfn-chev" aria-hidden="true"></i>';
+        scopeTrigger.innerHTML = '<span class="mfn-scope-label"><i class="fa-regular fa-folder" aria-hidden="true"></i> Forum</span><i class="fa-regular fa-chevron-down mfn-chev" aria-hidden="true"></i>';
 
         const scopePanel = h('div', { className: 'mfn-dropdown-panel mfn-scope-panel' });
         const scopeOptions = [
@@ -596,7 +594,7 @@ const ForumTopMenuModule = (function () {
                 className: 'mfn-dd-link mfn-scope-option',
                 'data-value': opt.value
             });
-            btn.innerHTML = `<span class="mfn-dd-link-left">${opt.icon ? `<i class="${opt.icon}" aria-hidden="true"></i>` : ''} ${escapeHtml(opt.label)}</span>`;
+            btn.innerHTML = `<span class="mfn-dd-link-left">${opt.icon ? `<i class="${opt.icon}"></i>` : ''} ${opt.label}</span>`;
             scopePanel.appendChild(btn);
         });
 
@@ -607,11 +605,11 @@ const ForumTopMenuModule = (function () {
         // 2. The Search Form
         const form = h('form', {
             className: 'mfn-search',
-            action: 'https://patestt.forumcommunity.net/',
+            action: 'https://perveavenue.forumcommunity.net/',
             method: 'post',
             role: 'search'
         });
-
+        
         form.innerHTML =
             '<label class="mfn-search-label" for="mfn-search-input">Search</label>' +
             '<i class="fa-regular fa-magnifying-glass mfn-search-icon" aria-hidden="true"></i>' +
@@ -619,54 +617,170 @@ const ForumTopMenuModule = (function () {
                 'placeholder="Search forum threads..." autocomplete="off" maxlength="150" required>' +
             '<input type="hidden" name="act" value="Search" data-scope-added>' +
             '<input type="hidden" name="CODE" value="01" data-scope-added>';
-
+            
         searchWrap.appendChild(form);
 
-        // 3. The Switching Logic (Custom Dropdown)
+        // 3. Autocomplete Panel
+        const autocompletePanel = h('div', { className: 'mfn-search-autocomplete' });
+        searchWrap.appendChild(autocompletePanel);
+
+        // 4. Search State & Logic
+        let currentScope = 'forum';
+        let searchTimeout = null;
+        let searchAbort = null;
+        let acResults = [];
+        let acFocusIndex = -1;
+
+        const searchInput = form.querySelector('#mfn-search-input');
+
+        function closeAutocomplete() {
+            autocompletePanel.classList.remove('is-active');
+            acFocusIndex = -1;
+        }
+
+        function renderAutocomplete() {
+            if (!acResults.length) {
+                closeAutocomplete();
+                return;
+            }
+            autocompletePanel.innerHTML = '';
+            acFocusIndex = -1;
+
+            acResults.forEach((user, i) => {
+                const profileUrl = `/?act=Profile&MID=${user.id}`;
+                
+                // Optimize avatar
+                let avatarHtml = '<div class="mfn-ac-avatar" style="background:var(--mfn-bg-elev)"></div>';
+                if (user.avatar && user.avatar !== 'http') {
+                    let safeAvatar = user.avatar;
+                    if (!safeAvatar.includes('weserv.nl') && !safeAvatar.startsWith('data:')) {
+                        safeAvatar = `https://images.weserv.nl/?url=${encodeURIComponent(safeAvatar)}&output=webp&w=48&h=48&fit=cover`;
+                    }
+                    avatarHtml = `<img class="mfn-ac-avatar" src="${safeAvatar}" onerror="this.outerHTML='<div class=\\'mfn-ac-avatar\\' style=\\'background:var(--mfn-bg-elev)\\'>'">`;
+                }
+
+                const item = h('div', {
+                    className: 'mfn-ac-item',
+                    'data-index': i,
+                    'data-url': profileUrl
+                });
+                item.innerHTML = `${avatarHtml}<span class="mfn-ac-name">${escapeHtml(user.name || user.nickname)}</span>`;
+                
+                item.addEventListener('click', () => {
+                    window.location.href = profileUrl;
+                });
+                
+                autocompletePanel.appendChild(item);
+            });
+            autocompletePanel.classList.add('is-active');
+        }
+
+        function updateAcFocus(items) {
+            items.forEach((item, i) => {
+                item.classList.toggle('is-focused', i === acFocusIndex);
+            });
+            if (items[acFocusIndex]) {
+                items[acFocusIndex].scrollIntoView({ block: 'nearest' });
+            }
+        }
+
+        // Input Listener (Debounced API Fetch)
+        searchInput.addEventListener('input', (e) => {
+            if (currentScope !== 'user') return;
+            const query = e.target.value.trim();
+            
+            clearTimeout(searchTimeout);
+            if (searchAbort) searchAbort.abort();
+            closeAutocomplete();
+            
+            if (query.length < 2) return;
+
+            searchTimeout = setTimeout(async () => {
+                searchAbort = new AbortController();
+                try {
+                    const res = await fetch(`/api.php?search&name=${encodeURIComponent(query)}&n=10&cookie=1`, {
+                        credentials: 'include',
+                        signal: searchAbort.signal
+                    });
+                    if (!res.ok) throw new Error('HTTP ' + res.status);
+                    const data = await res.json();
+                    acResults = (data && data.users) ? data.users : [];
+                    renderAutocomplete();
+                } catch (err) {
+                    if (err.name !== 'AbortError') console.warn('[TopMenu] User search failed:', err);
+                }
+            }, 300);
+        });
+
+        // Keyboard Navigation
+        searchInput.addEventListener('keydown', (e) => {
+            if (currentScope !== 'user' || !autocompletePanel.classList.contains('is-active')) return;
+            
+            const items = autocompletePanel.querySelectorAll('.mfn-ac-item');
+            if (!items.length) return;
+
+            if (e.key === 'ArrowDown') {
+                e.preventDefault();
+                acFocusIndex = (acFocusIndex + 1) % items.length;
+                updateAcFocus(items);
+            } else if (e.key === 'ArrowUp') {
+                e.preventDefault();
+                acFocusIndex = (acFocusIndex - 1 + items.length) % items.length;
+                updateAcFocus(items);
+            } else if (e.key === 'Enter' && acFocusIndex >= 0) {
+                e.preventDefault();
+                window.location.href = items[acFocusIndex].getAttribute('data-url');
+            } else if (e.key === 'Escape') {
+                closeAutocomplete();
+            }
+        });
+
+        // Close dropdown when input loses focus (with delay for clicks)
+        searchInput.addEventListener('blur', () => {
+            setTimeout(closeAutocomplete, 200);
+        });
+
+        // 5. Switching Logic
         scopePanel.addEventListener('click', (e) => {
             const btn = e.target.closest('.mfn-scope-option');
             if (!btn) return;
-
+            
             e.preventDefault();
             const scope = btn.dataset.value;
             const label = btn.textContent.trim();
-            const iconEl = btn.querySelector('i');
-            const iconHTML = iconEl ? iconEl.outerHTML : '';
-
-            // Update trigger UI
-            scopeTrigger.querySelector('.mfn-scope-label').innerHTML = iconHTML + ' ' + escapeHtml(label);
-
-            // Close dropdown
+            const iconHTML = btn.querySelector('i') ? btn.querySelector('i').outerHTML : '';
+            
+            scopeTrigger.querySelector('.mfn-scope-label').innerHTML = iconHTML + ' ' + label;
             scopeWrap.classList.remove(CONFIG.OPEN_CLASS);
             scopeTrigger.setAttribute('aria-expanded', 'false');
-            openDropdownTrigger = null;
 
-            // Update Form Logic
-            const input = form.querySelector('input[name="keywords"], input[name="q"], input[name="search"]');
+            currentScope = scope; // Update global scope state
+            searchInput.value = '';
+            closeAutocomplete();
+
             form.querySelectorAll('input[type="hidden"]').forEach(el => el.remove());
 
             if (scope === 'forum') {
-                form.action = 'https://patestt.forumcommunity.net/';
+                form.action = 'https://perveavenue.forumcommunity.net/';
                 form.method = 'post';
-                input.name = 'keywords';
-                input.placeholder = 'Search forum threads...';
-                form.insertAdjacentHTML('beforeend', '<input type="hidden" name="act" value="Search"><input type="hidden" name="CODE" value="01">');
+                searchInput.name = 'keywords';
+                searchInput.placeholder = 'Search forum threads...';
+                form.insertAdjacentHTML('beforeend', `<input type="hidden" name="act" value="Search"><input type="hidden" name="CODE" value="01">`);
             } else if (scope === 'google') {
                 form.action = 'https://www.google.com/search';
                 form.method = 'get';
-                input.name = 'q';
-                input.placeholder = 'Search on Google...';
-                form.insertAdjacentHTML('beforeend', `<input type="hidden" name="as_sitesearch" value="${escapeHtml(CONFIG.SITE_FILTER)}">`);
+                searchInput.name = 'q';
+                searchInput.placeholder = 'Search on Google...';
+                form.insertAdjacentHTML('beforeend', `<input type="hidden" name="as_sitesearch" value="${CONFIG.SITE_FILTER}">`);
             } else if (scope === 'user') {
                 form.action = 'https://www.forumcommunity.net/';
                 form.method = 'get';
-                input.name = 'act';
-                input.placeholder = 'Search members...';
-                form.insertAdjacentHTML('beforeend', '<input type="hidden" name="select" value="utente">');
+                searchInput.name = 'keywords';
+                searchInput.placeholder = 'Search members...';
+                form.insertAdjacentHTML('beforeend', `<input type="hidden" name="act" value="cerca"><input type="hidden" name="select" value="utente">`);
             }
-
-            input.value = '';
-            input.focus();
+            
+            searchInput.focus();
         });
 
         inner.appendChild(searchWrap);
