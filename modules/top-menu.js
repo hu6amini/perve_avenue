@@ -337,7 +337,7 @@ const ForumTopMenuModule = (function () {
                 const det = h('details', { className: 'mfn-submenu' });
                 det.appendChild(h('summary', { className: 'mfn-submenu-summary' }, [
                     h('span', { className: 'mfn-submenu-left', innerHTML: icon(item.icon) + ' ' + escapeHtml(item.label) }),
-                    '<i class="fa-regular fa-chevron-down mfn-chev" aria-hidden="true"></i>'
+                    h('i', { className: 'fa-regular fa-chevron-down mfn-chev', 'aria-hidden': 'true' })
                 ]));
                 const body = h('div', { className: 'mfn-submenu-body' });
                 body.appendChild(buildDropdownBody(item.items));
