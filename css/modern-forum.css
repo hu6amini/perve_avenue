@@ -7898,6 +7898,7 @@ body.has-docked-editor {
 .mfn-action {
     display: inline-flex;
     align-items: center;
+    position: relative;
     gap: 6px;
     height: 38px;
     padding: 0 12px;
@@ -7925,6 +7926,33 @@ body.has-docked-editor {
 }
 .mfn-action:focus-visible { box-shadow: 0 0 0 3px var(--mfn-accent-soft); }
 .mfn-action i { font-size: 1rem; opacity: .9; }
+.mfn-action > .mfn-badge {
+    position: absolute;
+    top: 2px;
+    right: 2px;
+    min-width: 16px;
+    height: 16px;
+    padding: 0 4px;
+    font-size: 0.65rem;
+    background: var(--danger-color); /* Use red for unread notifications */
+    color: #fff;
+    border: 2px solid var(--mfn-bg); /* Creates a cutout effect against the header */
+    border-radius: 10px;
+    pointer-events: none;
+}
+/* Inside dropdowns, revert to inline pill */
+.mfn-dd-link .mfn-badge,
+.mfn-submenu-summary .mfn-badge {
+    position: static;
+    border: none;
+    background: var(--danger-color);
+    color: #fff;
+    margin-left: 8px;
+}
+.mfn-submenu-summary .mfn-badge {
+    margin-left: auto; /* Pushes the badge to the right, next to the chevron */
+    margin-right: 6px;
+}
 /* Style the theme toggle specifically to be a perfect square */
 .mfn-theme-toggle {
     width: 38px;
@@ -7957,7 +7985,6 @@ body.has-docked-editor {
     min-width: 18px;
     height: 18px;
     padding: 0 5px;
-    margin-left: 2px;
     background: var(--mfn-accent);
     color: #06110c;
     border-radius: 9px;
