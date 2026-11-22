@@ -279,20 +279,31 @@ const ForumTopMenuModule = (function () {
         const out = [];
         for (const li of ul.children) {
             if (li.tagName !== 'LI') continue;
+            // native separator (in legacy markup: <li><hr …></li>)
             if (li.querySelector(':scope > hr')) { out.push({ type: 'separator' }); continue; }
             const a = li.querySelector(':scope > a');
             if (!a) continue;
 
-            const label = a.textContent.replace(/\s+/g, ' ').trim();
             const submenu = li.querySelector(':scope > ul');
             const em = a.querySelector('em');
-            const badge = em && /^\d+$/.test(em.textContent.trim()) ? em.textContent.trim() : null;
+            let badge = null;
+            
+            // Extract label and strip the badge number from it
+            let label = a.textContent.replace(/\s+/g, ' ').trim();
+            if (em) {
+                const emText = em.textContent.trim();
+                if (/^\d+$/.test(emText)) {
+                    badge = emText;
+                    label = label.replace(emText, '').trim();
+                }
+            }
 
             if (submenu) {
                 out.push({
                     type: 'submenu',
                     label,
                     icon: iconForLabel(label),
+                    badge,
                     items: extractItems(submenu)
                 });
             } else {
@@ -320,16 +331,27 @@ const ForumTopMenuModule = (function () {
         for (const li of menuWrap.querySelectorAll('.left > li.menu')) {
             const a = li.querySelector(':scope > a');
             if (!a || a === userLink) continue;
-            const label = a.textContent.replace(/\s+/g, ' ').trim().replace(/\s*\d+$/, '');
+
             const submenu = li.querySelector(':scope > ul');
             const em = a.querySelector('em');
-            const badge = em && /^\d+$/.test(em.textContent.trim()) ? em.textContent.trim() : null;
+            let badge = null;
+            
+            // Extract label and strip the badge number from it
+            let label = a.textContent.replace(/\s+/g, ' ').trim();
+            if (em) {
+                const emText = em.textContent.trim();
+                if (/^\d+$/.test(emText)) {
+                    badge = emText;
+                    label = label.replace(emText, '').trim();
+                }
+            }
 
             if (submenu) {
                 out.push({
                     type: 'submenu',
                     label,
                     icon: iconForLabel(label),
+                    badge,
                     items: extractItems(submenu)
                 });
             } else {
@@ -349,7 +371,7 @@ const ForumTopMenuModule = (function () {
         }
         return out;
     }
-
+   
     // ─── Guest data ───────────────────────────────────────────
     function extractGuest(menuWrap) {
         const socials = [];
@@ -373,7 +395,9 @@ const ForumTopMenuModule = (function () {
                 const det = h('details', { className: 'mfn-submenu' });
                 det.appendChild(h('summary', { className: 'mfn-submenu-summary' }, [
                     h('span', { className: 'mfn-submenu-left', innerHTML: icon(item.icon) + ' ' + escapeHtml(item.label) }),
-                    h('i', { className: 'fa-regular fa-angle-down mfn-chev', 'aria-hidden': 'true' })
+                    // ── ADDED BADGE HERE ──
+                    (item.badge ? '<span class="mfn-badge">' + escapeHtml(item.badge) + '</span>' : ''),
+                    '<i class="fa-regular fa-chevron-down mfn-chev" aria-hidden="true"></i>'
                 ]));
                 const body = h('div', { className: 'mfn-submenu-body' });
                 body.appendChild(buildDropdownBody(item.items));
