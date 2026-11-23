@@ -93,6 +93,33 @@ const ForumTopMenuModule = (function () {
         return `https://images.weserv.nl/?url=${encodeURIComponent(finalUrl)}&output=webp&maxage=1y&q=85&w=${width}&h=${height}&fit=cover&a=attention&il`;
     }
 
+       function getCurrentUserId() {
+        // 1. Desktop/Standard Link
+        const menuLink = document.querySelector('.menuwrap a[href*="MID="]');
+        if (menuLink) {
+            const m = menuLink.getAttribute('href').match(/MID=(\d+)/);
+            if (m) return m[1];
+        }
+
+        // 2. Mobile Fallback: Avatar URL
+        const avatarImg = document.querySelector('.menuwrap .avatar img');
+        if (avatarImg) {
+            const orig = avatarImg.getAttribute('data-original') || '';
+            const om = orig.match(/\/fc(\d{5,})\//);
+            if (om) return om[1];
+
+            const src = avatarImg.getAttribute('src') || '';
+            const sm = src.match(/fc(\d{5,})/);
+            if (sm) return sm[1];
+        }
+
+        // 3. Last resort: Body class
+        const bodyMatch = document.body.className.match(/\ba(\d{5,})\b/);
+        if (bodyMatch) return bodyMatch[1];
+        
+        return null;
+    }
+
     function getGroupClass(user) {
         if (!user || !user.group) return 'group-member';
         const name = (user.group.name || '').toLowerCase();
@@ -184,8 +211,8 @@ const ForumTopMenuModule = (function () {
     }
 
     // ─── Login state detection ────────────────────────────────
-    function isLoggedIn(menuWrap) {
-        return !!menuWrap.querySelector('.left .menu > a[href*="act=Profile"]');
+    function isLoggedIn() {
+        return getCurrentUserId() !== null;
     }
 
     // ─── Icon mapping ─────────────────────────────────────────
@@ -307,18 +334,34 @@ const ForumTopMenuModule = (function () {
     }
 
     // ─── Extract user card (logged in) ────────────────────────
-    function extractUser(menuWrap) {
-        const link = menuWrap.querySelector('.left .menu > a[href*="act=Profile"]');
-        if (!link) return null;
-        const href = link.getAttribute('href') || '#';
-        const midMatch = href.match(/MID=(\d+)/i);
-        const img = link.querySelector('.avatar img');
-        const nick = link.querySelector('.nick');
+    function extractUser() {
+        const mid = getCurrentUserId();
+        if (!mid) return null;
+
+        const link = document.querySelector('.menuwrap a[href*="MID="]');
+        let username = 'User';
+        let avatarSrc = '';
+        let profileUrl = '/?act=Profile&MID=' + mid;
+
+        if (link) {
+            const nick = link.querySelector('.nick');
+            if (nick) username = nick.textContent.trim();
+            
+            const img = link.querySelector('.avatar img');
+            if (img) avatarSrc = img.getAttribute('data-original') || img.getAttribute('src') || '';
+            
+            profileUrl = link.getAttribute('href') || profileUrl;
+        } else {
+            // Mobile fallback: extract what we can from the DOM
+            const img = document.querySelector('.menuwrap .avatar img');
+            if (img) avatarSrc = img.getAttribute('data-original') || img.getAttribute('src') || '';
+        }
+
         return {
-            mid: midMatch ? midMatch[1] : null,
-            avatarSrc: img ? (img.getAttribute('data-original') || img.getAttribute('src') || '') : '',
-            username: nick ? nick.textContent.trim() : 'User',
-            profileUrl: href
+            mid: mid,
+            avatarSrc: avatarSrc,
+            username: username,
+            profileUrl: profileUrl
         };
     }
 
@@ -1019,33 +1062,40 @@ const ForumTopMenuModule = (function () {
     }
 
     // ─── Init ────────────────────────────────────────────────
-    async function init() { // <── Make this async
+    async function init() {
         const menuWrap = document.querySelector(CONFIG.LEGACY_MENU_SELECTOR);
         if (!menuWrap) return;
         if (document.getElementById(CONFIG.NAV_ID)) return;
 
-        const loggedIn = isLoggedIn(menuWrap);
-        const userLink = loggedIn ? menuWrap.querySelector('.left .menu > a[href*="act=Profile"]') : null;
-
-        // 1. Extract the basic user data from the DOM
-        const user = loggedIn ? extractUser(menuWrap) : null;
+        // 1. Check login state via the new robust fallback
+        const loggedIn = isLoggedIn();
+        const user = loggedIn ? extractUser() : null;
         
-        // 2. Fetch full user data (group info) if logged in
+        // 2. Hydrate from API (vital for mobile, bonus for desktop)
         let apiUser = null;
-        if (user) {
-            const midMatch = user.profileUrl.match(/MID=(\d+)/);
-            if (midMatch) {
-                user.mid = midMatch[1];
-                apiUser = await fetchUserData(user.mid);
+        if (user && user.mid) {
+            apiUser = await fetchUserData(user.mid);
+            
+            // Update the local user object with API data (ensures mobile gets the name/avatar)
+            if (apiUser) {
+                user.username = apiUser.nickname || user.username;
+                user.avatarSrc = apiUser.avatar || user.avatarSrc;
             }
         }
 
+        // 3. Build the data object
+        const userLink = menuWrap.querySelector('.left .menu > a[href*="act=Profile"]');
+        
         const data = {
             loggedIn,
             search: extractSearch(menuWrap),
             user: user,
-            apiUser: apiUser, // <── Pass the API data
-            userDropdown: loggedIn && userLink ? extractItems(userLink.nextElementSibling || document.createElement('ul')) : [],
+            apiUser: apiUser,
+            // Only extract dropdown items if the link exists (Desktop)
+            userDropdown: loggedIn && userLink && userLink.nextElementSibling 
+                ? extractItems(userLink.nextElementSibling) 
+                : [],
+            // Extract top actions (will safely skip userLink if null)
             actions: loggedIn ? extractTopActions(menuWrap, userLink) : [],
             guest: !loggedIn ? extractGuest(menuWrap) : null
         };
