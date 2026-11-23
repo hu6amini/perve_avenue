@@ -469,7 +469,8 @@ const ForumTopMenuModule = (function () {
                 const det = h('details', { className: 'mfn-submenu' });
                 
                 // ── FIX: Build the summary using innerHTML ──
-                const summary = h('summary', { className: 'mfn-submenu-summary' });
+                const summary = h('summary', { className: 'mfn-submenu-summary' },
+                                 'data-menu-label': item.label);
                 summary.innerHTML = 
                     '<span class="mfn-submenu-left">' + icon(item.icon) + ' ' + escapeHtml(item.label) + '</span>' +
                     (item.badge ? '<span class="mfn-badge">' + escapeHtml(item.badge) + '</span>' : '') +
@@ -509,6 +510,7 @@ const ForumTopMenuModule = (function () {
                 className: 'mfn-action mfn-action--has-menu',
                 'aria-haspopup': 'true',
                 'aria-expanded': 'false',
+                'data-menu-label': item.label,
                 title: item.label,
                 innerHTML: icon(item.icon) +
                     '<span class="mfn-action-label">' + escapeHtml(item.label) + '</span>' +
@@ -1051,6 +1053,83 @@ const ForumTopMenuModule = (function () {
 
         attachEventDelegation();
         window.addEventListener('scroll', requestScroll, { passive: true });
+
+        // ── NEW: Watch for late-injected plugin badges ──
+        function syncBadges() {
+            // 1. Check top-level items
+            menuWrap.querySelectorAll('.left > li.menu > a').forEach(a => {
+                let label = a.textContent.replace(/\s+/g, ' ').trim();
+                const em = a.querySelector('em');
+                let badge = null;
+                
+                if (em && /^\d+$/.test(em.textContent.trim())) {
+                    badge = em.textContent.trim();
+                    label = label.replace(badge, '').trim();
+                }
+
+                const modernEl = navEl.querySelector(`[data-menu-label="${label}"]`);
+                if (modernEl) {
+                    let badgeEl = modernEl.querySelector('.mfn-badge');
+                    if (badge) {
+                        if (!badgeEl) {
+                            badgeEl = document.createElement('span');
+                            badgeEl.className = 'mfn-badge';
+                            modernEl.appendChild(badgeEl);
+                        }
+                        badgeEl.textContent = badge;
+                    } else if (badgeEl) {
+                        badgeEl.remove();
+                    }
+                }
+            });
+
+            // 2. Check nested submenu items (like "Additional features")
+            menuWrap.querySelectorAll('.submenu > a').forEach(a => {
+                let label = a.textContent.replace(/\s+/g, ' ').trim();
+                const em = a.querySelector('em');
+                let badge = null;
+                
+                if (em && /^\d+$/.test(em.textContent.trim())) {
+                    badge = em.textContent.trim();
+                    label = label.replace(badge, '').trim();
+                }
+
+                const modernEl = navEl.querySelector(`.mfn-submenu-summary[data-menu-label="${label}"]`);
+                if (modernEl) {
+                    let badgeEl = modernEl.querySelector('.mfn-badge');
+                    if (badge) {
+                        if (!badgeEl) {
+                            badgeEl = document.createElement('span');
+                            badgeEl.className = 'mfn-badge';
+                            // Insert before the chevron
+                            const chev = modernEl.querySelector('.mfn-chev');
+                            if (chev) modernEl.insertBefore(badgeEl, chev);
+                            else modernEl.appendChild(badgeEl);
+                        }
+                        badgeEl.textContent = badge;
+                    } else if (badgeEl) {
+                        badgeEl.remove();
+                    }
+                }
+            });
+        }
+
+        // Run once immediately to catch anything that loaded in time
+        syncBadges();
+
+        // Watch for the plugin injecting the <em> tags later
+        const badgeObserver = new MutationObserver((mutations) => {
+            // Debounce slightly to prevent firing 10 times in a row if multiple nodes are added
+            clearTimeout(badgeObserver._timer);
+            badgeObserver._timer = setTimeout(syncBadges, 100);
+        });
+        
+        badgeObserver.observe(menuWrap, {
+            childList: true,
+            subtree: true,
+            characterData: true
+        });
+        // ────────────────────────────────────────────────
 
         console.log('[TopMenu] Modern nav built (' + (loggedIn ? 'member' : 'guest') + ')');
     }
