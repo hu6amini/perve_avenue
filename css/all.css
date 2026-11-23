@@ -282,6 +282,8 @@
 .fa-list-check::before {content: "\f0ae"; }
 .fa-bars::before {content: "\f0c9"; }
 .fa-arrows-left-right::before {content: "\f07e"; }
+.fa-rectangle-ad::before {content: "\f641"; }
+.fa-right-to-bracket::before {content: "\f2f6"; }
 
 :root, :host {
   --fa-font-regular: normal 400 1em/1 "Font Awesome 6 Pro";
