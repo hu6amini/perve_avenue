@@ -7881,6 +7881,98 @@ body.has-docked-editor {
     clip: rect(0 0 0 0); white-space: nowrap; border: 0;
 }
 
+/* ── Guest Inline Login Bar ─────────────────── */
+.mfn-guest-login-bar {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex: 1;
+    max-width: 600px;
+    margin: 0 auto;
+}
+
+.mfn-login-inline {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex: 1;
+}
+
+.mfn-login-inline input {
+    height: 38px;
+    padding: 0 12px;
+    background: rgba(255, 255, 255, 0.04);
+    border: 1px solid var(--mfn-border);
+    border-radius: 6px;
+    color: var(--mfn-fg);
+    font: inherit;
+    font-size: 0.875rem;
+    flex: 1;
+    min-width: 120px;
+    transition: border-color 0.15s, background 0.15s;
+}
+
+.mfn-login-inline input:focus {
+    outline: none;
+    background: rgba(255, 255, 255, 0.08);
+    border-color: var(--mfn-accent);
+}
+
+.mfn-login-inline input::placeholder {
+    color: var(--mfn-fg-muted);
+}
+
+.mfn-login-inline .mfn-btn--primary {
+    height: 38px;
+    padding: 0 16px;
+    background: var(--mfn-accent);
+    color: #0b1913;
+    border: none;
+    border-radius: 6px;
+    font: inherit;
+    font-size: 0.875rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background 0.15s;
+    white-space: nowrap;
+}
+.mfn-login-inline .mfn-btn--primary:hover {
+    background: color-mix(in srgb, var(--mfn-accent) 88%, #fff);
+}
+
+.mfn-register-link--inline {
+    font-size: 0.875rem;
+    color: var(--mfn-fg);
+    text-decoration: none;
+    font-weight: 500;
+    white-space: nowrap;
+    padding: 0 8px;
+}
+.mfn-register-link--inline:hover {
+    color: var(--mfn-accent);
+}
+
+/* Hide mobile trigger on desktop */
+.mfn-mobile-login-trigger {
+    display: none !important;
+}
+
+/* ── Mobile Adjustments ─────────────────────── */
+@media (max-width: 860px) {
+    .mfn-guest-login-bar {
+        justify-content: flex-end;
+        flex: 0 0 auto;
+    }
+    .mfn-login-inline,
+    .mfn-register-link--inline,
+    .mfn-social-trigger {
+        display: none !important; /* Hide all desktop elements */
+    }
+    .mfn-mobile-login-trigger {
+        display: inline-flex !important; /* Show the Login button */
+    }
+}
+
 /* ── Action group ──────────────────────────── */
 .mfn-actions {
     display: flex;
