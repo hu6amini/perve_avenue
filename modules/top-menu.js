@@ -497,6 +497,18 @@ const ForumTopMenuModule = (function () {
             const url = btn.getAttribute('data-url');
             if (service && url) socials.push({ service, url });
         });
+
+        // Clone the legacy login form to the body to keep reCAPTCHA bindings intact
+        if (!document.getElementById('legacy-login-puppet')) {
+            const legacyForm = menuWrap.querySelector('#loginForm');
+            if (legacyForm) {
+                const clone = legacyForm.cloneNode(true);
+                clone.id = 'legacy-login-puppet';
+                clone.style.display = 'none';
+                document.body.appendChild(clone);
+            }
+        }
+
         return { socials };
     }
 
@@ -689,6 +701,104 @@ const ForumTopMenuModule = (function () {
         return frag;
     }
 
+       function buildGuestLoginBar(guest) {
+        const wrap = h('div', { className: 'mfn-guest-login-bar' });
+
+        // 1. Inline Form (Desktop)
+        const form = h('form', { className: 'mfn-login-inline' });
+        form.innerHTML = `
+            <input type="text" name="username" placeholder="E-mail or Nickname" autocomplete="username" required>
+            <input type="password" name="password" placeholder="Password" autocomplete="current-password" required>
+            <button type="submit" class="mfn-btn mfn-btn--primary">Log In</button>
+        `;
+
+        form.addEventListener('submit', (e) => {
+            e.preventDefault();
+            const u = form.querySelector('input[name="username"]').value;
+            const p = form.querySelector('input[name="password"]').value;
+            
+            const puppet = document.getElementById('legacy-login-puppet');
+            if (puppet) {
+                const legacyUser = puppet.querySelector('input[name="UserName"]');
+                const legacyPass = puppet.querySelector('input[name="PassWord"]');
+                const legacyUserSafe = puppet.querySelector('input[name="UserSafe"]');
+                
+                if (legacyUser) legacyUser.value = u;
+                if (legacyPass) legacyPass.value = p;
+                if (legacyUserSafe) legacyUserSafe.value = '1'; 
+                
+                const submitBtn = puppet.querySelector('input[type="submit"]');
+                if (submitBtn) submitBtn.click();
+            } else {
+                window.location.href = CONFIG.LOGIN_URL;
+            }
+        });
+
+        wrap.appendChild(form);
+
+        // 2. Register Link
+        wrap.appendChild(
+            h('a', {
+                className: 'mfn-register-link mfn-register-link--inline',
+                href: CONFIG.REGISTER_URL,
+                innerHTML: 'Register'
+            })
+        );
+
+        // 3. Social Dropdown (To save space)
+        if (guest.socials.length) {
+            const socialWrap = h('div', { className: 'mfn-dropdown' });
+            const socialTrigger = h('button', {
+                type: 'button',
+                className: 'mfn-action mfn-action--ghost mfn-social-trigger',
+                'aria-haspopup': 'true',
+                'aria-expanded': 'false',
+                innerHTML: icon('fa-share-nodes') + '<span class="mfn-action-label">Social</span>'
+            });
+            
+            const socialPanel = h('div', { className: 'mfn-dropdown-panel mfn-social-panel' });
+            const socialRow = h('div', { className: 'mfn-social-row' });
+            guest.socials.forEach(s => {
+                const btn = h('button', {
+                    type: 'button',
+                    className: 'mfn-social-btn',
+                    'data-service': s.service,
+                    'data-url': s.url
+                });
+                let brandIcon;
+                if (s.service === 'google')        brandIcon = '<i class="fa-brands fa-google"></i>';
+                else if (s.service === 'facebook') brandIcon = '<i class="fa-brands fa-facebook-f"></i>';
+                else if (s.service === 'telegram') brandIcon = '<i class="fa-brands fa-telegram"></i>';
+                else                               brandIcon = '<i class="fa-regular fa-globe"></i>';
+                btn.innerHTML = brandIcon + '<span>' + escapeHtml(s.service) + '</span>';
+                socialRow.appendChild(btn);
+            });
+            socialPanel.appendChild(socialRow);
+            
+            socialWrap.appendChild(socialTrigger);
+            socialWrap.appendChild(socialPanel);
+            wrap.appendChild(socialWrap);
+        }
+
+        // 4. Mobile Login Button (Hidden on Desktop)
+        const mobileTrigger = h('button', {
+            type: 'button',
+            className: 'mfn-action mfn-action--primary mfn-mobile-login-trigger',
+            innerHTML: icon('fa-right-to-bracket') + '<span class="mfn-action-label">Login</span>'
+        });
+        
+        // The mobile trigger opens a modal or we can reuse the dropdown from the previous step.
+        // For simplicity and to match the design, we'll just make it trigger the dropdown panel.
+        // We will structure the CSS to hide the inline form on mobile and show this button instead.
+        // (If they click it, we'll show a modal - but for now, let's just make it link to the login URL as a fallback if they somehow click it)
+        mobileTrigger.addEventListener('click', () => {
+            window.location.href = CONFIG.LOGIN_URL;
+        });
+        wrap.appendChild(mobileTrigger);
+
+        return wrap;
+    }
+
     // ─── Build: mobile search toggle ─────────────────────────
     function buildMobileSearchToggle(searchForm) {
         const searchToggle = h('button', {
@@ -721,229 +831,239 @@ const ForumTopMenuModule = (function () {
             })
         );
 
-        // ── Scoped Search Setup ──────────────────────────────────
-        const searchWrap = h('div', { className: 'mfn-search-wrap' });
+        let searchForm = null; // Reference needed for the mobile search toggle
 
-        // 1. Custom Scope Dropdown
-        const scopeWrap = h('div', { className: 'mfn-dropdown mfn-scope-dropdown' });
-        
-        const scopeTrigger = h('button', {
-            type: 'button',
-            className: 'mfn-scope-trigger',
-            'aria-haspopup': 'true',
-            'aria-expanded': 'false'
-        });
-        scopeTrigger.innerHTML = '<span class="mfn-scope-label"><i class="fa-regular fa-folder" aria-hidden="true"></i> Forum</span><i class="fa-regular fa-chevron-down mfn-chev" aria-hidden="true"></i>';
+        // ── Conditional Center Element: Search (Logged In) vs Login Bar (Guest) ──
+        if (data.loggedIn) {
+            // ── Scoped Search Setup ──────────────────────────────────
+            const searchWrap = h('div', { className: 'mfn-search-wrap' });
 
-        const scopePanel = h('div', { className: 'mfn-dropdown-panel mfn-scope-panel' });
-        const scopeOptions = [
-            { value: 'forum', label: 'Forum', icon: 'fa-regular fa-folder' },
-            { value: 'google', label: 'Google', icon: 'fa-brands fa-google' },
-            { value: 'user', label: 'Users', icon: 'fa-regular fa-user' }
-        ];
-
-        scopeOptions.forEach(opt => {
-            const btn = h('button', {
+            // 1. Custom Scope Dropdown
+            const scopeWrap = h('div', { className: 'mfn-dropdown mfn-scope-dropdown' });
+            
+            const scopeTrigger = h('button', {
                 type: 'button',
-                className: 'mfn-dd-link mfn-scope-option',
-                'data-value': opt.value
+                className: 'mfn-scope-trigger',
+                'aria-haspopup': 'true',
+                'aria-expanded': 'false'
             });
-            btn.innerHTML = `<span class="mfn-dd-link-left">${opt.icon ? `<i class="${opt.icon}"></i>` : ''} ${opt.label}</span>`;
-            scopePanel.appendChild(btn);
-        });
+            scopeTrigger.innerHTML = '<span class="mfn-scope-label"><i class="fa-regular fa-folder" aria-hidden="true"></i> Forum</span><i class="fa-regular fa-chevron-down mfn-chev" aria-hidden="true"></i>';
 
-        scopeWrap.appendChild(scopeTrigger);
-        scopeWrap.appendChild(scopePanel);
-        searchWrap.appendChild(scopeWrap);
+            const scopePanel = h('div', { className: 'mfn-dropdown-panel mfn-scope-panel' });
+            const scopeOptions = [
+                { value: 'forum', label: 'Forum', icon: 'fa-regular fa-folder' },
+                { value: 'google', label: 'Google', icon: 'fa-brands fa-google' },
+                { value: 'user', label: 'Users', icon: 'fa-regular fa-user' }
+            ];
 
-        // 2. The Search Form
-        const form = h('form', {
-            className: 'mfn-search',
-            action: 'https://perveavenue.forumcommunity.net/',
-            method: 'post',
-            role: 'search'
-        });
-        
-        form.innerHTML =
-            '<label class="mfn-search-label" for="mfn-search-input">Search</label>' +
-            '<i class="fa-regular fa-magnifying-glass mfn-search-icon" aria-hidden="true"></i>' +
-            '<input id="mfn-search-input" type="search" name="keywords" ' +
-                'placeholder="Search forum threads..." autocomplete="off" maxlength="150" required>' +
-            '<input type="hidden" name="act" value="Search" data-scope-added>' +
-            '<input type="hidden" name="CODE" value="01" data-scope-added>';
-            
-        searchWrap.appendChild(form);
-
-        // 3. Autocomplete Panel
-        const autocompletePanel = h('div', { className: 'mfn-search-autocomplete' });
-        searchWrap.appendChild(autocompletePanel);
-
-        // 4. Search State & Logic
-        let currentScope = 'forum';
-        let searchTimeout = null;
-        let searchAbort = null;
-        let acResults = [];
-        let acFocusIndex = -1;
-
-        const searchInput = form.querySelector('#mfn-search-input');
-
-        function closeAutocomplete() {
-            autocompletePanel.classList.remove('is-active');
-            acFocusIndex = -1;
-        }
-
-        function renderAutocomplete() {
-            if (!acResults.length) {
-                closeAutocomplete();
-                return;
-            }
-            autocompletePanel.innerHTML = '';
-            acFocusIndex = -1;
-
-            acResults.forEach((user, i) => {
-                const profileUrl = `/?act=Profile&MID=${user.id}`;
-                const username = user.name || user.nickname || 'User';
-                
-                // Use the shared helper!
-                const avatarHtml = generateAvatarHtml(user, username, user.id, 26);
-                const groupClass = getGroupClass(user);
-
-                const item = h('div', {
-                    className: 'mfn-ac-item',
-                    'data-index': i,
-                    'data-url': profileUrl
+            scopeOptions.forEach(opt => {
+                const btn = h('button', {
+                    type: 'button',
+                    className: 'mfn-dd-link mfn-scope-option',
+                    'data-value': opt.value
                 });
-                
-                item.innerHTML = `
-                    <span class="mfn-ac-avatar-wrap ${groupClass}">${avatarHtml}</span>
-                    <span class="mfn-ac-name">${escapeHtml(username)}</span>
-                `;
-                
-                item.addEventListener('click', () => {
-                    window.location.href = profileUrl;
-                });
-                
-                autocompletePanel.appendChild(item);
+                btn.innerHTML = `<span class="mfn-dd-link-left">${opt.icon ? `<i class="${opt.icon}"></i>` : ''} ${opt.label}</span>`;
+                scopePanel.appendChild(btn);
             });
-            autocompletePanel.classList.add('is-active');
-        }
 
-        function updateAcFocus(items) {
-            items.forEach((item, i) => {
-                item.classList.toggle('is-focused', i === acFocusIndex);
+            scopeWrap.appendChild(scopeTrigger);
+            scopeWrap.appendChild(scopePanel);
+            searchWrap.appendChild(scopeWrap);
+
+            // 2. The Search Form
+            const form = h('form', {
+                className: 'mfn-search',
+                action: 'https://perveavenue.forumcommunity.net/',
+                method: 'post',
+                role: 'search'
             });
-            if (items[acFocusIndex]) {
-                items[acFocusIndex].scrollIntoView({ block: 'nearest' });
+            searchForm = form; // Save reference for mobile toggle
+            
+            form.innerHTML =
+                '<label class="mfn-search-label" for="mfn-search-input">Search</label>' +
+                '<i class="fa-regular fa-magnifying-glass mfn-search-icon" aria-hidden="true"></i>' +
+                '<input id="mfn-search-input" type="search" name="keywords" ' +
+                    'placeholder="Search forum threads..." autocomplete="off" maxlength="150" required>' +
+                '<input type="hidden" name="act" value="Search" data-scope-added>' +
+                '<input type="hidden" name="CODE" value="01" data-scope-added>';
+                
+            searchWrap.appendChild(form);
+
+            // 3. Autocomplete Panel
+            const autocompletePanel = h('div', { className: 'mfn-search-autocomplete' });
+            searchWrap.appendChild(autocompletePanel);
+
+            // 4. Search State & Logic
+            let currentScope = 'forum';
+            let searchTimeout = null;
+            let searchAbort = null;
+            let acResults = [];
+            let acFocusIndex = -1;
+
+            const searchInput = form.querySelector('#mfn-search-input');
+
+            function closeAutocomplete() {
+                autocompletePanel.classList.remove('is-active');
+                acFocusIndex = -1;
             }
-        }
 
-        // Input Listener (Debounced API Fetch)
-        searchInput.addEventListener('input', (e) => {
-            if (currentScope !== 'user') return;
-            const query = e.target.value.trim();
-            
-            clearTimeout(searchTimeout);
-            if (searchAbort) searchAbort.abort();
-            closeAutocomplete();
-            
-            if (query.length < 2) return;
-
-            searchTimeout = setTimeout(async () => {
-                searchAbort = new AbortController();
-                try {
-                    const res = await fetch(`/api.php?search&name=${encodeURIComponent(query)}&n=10&cookie=1`, {
-                        credentials: 'include',
-                        signal: searchAbort.signal
-                    });
-                    if (!res.ok) throw new Error('HTTP ' + res.status);
-                    const data = await res.json();
-                    acResults = (data && data.users) ? data.users : [];
-                    renderAutocomplete();
-                } catch (err) {
-                    if (err.name !== 'AbortError') console.warn('[TopMenu] User search failed:', err);
+            function renderAutocomplete() {
+                if (!acResults.length) {
+                    closeAutocomplete();
+                    return;
                 }
-            }, 300);
-        });
+                autocompletePanel.innerHTML = '';
+                acFocusIndex = -1;
 
-        // Keyboard Navigation
-        searchInput.addEventListener('keydown', (e) => {
-            if (currentScope !== 'user' || !autocompletePanel.classList.contains('is-active')) return;
-            
-            const items = autocompletePanel.querySelectorAll('.mfn-ac-item');
-            if (!items.length) return;
+                acResults.forEach((user, i) => {
+                    const profileUrl = `/?act=Profile&MID=${user.id}`;
+                    const username = user.name || user.nickname || 'User';
+                    
+                    const avatarHtml = generateAvatarHtml(user, username, user.id, 26);
+                    const groupClass = getGroupClass(user);
 
-            if (e.key === 'ArrowDown') {
-                e.preventDefault();
-                acFocusIndex = (acFocusIndex + 1) % items.length;
-                updateAcFocus(items);
-            } else if (e.key === 'ArrowUp') {
-                e.preventDefault();
-                acFocusIndex = (acFocusIndex - 1 + items.length) % items.length;
-                updateAcFocus(items);
-            } else if (e.key === 'Enter' && acFocusIndex >= 0) {
-                e.preventDefault();
-                window.location.href = items[acFocusIndex].getAttribute('data-url');
-            } else if (e.key === 'Escape') {
+                    const item = h('div', {
+                        className: 'mfn-ac-item',
+                        'data-index': i,
+                        'data-url': profileUrl
+                    });
+                    
+                    item.innerHTML = `
+                        <span class="mfn-ac-avatar-wrap ${groupClass}">${avatarHtml}</span>
+                        <span class="mfn-ac-name">${escapeHtml(username)}</span>
+                    `;
+                    
+                    item.addEventListener('click', () => {
+                        window.location.href = profileUrl;
+                    });
+                    
+                    autocompletePanel.appendChild(item);
+                });
+                autocompletePanel.classList.add('is-active');
+            }
+
+            function updateAcFocus(items) {
+                items.forEach((item, i) => {
+                    item.classList.toggle('is-focused', i === acFocusIndex);
+                });
+                if (items[acFocusIndex]) {
+                    items[acFocusIndex].scrollIntoView({ block: 'nearest' });
+                }
+            }
+
+            // Input Listener (Debounced API Fetch)
+            searchInput.addEventListener('input', (e) => {
+                if (currentScope !== 'user') return;
+                const query = e.target.value.trim();
+                
+                clearTimeout(searchTimeout);
+                if (searchAbort) searchAbort.abort();
                 closeAutocomplete();
-            }
-        });
+                
+                if (query.length < 2) return;
 
-        // Close dropdown when input loses focus (with delay for clicks)
-        searchInput.addEventListener('blur', () => {
-            setTimeout(closeAutocomplete, 200);
-        });
+                searchTimeout = setTimeout(async () => {
+                    searchAbort = new AbortController();
+                    try {
+                        const res = await fetch(`/api.php?search&name=${encodeURIComponent(query)}&n=10&cookie=1`, {
+                            credentials: 'include',
+                            signal: searchAbort.signal
+                        });
+                        if (!res.ok) throw new Error('HTTP ' + res.status);
+                        const data = await res.json();
+                        acResults = (data && data.users) ? data.users : [];
+                        renderAutocomplete();
+                    } catch (err) {
+                        if (err.name !== 'AbortError') console.warn('[TopMenu] User search failed:', err);
+                    }
+                }, 300);
+            });
 
-        // 5. Switching Logic
-        scopePanel.addEventListener('click', (e) => {
-            const btn = e.target.closest('.mfn-scope-option');
-            if (!btn) return;
+            // Keyboard Navigation
+            searchInput.addEventListener('keydown', (e) => {
+                if (currentScope !== 'user' || !autocompletePanel.classList.contains('is-active')) return;
+                
+                const items = autocompletePanel.querySelectorAll('.mfn-ac-item');
+                if (!items.length) return;
+
+                if (e.key === 'ArrowDown') {
+                    e.preventDefault();
+                    acFocusIndex = (acFocusIndex + 1) % items.length;
+                    updateAcFocus(items);
+                } else if (e.key === 'ArrowUp') {
+                    e.preventDefault();
+                    acFocusIndex = (acFocusIndex - 1 + items.length) % items.length;
+                    updateAcFocus(items);
+                } else if (e.key === 'Enter' && acFocusIndex >= 0) {
+                    e.preventDefault();
+                    window.location.href = items[acFocusIndex].getAttribute('data-url');
+                } else if (e.key === 'Escape') {
+                    closeAutocomplete();
+                }
+            });
+
+            // Close dropdown when input loses focus (with delay for clicks)
+            searchInput.addEventListener('blur', () => {
+                setTimeout(closeAutocomplete, 200);
+            });
+
+            // 5. Switching Logic
+            scopePanel.addEventListener('click', (e) => {
+                const btn = e.target.closest('.mfn-scope-option');
+                if (!btn) return;
+                
+                e.preventDefault();
+                const scope = btn.dataset.value;
+                const label = btn.textContent.trim();
+                const iconHTML = btn.querySelector('i') ? btn.querySelector('i').outerHTML : '';
+                
+                scopeTrigger.querySelector('.mfn-scope-label').innerHTML = iconHTML + ' ' + label;
+                scopeWrap.classList.remove(CONFIG.OPEN_CLASS);
+                scopeTrigger.setAttribute('aria-expanded', 'false');
+
+                currentScope = scope;
+                searchInput.value = '';
+                closeAutocomplete();
+
+                form.querySelectorAll('input[type="hidden"]').forEach(el => el.remove());
+
+                if (scope === 'forum') {
+                    form.action = 'https://perveavenue.forumcommunity.net/';
+                    form.method = 'post';
+                    searchInput.name = 'keywords';
+                    searchInput.placeholder = 'Search forum threads...';
+                    form.insertAdjacentHTML('beforeend', `<input type="hidden" name="act" value="Search"><input type="hidden" name="CODE" value="01">`);
+                } else if (scope === 'google') {
+                    form.action = 'https://www.google.com/search';
+                    form.method = 'get';
+                    searchInput.name = 'q';
+                    searchInput.placeholder = 'Search on Google...';
+                    form.insertAdjacentHTML('beforeend', `<input type="hidden" name="as_sitesearch" value="${CONFIG.SITE_FILTER}">`);
+                } else if (scope === 'user') {
+                    form.action = 'https://www.forumcommunity.net/';
+                    form.method = 'get';
+                    searchInput.name = 'keywords';
+                    searchInput.placeholder = 'Search members...';
+                    form.insertAdjacentHTML('beforeend', `<input type="hidden" name="act" value="cerca"><input type="hidden" name="select" value="utente">`);
+                }
+                
+                searchInput.focus();
+            });
+
+            inner.appendChild(searchWrap);
             
-            e.preventDefault();
-            const scope = btn.dataset.value;
-            const label = btn.textContent.trim();
-            const iconHTML = btn.querySelector('i') ? btn.querySelector('i').outerHTML : '';
-            
-            scopeTrigger.querySelector('.mfn-scope-label').innerHTML = iconHTML + ' ' + label;
-            scopeWrap.classList.remove(CONFIG.OPEN_CLASS);
-            scopeTrigger.setAttribute('aria-expanded', 'false');
+        } else {
+            // ── Guest: Show Inline Login Bar instead of Search ──
+            inner.appendChild(buildGuestLoginBar(data.guest));
+        }
 
-            currentScope = scope; // Update global scope state
-            searchInput.value = '';
-            closeAutocomplete();
-
-            form.querySelectorAll('input[type="hidden"]').forEach(el => el.remove());
-
-            if (scope === 'forum') {
-                form.action = 'https://perveavenue.forumcommunity.net/';
-                form.method = 'post';
-                searchInput.name = 'keywords';
-                searchInput.placeholder = 'Search forum threads...';
-                form.insertAdjacentHTML('beforeend', `<input type="hidden" name="act" value="Search"><input type="hidden" name="CODE" value="01">`);
-            } else if (scope === 'google') {
-                form.action = 'https://www.google.com/search';
-                form.method = 'get';
-                searchInput.name = 'q';
-                searchInput.placeholder = 'Search on Google...';
-                form.insertAdjacentHTML('beforeend', `<input type="hidden" name="as_sitesearch" value="${CONFIG.SITE_FILTER}">`);
-            } else if (scope === 'user') {
-                form.action = 'https://www.forumcommunity.net/';
-                form.method = 'get';
-                searchInput.name = 'keywords';
-                searchInput.placeholder = 'Search members...';
-                form.insertAdjacentHTML('beforeend', `<input type="hidden" name="act" value="cerca"><input type="hidden" name="select" value="utente">`);
-            }
-            
-            searchInput.focus();
-        });
-
-        inner.appendChild(searchWrap);
-        // ─────────────────────────────────────────────────────────
-
-        // Actions
+        // Actions Group (Right Side)
         const actions = h('div', { className: 'mfn-actions' });
 
-        // Mobile search toggle (created once)
-        actions.appendChild(buildMobileSearchToggle(form));
+        // Mobile search toggle (Only needed for logged-in users)
+        if (data.loggedIn && searchForm) {
+            actions.appendChild(buildMobileSearchToggle(searchForm));
+        }
 
         // Theme Toggle
         const themeToggle = h('button', {
@@ -957,12 +1077,10 @@ const ForumTopMenuModule = (function () {
 
         actions.appendChild(themeToggle);
 
+        // Render User Dropdown (Logged in only; Guest actions are handled by the center bar)
         if (data.loggedIn) {
             data.actions.forEach(item => actions.appendChild(buildTopAction(item)));
-            // Pass data.apiUser here
             actions.appendChild(buildUserDropdown(data.user, data.userDropdown, data.apiUser)); 
-        } else {
-            actions.appendChild(buildGuestBlock(data.guest));
         }
 
         inner.appendChild(actions);
