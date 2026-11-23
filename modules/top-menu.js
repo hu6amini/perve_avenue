@@ -468,9 +468,12 @@ const ForumTopMenuModule = (function () {
             if (item.type === 'submenu') {
                 const det = h('details', { className: 'mfn-submenu' });
                 
-                // ── FIX: Build the summary using innerHTML ──
-                const summary = h('summary', { className: 'mfn-submenu-summary' },
-                                 'data-menu-label': item.label);
+                // ── FIX: Combine the attributes into a single object ──
+                const summary = h('summary', { 
+                    className: 'mfn-submenu-summary',
+                    'data-menu-label': item.label 
+                });
+                
                 summary.innerHTML = 
                     '<span class="mfn-submenu-left">' + icon(item.icon) + ' ' + escapeHtml(item.label) + '</span>' +
                     (item.badge ? '<span class="mfn-badge">' + escapeHtml(item.badge) + '</span>' : '') +
@@ -1067,7 +1070,8 @@ const ForumTopMenuModule = (function () {
                     label = label.replace(badge, '').trim();
                 }
 
-                const modernEl = navEl.querySelector(`[data-menu-label="${label}"]`);
+                // ── FIX: Scope to .mfn-action ──
+                const modernEl = navEl.querySelector(`.mfn-action[data-menu-label="${label}"]`);
                 if (modernEl) {
                     let badgeEl = modernEl.querySelector('.mfn-badge');
                     if (badge) {
@@ -1094,6 +1098,7 @@ const ForumTopMenuModule = (function () {
                     label = label.replace(badge, '').trim();
                 }
 
+                // ── FIX: Scope to .mfn-submenu-summary ──
                 const modernEl = navEl.querySelector(`.mfn-submenu-summary[data-menu-label="${label}"]`);
                 if (modernEl) {
                     let badgeEl = modernEl.querySelector('.mfn-badge');
@@ -1101,7 +1106,6 @@ const ForumTopMenuModule = (function () {
                         if (!badgeEl) {
                             badgeEl = document.createElement('span');
                             badgeEl.className = 'mfn-badge';
-                            // Insert before the chevron
                             const chev = modernEl.querySelector('.mfn-chev');
                             if (chev) modernEl.insertBefore(badgeEl, chev);
                             else modernEl.appendChild(badgeEl);
