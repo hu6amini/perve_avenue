@@ -36,6 +36,7 @@
   "jq.js",
   "plugin_v3.js",
   "script-loader",
+  "boot-loader.js",
   "boot-loader.min.js",
   "dynamic-loader.min.js",
   "user-msg-loader.min.js",          // ← add
