@@ -7612,7 +7612,7 @@ body.has-docked-editor {
     height: 1.25em !important;
     vertical-align: -0.1em !important;
     display: inline-block !important;
-    opacity: 0 !important;
+    visibility: hidden !important;
 }
 .FFA-text {
     padding: var(--pad-5) !important;
