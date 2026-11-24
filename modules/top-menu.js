@@ -701,7 +701,7 @@ const ForumTopMenuModule = (function () {
         return frag;
     }
 
-       function buildGuestLoginBar(guest) {
+    function buildGuestLoginBar(guest) {
         const wrap = h('div', { className: 'mfn-guest-login-bar' });
 
         // 1. Inline Form (Desktop)
@@ -709,7 +709,9 @@ const ForumTopMenuModule = (function () {
         form.innerHTML = `
             <input type="text" name="username" placeholder="E-mail or Nickname" autocomplete="username" required>
             <input type="password" name="password" placeholder="Password" autocomplete="current-password" required>
-            <button type="submit" class="mfn-btn mfn-btn--primary">Log In</button>
+            <button type="submit" class="mfn-btn mfn-btn--primary">
+                ${icon('fa-right-to-bracket')} Log In
+            </button>
         `;
 
         form.addEventListener('submit', (e) => {
@@ -736,12 +738,12 @@ const ForumTopMenuModule = (function () {
 
         wrap.appendChild(form);
 
-        // 2. Register Link
+        // 2. Register Button (Matching the Log In button style)
         wrap.appendChild(
             h('a', {
-                className: 'mfn-register-link mfn-register-link--inline',
+                className: 'mfn-btn mfn-btn--ghost',
                 href: CONFIG.REGISTER_URL,
-                innerHTML: 'Register'
+                innerHTML: icon('fa-user-plus') + ' Register'
             })
         );
 
@@ -753,7 +755,9 @@ const ForumTopMenuModule = (function () {
                 className: 'mfn-action mfn-action--ghost mfn-social-trigger',
                 'aria-haspopup': 'true',
                 'aria-expanded': 'false',
-                innerHTML: icon('fa-share-nodes') + '<span class="mfn-action-label">Social</span>'
+                title: 'Alternative login methods',
+                // Changed icon to fa-right-left to denote alternatives
+                innerHTML: icon('fa-right-left') + '<span class="mfn-action-label">Social</span>'
             });
             
             const socialPanel = h('div', { className: 'mfn-dropdown-panel mfn-social-panel' });
@@ -787,10 +791,6 @@ const ForumTopMenuModule = (function () {
             innerHTML: icon('fa-right-to-bracket') + '<span class="mfn-action-label">Login</span>'
         });
         
-        // The mobile trigger opens a modal or we can reuse the dropdown from the previous step.
-        // For simplicity and to match the design, we'll just make it trigger the dropdown panel.
-        // We will structure the CSS to hide the inline form on mobile and show this button instead.
-        // (If they click it, we'll show a modal - but for now, let's just make it link to the login URL as a fallback if they somehow click it)
         mobileTrigger.addEventListener('click', () => {
             window.location.href = CONFIG.LOGIN_URL;
         });
@@ -1131,7 +1131,8 @@ const ForumTopMenuModule = (function () {
         // Click on triggers
         navEl.addEventListener('click', (e) => {
             const trigger = e.target.closest(
-                '.mfn-user-trigger, .mfn-action--has-menu, .mfn-action--primary, .mfn-scope-trigger'
+                // ── ADDED .mfn-social-trigger HERE ──
+                '.mfn-user-trigger, .mfn-action--has-menu, .mfn-action--primary, .mfn-scope-trigger, .mfn-social-trigger'
             );
             if (trigger && navEl.contains(trigger)) {
                 const dd = trigger.closest('.mfn-dropdown');
