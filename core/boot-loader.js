@@ -1,68 +1,54 @@
-/* Optimised Boot Loader – v9 */
+/* Optimised Boot Loader – v8 (ordered release)
+ *
+ * Key change vs. v7:
+ *   - Released scripts now use `async = false` instead of `defer = true`.
+ *     `defer` is a NO-OP on dynamically-created scripts — the browser
+ *     treats them as async by default, which scrambles execution order.
+ *     `async = false` puts the script in the "execute in insertion order
+ *     as soon as possible" queue, which is the real defer behaviour.
+ *     Because the trapper only touched synchronous scripts, releasing
+ *     them all with async=false preserves the original DOM order.
+ *
+ *   - `safeList` renamed to `neverTrap` and split conceptually into:
+ *       • boot pipeline (perve_avenue modules in <head>)
+ *       • forumfree core (jq.js, plugin_v3.js, script-loader)
+ *     Any other file on cdn.jsdelivr.net/gh/hu6amini/perve_avenue is
+ *     auto-exempt via URL match, so new modules need no config change.
+ *
+ *   - The Popper/tippy order guard is gone: ordered release guarantees
+ *     popper.js (listed first in the DOM) executes before tippy.js.
+ *
+ *   - Logging is unconditional again. Pre-trapped (server-side) scripts
+ *     are catalogued at startup, so you always see what's in the queue.
+ */
 "use strict";
 (function () {
-  // Debug logging is opt-in. Set localStorage["avn-debug"] = "1" to enable.
-  const DEBUG = (() => {
-    try { return localStorage.getItem("avn-debug") === "1"; } catch (e) { return false; }
-  })();
-
-  const logEntries = [];
-
-  // =========================================================================
-  // DYNAMIC SCRIPT PRELOADS (Bypasses ForumCommunity attribute mangling)
-  // These run immediately in the <head> before the body is parsed.
-  // =========================================================================
-  (function injectUniversalPreloads() {
-    const scriptsToPreload = [
-      "https://cdn.jsdelivr.net/gh/hu6amini/perve_avenue@1977fabb5553b0f825fa92671a03b2ae26c67702/core/event-bus.min.js",
-      "https://cdn.jsdelivr.net/gh/hu6amini/perve_avenue@8f6a9f7f137c8f7a9e36bce00a1c5dc937269906/media-optimizer.min.js",
-      "https://cdn.jsdelivr.net/gh/hu6amini/perve_avenue@9681242beef6f3a2e2e4c8de461c2e6eeabec26a/core/dom-utils.min.js",
-      "https://cdn.jsdelivr.net/gh/hu6amini/perve_avenue@70efe7c7bca10a5093093841f67994aef3b76819/forum_core_observer.min.js"
-    ];
-
-    scriptsToPreload.forEach(url => {
-      const link = document.createElement('link');
-      link.rel = 'preload';
-      link.as = 'script'; // Safe from the platform's HTML parser
-      link.href = url;
-      link.crossOrigin = 'anonymous'; // Match loadScript() to avoid a double-fetch
-      document.head.appendChild(link);
-    });
-  })();
-  // =========================================================================
+  let logBuffer = "[Bypass Active]:";
 
   const config = {
-    safeList: [
-  "jq.js",
-  "plugin_v3.js",
-  "script-loader",
-  "boot-loader.js",
-  "boot-loader.min.js",
-  "dynamic-loader.min.js",
-  "user-msg-loader.min.js",          // ← add
-  "media-optimizer.min.js",
-  "event-bus.min.js",
-  "forum_core_observer.min.js",      // ← add
-  "dom-utils.min.js",                // ← add
-  "media-dimensions.min.js",         // ← add
-  "breadcrumbs.min.js",              // ← add
-  "boards.min.js",                   // ← add
-  "posts.min.js",                    // ← add
-  "modals.min.js",                   // ← add
-  "quote-queue.min.js",              // ← add
-  "twemoji.min.js",                  // ← add
-  "slick-carousel.min.js",           // ← add
-  "theme.min.js",                    // ← add
-  "lite-embed.min.js",               // ← add
-  "messenger.min.js",                // ← add
-  "editor-module.min.js",            // ← add
-  "similar-topics.min.js",           // ← add
-  "report.min.js",                   // ← add
-  "modern-chat.min.js",              // ← add
-  "forum-enhancer.min.js",
-  "modern-forum.css",
-  "all.css"
-],
+    // Must execute before DOMContentLoaded / before the boot pipeline
+    // reads them. If a script is already loaded with async="" it won't
+    // be trapped anyway — this list is the belt-and-suspenders for any
+    // template that forgets the attribute.
+    neverTrap: [
+      // Boot pipeline
+      "boot-loader",
+      "dynamic-loader",
+      "user-msg-loader",
+      "media-optimizer",
+      "event-bus",
+      "forum_core_observer",
+      "dom-utils",
+      "media-dimensions",
+      // forumfree core
+      "jq.js",
+      "plugin_v3.js",
+      "script-loader"
+    ],
+    // Any file served from the perve_avenue repo is exempt regardless
+    // of filename, so new modules don't need an entry above.
+    perveAvenueCDN: "cdn.jsdelivr.net/gh/hu6amini/perve_avenue",
+    // Never released at idle — loaded on first form interaction instead
     skipRelease: [
       "challenges.cloudflare.com",
       "turnstile",
@@ -90,10 +76,6 @@
     observerDisconnected: false
   };
 
-  // Rules run in order; first match wins, one block per key. `key`
-  // holds the CSS-string identifier used to index state.capturedCSS /
-  // state.injected. Injection triggers are wired separately below so
-  // each block fires at the right user interaction.
   const STYLE_CAPTURE_RULES = [
     {
       key: config.capturedStyleKeys.ffbEmbed,
@@ -117,13 +99,34 @@
     }
   ];
 
-  const isSafeAsset = (fileName) => config.safeList.some((item) => fileName.includes(item));
   const getFileName = (url) => url.split("/").pop().split("?")[0];
-  const shouldSkipRelease = (src) => config.skipRelease.some((item) => src.includes(item));
-  const record = (line) => { if (DEBUG) logEntries.push(line); };
+
+  const isNeverTrap = (src) => {
+    if (src.includes(config.perveAvenueCDN)) return true;
+    const fileName = getFileName(src);
+    return config.neverTrap.some((item) => fileName.includes(item) || src.includes(item));
+  };
+
+  const shouldSkipRelease = (src) =>
+    config.skipRelease.some((item) => src.includes(item));
 
   // ---------------------------------------------------------------
-  // <script> / <link> processing — unchanged
+  // Startup catalogue — server-side pre-trapped scripts
+  // ---------------------------------------------------------------
+  // These are emitted by the forum server already in trap form, so the
+  // client-side trapper never sees them as live <script src>. Report
+  // them up front so the log tells the whole story.
+  (function cataloguePreTrapped() {
+    const pre = document.querySelectorAll('script[type="text/plain"][data-original]');
+    if (pre.length === 0) return;
+    logBuffer += "\n\n\u25B8 Pre-trapped (server-side): " + pre.length;
+    pre.forEach((el) => {
+      logBuffer += "\n  \u00B7 " + getFileName(el.dataset.original || '');
+    });
+  })();
+
+  // ---------------------------------------------------------------
+  // <script> / <link> processing
   // ---------------------------------------------------------------
   const processElement = (el) => {
     const isScript = el.tagName === "SCRIPT";
@@ -133,52 +136,52 @@
     const src = isScript ? (el.src || el.getAttribute("data-src")) : el.href;
     if (!src) return;
 
+    // Everything in neverTrap is skipped entirely: no trap, no downgrade.
+    if (isNeverTrap(src)) return;
+
     const fileName = getFileName(src);
-    const isSafe = isSafeAsset(fileName);
 
-    if (!isSafe) {
-      // Force-trap the heavy script-loader
-      if (isScript && src.includes("script-loader")) {
-        el.type = "text/plain";
-        el.dataset.original = src;
-        el.removeAttribute("src");
-        record("- Forced Trap (Loader): " + fileName);
-        return;
-      }
+    // Force-trap the heavy script-loader (only reachable if not in neverTrap)
+    if (isScript && src.includes("script-loader")) {
+      el.type = "text/plain";
+      el.dataset.original = src;
+      el.removeAttribute("src");
+      logBuffer += "\n- Forced Trap (Loader): " + fileName;
+      return;
+    }
 
-      // Force-trap reCAPTCHA (lazy-load on first form interaction)
-      if (isScript && src.includes("recaptcha/api.js")) {
-        state.recaptchaSrc = src;
-        el.type = "text/plain";
-        el.dataset.original = src;
-        el.removeAttribute("src");
-        record("- Forced Trap (reCAPTCHA): " + fileName);
-        return;
-      }
+    // Force-trap reCAPTCHA — lazy-loaded on first form interaction
+    if (isScript && src.includes("recaptcha/api.js")) {
+      state.recaptchaSrc = src;
+      el.type = "text/plain";
+      el.dataset.original = src;
+      el.removeAttribute("src");
+      logBuffer += "\n- Forced Trap (reCAPTCHA): " + fileName;
+      return;
+    }
 
-      // Trap synchronous scripts
-      if (isScript && !el.hasAttribute("async") && !el.hasAttribute("defer") && el.type !== "text/plain") {
-        el.type = "text/plain";
-        el.dataset.original = src;
-        el.removeAttribute("src");
-        record("- Trapped JS: " + fileName);
-        return;
-      }
+    // Trap synchronous scripts
+    if (isScript && !el.hasAttribute("async") && !el.hasAttribute("defer") && el.type !== "text/plain") {
+      el.type = "text/plain";
+      el.dataset.original = src;
+      el.removeAttribute("src");
+      logBuffer += "\n- Trapped JS: " + fileName;
+      return;
+    }
 
-      // Downgrade render-blocking CSS
-      if (isLink) {
-        if (el.dataset.activated || el.media === "print") return;
-        el.media = "print";
-        const activate = function () {
-          this.media = "all";
-          this.dataset.activated = "true";
-        };
-        el.onload = activate;
-        try {
-          if (el.sheet && el.sheet.cssRules) activate.call(el);
-        } catch (e) { /* CORS – onload will handle it */ }
-        record("- Downgraded CSS: " + fileName);
-      }
+    // Downgrade render-blocking CSS
+    if (isLink) {
+      if (el.dataset.activated || el.media === "print") return;
+      el.media = "print";
+      const activate = function () {
+        this.media = "all";
+        this.dataset.activated = "true";
+      };
+      el.onload = activate;
+      try {
+        if (el.sheet && el.sheet.cssRules) activate.call(el);
+      } catch (e) { /* CORS – onload will handle it */ }
+      logBuffer += "\n- Downgraded CSS: " + fileName;
     }
   };
 
@@ -189,12 +192,8 @@
     const text = styleEl.textContent || "";
     if (!text) return false;
 
-    // Emoji-picker CSS is multi-part — accumulate, inject as one block.
-    // FIX: check emojiCSSLoaded (the flag actually set on injection) instead
-    // of state.injected[emoji] (never set), which previously allowed late
-    // emoji styles to be captured and removed but never re-injected.
     if ((styleEl.id === 'emoji-picker-css' || text.includes(".emoji-picker")) &&
-        !state.emojiCSSLoaded) {
+        !state.injected[config.capturedStyleKeys.emoji]) {
       if (!state.emojiCSSParts) state.emojiCSSParts = [];
       state.emojiCSSParts.push(text);
       styleEl.remove();
@@ -209,10 +208,6 @@
       state.capturedCSS[rule.key] = text;
       styleEl.remove();
 
-      // The cs-framework block also carries the cursor affordance for
-      // the "(elenco)" scripts-credits link. Preserve that one rule so
-      // the link keeps its clickable look before the modal framework
-      // is injected.
       if (rule.key === config.capturedStyleKeys.csFramework && text.includes('[data-credits]')) {
         const mini = document.createElement('style');
         mini.textContent = '[data-credits]{cursor:pointer}';
@@ -232,7 +227,7 @@
     if (styleId) style.id = styleId;
     style.textContent = state.capturedCSS[key];
     document.head.appendChild(style);
-    record("- Injected CSS: " + key);
+    logBuffer += "\n- Injected CSS: " + key;
   };
 
   const injectEmojiCSS = () => {
@@ -266,8 +261,7 @@
           try { node.querySelectorAll("style").forEach(processCSSStyle); } catch (e) {}
         }
 
-        // Deferred-CSS triggers. Skip the queries entirely if nothing
-        // is pending — the observer fires for every DOM mutation.
+        // Deferred-CSS triggers
         const pending =
           (state.capturedCSS[config.capturedStyleKeys.ffbEmbed]     && !state.injected[config.capturedStyleKeys.ffbEmbed]) ||
           (state.capturedCSS[config.capturedStyleKeys.elModal]      && !state.injected[config.capturedStyleKeys.elModal]) ||
@@ -316,8 +310,6 @@
   });
 
   // If any trigger element already exists, inject its CSS now.
-  // MutationObserver only sees NEW nodes, so this covers the case
-  // where a trigger element was in the initial HTML.
   (function injectIfPresent() {
     const triggers = {};
     triggers[config.capturedStyleKeys.ffbEmbed]      = '.ffb_embedlink';
@@ -336,7 +328,7 @@
   })();
 
   // ---------------------------------------------------------------
-  // uiDatepicker — inject on the specific interactions that trigger it
+  // uiDatepicker — inject on the specific interactions
   // ---------------------------------------------------------------
   function maybeInjectDatepicker() {
     const key = config.capturedStyleKeys.uiDatepicker;
@@ -361,14 +353,7 @@
   }, { passive: true });
 
   // ---------------------------------------------------------------
-  // Turnstile / reCAPTCHA — lazy-load on first form interaction
-  //
-  // FIX: the previous code used `{ once: true }` on the listener, which
-  // removed it after the *first* focusin event — even if that event
-  // wasn't inside a form. A user who clicked a search box or toolbar
-  // button before touching a form would never load the captcha. The
-  // listener is now kept attached until a form element is actually
-  // focused, then removed manually.
+  // Turnstile / reCAPTCHA — lazy on first form interaction
   // ---------------------------------------------------------------
   function loadTurnstile() {
     if (state.turnstileLoaded) return;
@@ -379,6 +364,10 @@
     document.head.appendChild(script);
   }
 
+  document.addEventListener("focusin", (e) => {
+    if (e.target.closest("form")) loadTurnstile();
+  }, { once: true, passive: true });
+
   function loadRecaptcha() {
     if (state.recaptchaLoaded || !state.recaptchaSrc) return;
     state.recaptchaLoaded = true;
@@ -388,22 +377,15 @@
     document.head.appendChild(script);
   }
 
-  const onFirstFormFocus = (e) => {
-    if (!e.target || !e.target.closest) return;
-    if (!e.target.closest("form")) return;
-    loadTurnstile();
-    loadRecaptcha();
-    document.removeEventListener("focusin", onFirstFormFocus, true);
-  };
-  document.addEventListener("focusin", onFirstFormFocus, true);
+  document.addEventListener("focusin", (e) => {
+    if (e.target.closest("form")) loadRecaptcha();
+  }, { once: true, passive: true });
 
   // ---------------------------------------------------------------
   // Emoji picker CSS — lazy-load on editor pages
   // ---------------------------------------------------------------
   document.addEventListener("click", function (e) {
-    const t = e.target;
-    if (!t || !t.closest) return;
-    const btn = t.closest(".ve-btn-emoji") || t.closest("#emoticons");
+    const btn = e.target.closest(".ve-btn-emoji") || e.target.closest("#emoticons");
     if (!btn) return;
     if (document.body && config.emojiEditorPages.includes(document.body.id)) {
       injectEmojiCSS();
@@ -411,35 +393,34 @@
   }, { passive: true });
 
   // ---------------------------------------------------------------
-  // Release trapped assets at idle
-  //
-  // Note on `defer`/`async`: dynamically inserted scripts (created via
-  // document.createElement) are *always* executed as soon as they are
-  // available, regardless of the defer attribute. Setting `defer` here
-  // would be a no-op — that's why it has been removed. If ordered
-  // execution between released scripts is ever required, replace this
-  // forEach with a sequential await loader.
+  // Release trapped assets at idle — ORDERED
   // ---------------------------------------------------------------
   window.addEventListener("load", () => {
     const releaseAssets = () => {
-      if (DEBUG) {
-        console.log("[Bypass Active]:\n" + logEntries.join("\n"));
-      }
+      const released = [];
+      const skipped = [];
 
-      document.querySelectorAll('script[type="text/plain"]').forEach((oldScript) => {
+      // querySelectorAll returns document order — exactly what we want.
+      // The trapper never moved nodes, only stripped src / type, so
+      // the DOM order still reflects the original author order.
+      document.querySelectorAll('script[type="text/plain"][data-original]').forEach((oldScript) => {
         const src = oldScript.dataset.original;
         if (!src) return;
 
-        // Swap in minified variants where available.
-        // `type = "module"` is preserved for media-optimizer because the
-        // module graph gives us deterministic dependency ordering; the
-        // rest are classic async scripts.
+        // Lazy-only scripts (turnstile / recaptcha) — loaded on form focus
+        if (shouldSkipRelease(src)) {
+          skipped.push(getFileName(src));
+          return;
+        }
+
+        // Swap to minified variants where available
         if (src.includes("media-optimizer.js") && !src.includes(".min.js")) {
           const minSrc = src.replace(/media-optimizer\.js$/, "media-optimizer.min.js");
           const newScript = document.createElement("script");
           newScript.src = minSrc;
           newScript.type = "module";
           oldScript.parentNode.replaceChild(newScript, oldScript);
+          released.push("media-optimizer.min.js (module)");
           return;
         }
 
@@ -447,25 +428,20 @@
           const minSrc = src.replace(/event-bus\.js$/, "event-bus.min.js");
           const newScript = document.createElement("script");
           newScript.src = minSrc;
+          newScript.async = false;
           oldScript.parentNode.replaceChild(newScript, oldScript);
+          released.push("event-bus.min.js");
           return;
         }
 
-        if (shouldSkipRelease(src)) return;
-
-        // Popper.js guard: delay tippy if Popper isn't ready
-        if (src.includes("tippy.js") && !window.Popper) {
-          setTimeout(() => {
-            const newScript = document.createElement("script");
-            newScript.src = src;
-            oldScript.parentNode.replaceChild(newScript, oldScript);
-          }, 50);
-          return;
-        }
-
+        // Normal release: async=false enforces insertion order.
+        // This is the equivalent of defer for a dynamically-inserted
+        // classic script. Setting .defer here would be a no-op.
         const newScript = document.createElement("script");
         newScript.src = src;
+        newScript.async = false;
         oldScript.parentNode.replaceChild(newScript, oldScript);
+        released.push(getFileName(src));
       });
 
       // Activate downgraded CSS
@@ -476,7 +452,16 @@
         }
       });
 
-      if (DEBUG) console.log("[Bypass]: Legacy assets released during idle time.");
+      if (released.length) {
+        logBuffer += "\n\n\u25B8 Released in DOM order: " + released.length;
+        released.forEach((name) => { logBuffer += "\n  \u00B7 " + name; });
+      }
+      if (skipped.length) {
+        logBuffer += "\n\n\u25B8 Lazy-loaded on interaction: " + skipped.length;
+        skipped.forEach((name) => { logBuffer += "\n  \u00B7 " + name; });
+      }
+
+      console.log(logBuffer);
     };
 
     if ("requestIdleCallback" in window) {
