@@ -7901,21 +7901,20 @@ body.has-docked-editor {
 .mfn-login-inline input {
     height: 38px;
     padding: 0 12px;
-    background: rgba(255, 255, 255, 0.04);
+    background: var(--mfn-bg-elev) !important; /* Force dark background */
     border: 1px solid var(--mfn-border);
     border-radius: 6px;
     color: var(--mfn-fg);
     font: inherit;
     font-size: 0.875rem;
     flex: 1;
-    min-width: 120px;
-    transition: border-color 0.15s, background 0.15s;
+    min-width: 140px;
+    transition: border-color 0.15s, box-shadow 0.15s;
 }
-
 .mfn-login-inline input:focus {
     outline: none;
-    background: rgba(255, 255, 255, 0.08);
     border-color: var(--mfn-accent);
+    box-shadow: 0 0 0 3px var(--mfn-accent-soft);
 }
 
 .mfn-login-inline input::placeholder {
@@ -7938,6 +7937,68 @@ body.has-docked-editor {
 }
 .mfn-login-inline .mfn-btn--primary:hover {
     background: color-mix(in srgb, var(--mfn-accent) 88%, #fff);
+}
+
+/* General Button Styles for the login bar */
+.mfn-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    height: 38px;
+    padding: 0 16px;
+    border-radius: 6px;
+    font: inherit;
+    font-size: 0.875rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.15s;
+    text-decoration: none;
+    white-space: nowrap;
+}
+
+.mfn-btn i {
+    font-size: 0.9rem;
+}
+
+.mfn-btn--primary {
+    background: var(--mfn-accent);
+    color: #0b1913;
+    border: 1px solid transparent;
+}
+.mfn-btn--primary:hover {
+    background: color-mix(in srgb, var(--mfn-accent) 88%, #fff);
+}
+
+.mfn-btn--ghost {
+    background: transparent;
+    color: var(--mfn-fg);
+    border: 1px solid var(--mfn-border);
+}
+.mfn-btn--ghost:hover {
+    background: rgba(255, 255, 255, 0.05);
+    border-color: var(--mfn-accent);
+}
+
+/* Style the social dropdown trigger to match the ghost button */
+.mfn-social-trigger {
+    border: 1px solid var(--mfn-border);
+}
+
+/* ── Mobile Adjustments ─────────────────────── */
+@media (max-width: 860px) {
+    .mfn-guest-login-bar {
+        justify-content: flex-end;
+        flex: 0 0 auto;
+    }
+    .mfn-login-inline,
+    .mfn-btn--ghost, /* Hide register button */
+    .mfn-social-trigger {
+        display: none !important; 
+    }
+    .mfn-mobile-login-trigger {
+        display: inline-flex !important; 
+    }
 }
 
 .mfn-register-link--inline {
