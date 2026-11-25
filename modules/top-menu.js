@@ -345,13 +345,47 @@ const ForumTopMenuModule = (function () {
         return out;
     }
 
-       function getEnglishLabel(originalLabel, href) {
+    function getEnglishLabel(originalLabel, href, isTopLevel = false) {
         if (!href) href = '';
-        
-        // 1. Force English based on URL parameters (100% reliable)
+        const lower = originalLabel.toLowerCase();
+
+        // 1. FIX: Top-level items that share URLs with their submenus
+        if (isTopLevel) {
+            if (href.includes('act=Msg&CODE=01')) return 'Messenger';
+            if (href.includes('act=UserCP&CODE=26')) return 'Topics';
+        }
+
+        // 2. Dictionary for submenus (Italian -> English)
+        const itToEn = {
+            'profilo': 'Profile', 'messaggi': 'Messenger', 'argomenti': 'Topics',
+            'reazioni': 'Reactions', 'notifiche': 'Notifications', 'amministrazione': 'Administration',
+            'moderazione': 'Moderation', 'sito web': 'Website', 'utenti': 'Users',
+            'grafica': 'Graphic', 'funzioni aggiuntive': 'Additional features',
+            'segnalazioni': 'Posts reported', 'nome, categorie e indirizzo': 'Name, categories and address',
+            'gestione sezioni': 'Manage sections', 'pagine personalizzate': 'Custom pages',
+            'gestisci blog': 'Manage Blog', 'log e ripristino dati': 'Logs and data recovery',
+            'coda di moderazione': 'Moderation queue', 'statistiche e opzioni': 'Stats and options',
+            'sposta sezioni': 'Transfer sections', 'elimina sito': 'Delete site',
+            'invia newsletter': 'Send newsletter', 'gruppi': 'Groups', 'ban': 'Ban',
+            'approvazione utenti': 'User approval', 'convalida utente': 'Validate user',
+            'modifica nome utente': "Edit user's name", 'livelli utente': 'User ranks',
+            'avatar e firme': 'Avatars and signatures', 'mobile/app': 'Mobile/App',
+            'codice html': 'HTML code', 'colori e stili': 'Colors and styles',
+            'logo e immagini': 'Logo and images', 'skin del sito': 'Site skin',
+            'emoticon': 'Emoticons', 'menu': 'Menu', 'tabs': 'Tabs',
+            'script e codici': 'Scripts and codes', 'top forum/blog': 'Top Forum/Blog',
+            'allegati': 'Attachments', 'chat/tagboard': 'Chat/TagBoard',
+            'esci': 'Log Out', 'registrati': 'Register', 'accedi': 'Login'
+        };
+
+        for (const [it, en] of Object.entries(itToEn)) {
+            if (lower === it || lower.includes(it)) return en;
+        }
+
+        // 3. URL Fallbacks
         if (href.includes('act=Profile')) return 'Profile';
         if (href.includes('act=Msg&CODE=04')) return 'Send New PM';
-        if (href.includes('act=Msg&CODE=01')) return 'Go to Inbox';
+        if (href.includes('act=Msg&CODE=01') && lower.includes('inbox')) return 'Go to Inbox';
         if (href.includes('act=Msg&CODE=07')) return 'Edit Folders';
         if (href.includes('act=Msg&CODE=14')) return 'Archive Messages';
         if (href.includes('act=Msg&CODE=02')) return 'Contact List';
@@ -371,8 +405,6 @@ const ForumTopMenuModule = (function () {
         if (href.includes('act=Members&rep=1')) return 'Top Members';
         if (href.includes('act=Members')) return 'Members';
         if (href.includes('act=staff')) return 'Staff';
-        
-        // Admin Links
         if (href.includes('act=modforum')) return 'Name, categories and address';
         if (href.includes('act=modsezioni')) return 'Manage sections';
         if (href.includes('act=modpages')) return 'Custom pages';
@@ -402,60 +434,6 @@ const ForumTopMenuModule = (function () {
         if (href.includes('act=allegati')) return 'Attachments';
         if (href.includes('act=addtagboard')) return 'Chat/TagBoard';
 
-        // 2. Fallback: Translate known Italian submenus to English
-        const itToEn = {
-            'profilo': 'Profile',
-            'messaggi': 'Messenger',
-            'argomenti': 'Topics',
-            'reazioni': 'Reactions',
-            'notifiche': 'Notifications',
-            'amministrazione': 'Administration',
-            'moderazione': 'Moderation',
-            'sito web': 'Website',
-            'utenti': 'Users',
-            'grafica': 'Graphic',
-            'funzioni aggiuntive': 'Additional features',
-            'segnalazioni': 'Posts reported',
-            'nome, categorie e indirizzo': 'Name, categories and address',
-            'gestione sezioni': 'Manage sections',
-            'pagine personalizzate': 'Custom pages',
-            'gestisci blog': 'Manage Blog',
-            'log e ripristino dati': 'Logs and data recovery',
-            'coda di moderazione': 'Moderation queue',
-            'statistiche e opzioni': 'Stats and options',
-            'sposta sezioni': 'Transfer sections',
-            'elimina sito': 'Delete site',
-            'invia newsletter': 'Send newsletter',
-            'gruppi': 'Groups',
-            'ban': 'Ban',
-            'approvazione utenti': 'User approval',
-            'convalida utente': 'Validate user',
-            'modifica nome utente': "Edit user's name",
-            'livelli utente': 'User ranks',
-            'avatar e firme': 'Avatars and signatures',
-            'mobile/app': 'Mobile/App',
-            'codice html': 'HTML code',
-            'colori e stili': 'Colors and styles',
-            'logo e immagini': 'Logo and images',
-            'skin del sito': 'Site skin',
-            'emoticon': 'Emoticons',
-            'menu': 'Menu',
-            'tabs': 'Tabs',
-            'script e codici': 'Scripts and codes',
-            'top forum/blog': 'Top Forum/Blog',
-            'allegati': 'Attachments',
-            'chat/tagboard': 'Chat/TagBoard',
-            'esci': 'Log Out',
-            'registrati': 'Register',
-            'accedi': 'Login'
-        };
-
-        const lower = originalLabel.toLowerCase();
-        for (const [it, en] of Object.entries(itToEn)) {
-            if (lower === it || lower.includes(it)) return en;
-        }
-
-        // If no match, return the original label (e.g., if it's already English)
         return originalLabel;
     }
 
@@ -482,7 +460,7 @@ const ForumTopMenuModule = (function () {
 
             // 2. Force to English based on URL or dictionary
             const href = a.getAttribute('href') || '';
-            const label = getEnglishLabel(rawLabel, href);
+            const label = getEnglishLabel(rawLabel, href, true);
 
             if (submenu) {
                 out.push({
@@ -576,9 +554,12 @@ const ForumTopMenuModule = (function () {
         if (item.type === 'submenu') {
             const wrap = h('div', { className: 'mfn-dropdown' });
             const trigger = h('button', {
-                type: 'button', className: 'mfn-action mfn-action--has-menu',
-                'aria-haspopup': 'true', 'aria-expanded': 'false',
-                'data-menu-label': item.label, title: item.label,
+                type: 'button', 
+                className: 'mfn-action mfn-action--has-menu',
+                'aria-haspopup': 'true', 
+                'aria-expanded': 'false',
+                'data-menu-label': item.label, 
+                'data-tippy-content': item.label, // <── CHANGED
                 innerHTML: icon(item.icon) + '<span class="mfn-action-label">' + escapeHtml(item.label) + '</span>' +
                     (item.badge ? '<span class="mfn-badge">' + escapeHtml(item.badge) + '</span>' : '') +
                     '<i class="fa-regular fa-angle-down mfn-chev" aria-hidden="true"></i>'
@@ -597,12 +578,13 @@ const ForumTopMenuModule = (function () {
             role: item.role || undefined, tabindex: item.tabindex || undefined,
             href: tag === 'a' ? (item.href || '#') : undefined,
             onclick: item.onclick || undefined, 'data-toggle': item.dataToggle || undefined,
+            'data-tippy-content': item.label, // <── ADDED
             innerHTML: icon(item.icon) + '<span class="mfn-action-label">' + escapeHtml(item.label) + '</span>' +
                 (item.badge ? '<span class="mfn-badge">' + escapeHtml(item.badge) + '</span>' : '')
         };
         return h(tag, attrs);
     }
-
+   
     function buildUserDropdown(user, items, apiUser) {
         const wrap = h('div', { className: 'mfn-dropdown mfn-user-dropdown' });
         const avatarHtml = generateAvatarHtml(apiUser, user.username, user.mid, 32);
@@ -662,7 +644,8 @@ const ForumTopMenuModule = (function () {
             const socialWrap = h('div', { className: 'mfn-dropdown' });
             const socialTrigger = h('button', {
                 type: 'button', className: 'mfn-action mfn-action--ghost mfn-social-trigger',
-                'aria-haspopup': 'true', 'aria-expanded': 'false', title: 'Alternative login methods',
+                'aria-haspopup': 'true', 'aria-expanded': 'false', 
+                'data-tippy-content': 'Alternative login methods', // <── CHANGED
                 innerHTML: icon('fa-right-left') + '<span class="mfn-action-label">Social</span>'
             });
             
@@ -954,7 +937,7 @@ const ForumTopMenuModule = (function () {
 
         if (data.loggedIn && searchForm) actions.appendChild(buildMobileSearchToggle(searchForm));
 
-        const themeToggle = h('button', { type: 'button', className: 'mfn-action mfn-theme-toggle', 'data-theme-toggle': '', 'aria-label': 'Toggle theme', title: 'Toggle theme' });
+        const themeToggle = h('button', { type: 'button', className: 'mfn-action mfn-theme-toggle', 'data-theme-toggle': '', 'aria-label': 'Toggle theme', 'data-tippy-content': 'Toggle theme' });
         themeToggle.innerHTML = '<i class="fa-regular fa-sun-bright" aria-hidden="true"></i>';
         actions.appendChild(themeToggle);
 
@@ -1083,6 +1066,18 @@ const ForumTopMenuModule = (function () {
         navEl = buildNav(data);
         menuWrap.parentNode.insertBefore(navEl, menuWrap);
         menuWrap.setAttribute('aria-hidden', 'true');
+
+        // ── NEW: Initialize Tippy Tooltips ──
+        if (window.tippy) {
+            tippy('#modern-forum-nav [data-tippy-content]', {
+                theme: 'emerald',      // Uses your existing tooltip theme
+                placement: 'bottom',
+                delay: [400, 0],       // Show after 400ms, hide instantly
+                animation: 'fade',
+                touch: false,          // Don't trigger on mobile taps
+                appendTo: () => document.body
+            });
+        }
 
         attachEventDelegation();
         window.addEventListener('scroll', requestScroll, { passive: true });
