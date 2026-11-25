@@ -527,7 +527,7 @@ const ForumTopMenuModule = (function () {
                 summary.innerHTML = 
                     '<span class="mfn-submenu-left">' + icon(item.icon) + ' ' + escapeHtml(item.label) + '</span>' +
                     (item.badge ? '<span class="mfn-badge">' + escapeHtml(item.badge) + '</span>' : '') +
-                    '<i class="fa-regular fa-chevron-down mfn-chev" aria-hidden="true"></i>';
+                    '<i class="fa-regular fa-angle-down mfn-chev" aria-hidden="true"></i>';
                 
                 det.appendChild(summary);
                 const body = h('div', { className: 'mfn-submenu-body' });
@@ -593,7 +593,7 @@ const ForumTopMenuModule = (function () {
         const trigger = h('button', { type: 'button', className: 'mfn-user-trigger', 'aria-haspopup': 'true', 'aria-expanded': 'false' });
         trigger.innerHTML = `<span class="mfn-avatar ${groupClass}">${avatarHtml}</span>` +
             '<span class="mfn-user-name">' + escapeHtml(user.username) + '</span>' +
-            '<i class="fa-regular fa-chevron-down mfn-chev" aria-hidden="true"></i>';
+            '<i class="fa-regular fa-angle-down mfn-chev" aria-hidden="true"></i>';
 
         const panel = h('div', { className: 'mfn-dropdown-panel mfn-user-panel' });
         const head = h('div', { className: 'mfn-user-panel-head' });
@@ -698,7 +698,7 @@ const ForumTopMenuModule = (function () {
             const scopeWrap = h('div', { className: 'mfn-dropdown mfn-scope-dropdown' });
             
             const scopeTrigger = h('button', { type: 'button', className: 'mfn-scope-trigger', 'aria-haspopup': 'true', 'aria-expanded': 'false' });
-            scopeTrigger.innerHTML = '<span class="mfn-scope-label"><i class="fa-regular fa-folder" aria-hidden="true"></i> Forum</span><i class="fa-regular fa-chevron-down mfn-chev" aria-hidden="true"></i>';
+            scopeTrigger.innerHTML = '<span class="mfn-scope-label"><i class="fa-regular fa-folder" aria-hidden="true"></i> Forum</span><i class="fa-regular fa-angle-down mfn-chev" aria-hidden="true"></i>';
 
             const scopePanel = h('div', { className: 'mfn-dropdown-panel mfn-scope-panel' });
             
