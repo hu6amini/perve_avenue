@@ -30,6 +30,7 @@ const ForumTopMenuModule = (function () {
     let ticking = false;
     let openDropdownTrigger = null;
     const userApiCache = new Map();
+    let cachedSections = null; // Cache for the Sections API
 
     // ─── Helpers ──────────────────────────────────────────────
     const escapeHtml = (s) => {
@@ -63,7 +64,7 @@ const ForumTopMenuModule = (function () {
         return '<i class="fa-' + (style || 'regular') + ' ' + name + '" aria-hidden="true"></i>';
     }
 
-       // ── Avatar Utilities ──────────────────────────────────────
+    // ── Avatar Utilities ──────────────────────────────────────
     const AVATAR_COLORS = [
         '059669', '10B981', '34D399', '6EE7B7', 'A7F3D0',
         '0D9488', '14B8A6', '2DD4BF', '5EEAD4', '99F6E4',
@@ -93,30 +94,23 @@ const ForumTopMenuModule = (function () {
         return `https://images.weserv.nl/?url=${encodeURIComponent(finalUrl)}&output=webp&maxage=1y&q=85&w=${width}&h=${height}&fit=cover&a=attention&il`;
     }
 
-       function getCurrentUserId() {
-        // 1. Desktop/Standard Link
+    function getCurrentUserId() {
         const menuLink = document.querySelector('.menuwrap a[href*="MID="]');
         if (menuLink) {
             const m = menuLink.getAttribute('href').match(/MID=(\d+)/);
             if (m) return m[1];
         }
-
-        // 2. Mobile Fallback: Avatar URL
         const avatarImg = document.querySelector('.menuwrap .avatar img');
         if (avatarImg) {
             const orig = avatarImg.getAttribute('data-original') || '';
             const om = orig.match(/\/fc(\d{5,})\//);
             if (om) return om[1];
-
             const src = avatarImg.getAttribute('src') || '';
             const sm = src.match(/fc(\d{5,})/);
             if (sm) return sm[1];
         }
-
-        // 3. Last resort: Body class
         const bodyMatch = document.body.className.match(/\ba(\d{5,})\b/);
         if (bodyMatch) return bodyMatch[1];
-        
         return null;
     }
 
@@ -151,7 +145,6 @@ const ForumTopMenuModule = (function () {
         }
     }
 
-    // Fetch group data for the logged-in user
     async function fetchUserData(mid) {
         try {
             const res = await fetch(`/api.php?mid=${mid}`);
@@ -184,7 +177,6 @@ const ForumTopMenuModule = (function () {
         return '<span class="mfn-avatar-fallback">' + escapeHtml(initial) + '</span>';
     }
 
-    // ─── API User Lookup ──────────────────────────────────────
     async function fetchUserByMid(mid) {
         if (mid == null) return null;
         const key = String(mid).trim();
@@ -210,121 +202,65 @@ const ForumTopMenuModule = (function () {
         }
     }
 
-    // ─── Login state detection ────────────────────────────────
     function isLoggedIn() {
         return getCurrentUserId() !== null;
     }
 
-    // ─── Icon mapping ─────────────────────────────────────────
-// ─── Icon mapping ─────────────────────────────────────────
     function iconForLabel(label) {
         const l = (label || '').toLowerCase();
         const map = {
-            // Specific multi-word / compound labels first
-            'edit topic title': 'fa-pen-to-square',
-            'edit this topic': 'fa-pen-to-square',
-            'move selected topics': 'fa-arrows-left-right',
-            'move selected posts': 'fa-arrows-left-right',
-            'move this topic': 'fa-arrows-left-right',
-            'delete selected topics': 'fa-trash-can',
-            'delete selected posts': 'fa-trash-can',
-            'delete this topic': 'fa-trash-can',
-            'close selected topics': 'fa-lock',
-            'close this topic': 'fa-lock',
-            'open selected topics': 'fa-lock-open',
-            'unpin selected topics': 'fa-thumbtack',
-            'unpin this topic': 'fa-thumbtack',
-            'pin selected topics': 'fa-thumbtack',
-            'remove announcement': 'fa-bullhorn',
-            'create announcement': 'fa-bullhorn',
-            'mass moving/deleting': 'fa-layer-group',
-            'add': 'fa-plus',
-
-            // Existing user, forum, and admin labels
-            'edit profile': 'fa-user-pen',
-            'edit avatar': 'fa-image-portrait',
-            'edit signature': 'fa-signature',
-            'my album': 'fa-images',
-            'ffupload': 'fa-cloud-arrow-up',
-            'forum settings': 'fa-gear',
-            'email settings': 'fa-envelope',
-            'change password': 'fa-key',
-            'log out': 'fa-right-from-bracket',
-            'send new pm': 'fa-paper-plane',
-            'go to inbox': 'fa-inbox',
-            'edit folders': 'fa-folder-tree',
-            'archive messages': 'fa-box-archive',
-            'contact list': 'fa-address-book',
-            'notepad': 'fa-notebook',
-            'active topics': 'fa-fire',
-            'popular topics': 'fa-star',
-            'subscriptions': 'fa-bell',
-            'notification centre': 'fa-bell-on',
-            'mark all as read': 'fa-check-double',
-            'my topics': 'fa-user-pen',
-            'my posts': 'fa-message',
-            'subscribe to the forum': 'fa-bell',
-            'subscribe': 'fa-bell',
-            'site\'s messages': 'fa-shield-halved',
-            'topics planned': 'fa-calendar-check',
-            'notifications from scripts': 'fa-bell',
-            'website': 'fa-globe',
-            'users': 'fa-users',
-            'graphic': 'fa-palette',
-            'additional features': 'fa-plus',
-            'posts reported': 'fa-flag',
-            'scripts and codes': 'fa-code',
-            'top forum/blog': 'fa-trophy',
-            'attachments': 'fa-paperclip',
-            'chat/tagboard': 'fa-comments',
-            'name, categories': 'fa-tag',
-            'manage sections': 'fa-folder-tree',
-            'custom pages': 'fa-file',
-            'manage blog': 'fa-newspaper',
-            'logs and data': 'fa-database',
-            'logs': 'fa-database',
-            'moderation queue': 'fa-list-check',
-            'stats and options': 'fa-chart-line',
-            'transfer sections': 'fa-arrow-right-arrow-left',
-            'delete site': 'fa-trash',
-            'send newsletter': 'fa-envelope-open-text',
-            'groups': 'fa-user-group',
-            'ban': 'fa-ban',
-            'user approval': 'fa-user-check',
-            'validate user': 'fa-user-shield',
-            'edit user': 'fa-user-pen',
-            'user ranks': 'fa-ranking-star',
-            'avatars and signatures': 'fa-image',
-            'mobile/app': 'fa-mobile-screen',
-            'html code': 'fa-code',
-            'colors and styles': 'fa-palette',
-            'logo and images': 'fa-image',
-            'site skin': 'fa-shirt',
-            'emoticons': 'fa-face-smile',
-            'menu': 'fa-bars',
-            'tabs': 'fa-table-columns',
-            'messenger': 'fa-comment',
-            'topics': 'fa-list',
-            'reactions': 'fa-face-smile',
-            'notifications': 'fa-bell',
-            'administration': 'fa-shield-halved',
-
-            // Broader single-word / fallback action keywords
-            'moderation': 'fa-gavel',
-            'announcement': 'fa-bullhorn',
-            'unpin': 'fa-thumbtack',
-            'pin': 'fa-thumbtack',
-            'move': 'fa-arrows-left-right',
-            'delete': 'fa-trash-can',
-            'open': 'fa-lock-open',
-            'close': 'fa-lock',
-            'edit': 'fa-pen-to-square'
+            'edit topic title': 'fa-pen-to-square', 'edit this topic': 'fa-pen-to-square',
+            'move selected topics': 'fa-arrows-left-right', 'move selected posts': 'fa-arrows-left-right',
+            'move this topic': 'fa-arrows-left-right', 'delete selected topics': 'fa-trash-can',
+            'delete selected posts': 'fa-trash-can', 'delete this topic': 'fa-trash-can',
+            'close selected topics': 'fa-lock', 'close this topic': 'fa-lock',
+            'open selected topics': 'fa-lock-open', 'unpin selected topics': 'fa-thumbtack',
+            'unpin this topic': 'fa-thumbtack', 'pin selected topics': 'fa-thumbtack',
+            'remove announcement': 'fa-bullhorn', 'create announcement': 'fa-bullhorn',
+            'mass moving/deleting': 'fa-layer-group', 'add': 'fa-plus',
+            'edit profile': 'fa-user-pen', 'edit avatar': 'fa-image-portrait',
+            'edit signature': 'fa-signature', 'my album': 'fa-images',
+            'ffupload': 'fa-cloud-arrow-up', 'forum settings': 'fa-gear',
+            'email settings': 'fa-envelope', 'change password': 'fa-key',
+            'log out': 'fa-right-from-bracket', 'send new pm': 'fa-paper-plane',
+            'go to inbox': 'fa-inbox', 'edit folders': 'fa-folder-tree',
+            'archive messages': 'fa-box-archive', 'contact list': 'fa-address-book',
+            'notepad': 'fa-notebook', 'active topics': 'fa-fire',
+            'popular topics': 'fa-star', 'subscriptions': 'fa-bell',
+            'notification centre': 'fa-bell-on', 'mark all as read': 'fa-check-double',
+            'my topics': 'fa-user-pen', 'my posts': 'fa-message',
+            'subscribe to the forum': 'fa-bell', 'subscribe': 'fa-bell',
+            'site\'s messages': 'fa-shield-halved', 'topics planned': 'fa-calendar-check',
+            'notifications from scripts': 'fa-bell', 'website': 'fa-globe',
+            'users': 'fa-users', 'graphic': 'fa-palette',
+            'additional features': 'fa-plus', 'posts reported': 'fa-flag',
+            'scripts and codes': 'fa-code', 'top forum/blog': 'fa-trophy',
+            'attachments': 'fa-paperclip', 'chat/tagboard': 'fa-comments',
+            'name, categories': 'fa-tag', 'manage sections': 'fa-folder-tree',
+            'custom pages': 'fa-file', 'manage blog': 'fa-newspaper',
+            'logs and data': 'fa-database', 'logs': 'fa-database',
+            'moderation queue': 'fa-list-check', 'stats and options': 'fa-chart-line',
+            'transfer sections': 'fa-arrow-right-arrow-left', 'delete site': 'fa-trash',
+            'send newsletter': 'fa-envelope-open-text', 'groups': 'fa-user-group',
+            'ban': 'fa-ban', 'user approval': 'fa-user-check',
+            'validate user': 'fa-user-shield', 'edit user': 'fa-user-pen',
+            'user ranks': 'fa-ranking-star', 'avatars and signatures': 'fa-image',
+            'mobile/app': 'fa-mobile-screen', 'html code': 'fa-code',
+            'colors and styles': 'fa-palette', 'logo and images': 'fa-image',
+            'site skin': 'fa-shirt', 'emoticons': 'fa-face-smile',
+            'menu': 'fa-bars', 'tabs': 'fa-table-columns',
+            'messenger': 'fa-comment', 'topics': 'fa-list',
+            'reactions': 'fa-face-smile', 'notifications': 'fa-bell',
+            'administration': 'fa-shield-halved', 'moderation': 'fa-gavel',
+            'announcement': 'fa-bullhorn', 'unpin': 'fa-thumbtack',
+            'pin': 'fa-thumbtack', 'move': 'fa-arrows-left-right',
+            'delete': 'fa-trash-can', 'open': 'fa-lock-open',
+            'close': 'fa-lock', 'edit': 'fa-pen-to-square'
         };
         for (const k in map) if (l.includes(k)) return map[k];
         return 'fa-circle';
     }
 
-    // ─── Extract search form ──────────────────────────────────
     function extractSearch(menuWrap) {
         const form = menuWrap.querySelector('.right form.search');
         return {
@@ -333,11 +269,9 @@ const ForumTopMenuModule = (function () {
         };
     }
 
-    // ─── Extract user card (logged in) ────────────────────────
     function extractUser() {
         const mid = getCurrentUserId();
         if (!mid) return null;
-
         const link = document.querySelector('.menuwrap a[href*="MID="]');
         let username = 'User';
         let avatarSrc = '';
@@ -346,57 +280,20 @@ const ForumTopMenuModule = (function () {
         if (link) {
             const nick = link.querySelector('.nick');
             if (nick) username = nick.textContent.trim();
-            
             const img = link.querySelector('.avatar img');
             if (img) avatarSrc = img.getAttribute('data-original') || img.getAttribute('src') || '';
-            
             profileUrl = link.getAttribute('href') || profileUrl;
         } else {
-            // Mobile fallback: extract what we can from the DOM
             const img = document.querySelector('.menuwrap .avatar img');
             if (img) avatarSrc = img.getAttribute('data-original') || img.getAttribute('src') || '';
         }
-
-        return {
-            mid: mid,
-            avatarSrc: avatarSrc,
-            username: username,
-            profileUrl: profileUrl
-        };
+        return { mid, avatarSrc, username, profileUrl };
     }
 
-    async function hydrateUserFromApi(user) {
-        if (!user || !user.mid || !navEl) return;
-        const apiUser = await fetchUserByMid(user.mid);
-        if (!apiUser || !navEl) return;
-
-        const nextUsername = (apiUser.nickname || '').trim() || user.username;
-        const nextAvatarSrc = normalizeAvatarUrl(apiUser.avatar) || normalizeAvatarUrl(user.avatarSrc);
-        const avatarHtml = buildAvatarHtml(nextAvatarSrc, nextUsername);
-
-        const trigger = navEl.querySelector('.mfn-user-trigger');
-        if (trigger) {
-            const triggerAvatar = trigger.querySelector('.mfn-avatar');
-            const triggerName = trigger.querySelector('.mfn-user-name');
-            if (triggerAvatar) triggerAvatar.innerHTML = avatarHtml;
-            if (triggerName) triggerName.textContent = nextUsername;
-        }
-
-        const panelHead = navEl.querySelector('.mfn-user-panel-head');
-        if (panelHead) {
-            const headAvatar = panelHead.querySelector('.mfn-avatar');
-            const headName = panelHead.querySelector('.mfn-user-panel-name');
-            if (headAvatar) headAvatar.innerHTML = avatarHtml;
-            if (headName) headName.textContent = nextUsername;
-        }
-    }
-
-    // ─── Recursive menu-item extractor ────────────────────────
     function extractItems(ul) {
         const out = [];
         for (const li of ul.children) {
             if (li.tagName !== 'LI') continue;
-            // native separator (in legacy markup: <li><hr …></li>)
             if (li.querySelector(':scope > hr')) { out.push({ type: 'separator' }); continue; }
             const a = li.querySelector(':scope > a');
             if (!a) continue;
@@ -404,8 +301,6 @@ const ForumTopMenuModule = (function () {
             const submenu = li.querySelector(':scope > ul');
             const em = a.querySelector('em');
             let badge = null;
-            
-            // Extract label and strip the badge number from it
             let label = a.textContent.replace(/\s+/g, ' ').trim();
             if (em) {
                 const emText = em.textContent.trim();
@@ -416,33 +311,20 @@ const ForumTopMenuModule = (function () {
             }
 
             if (submenu) {
-                out.push({
-                    type: 'submenu',
-                    label,
-                    icon: iconForLabel(label),
-                    badge,
-                    items: extractItems(submenu)
-                });
+                out.push({ type: 'submenu', label, icon: iconForLabel(label), badge, items: extractItems(submenu) });
             } else {
                 out.push({
-                    type: 'link',
-                    label,
-                    href: a.getAttribute('href') || '',
-                    onclick: a.getAttribute('onclick') || '',
-                    role: a.getAttribute('role') || '',
-                    tabindex: a.getAttribute('tabindex') || '',
-                    dataToggle: a.getAttribute('data-toggle') || '',
-                    className: a.className || '',
-                    bold: /font-weight:\s*(600|bold)/i.test(a.getAttribute('style') || ''),
-                    badge,
-                    icon: iconForLabel(label)
+                    type: 'link', label, href: a.getAttribute('href') || '',
+                    onclick: a.getAttribute('onclick') || '', role: a.getAttribute('role') || '',
+                    tabindex: a.getAttribute('tabindex') || '', dataToggle: a.getAttribute('data-toggle') || '',
+                    className: a.className || '', bold: /font-weight:\s*(600|bold)/i.test(a.getAttribute('style') || ''),
+                    badge, icon: iconForLabel(label)
                 });
             }
         }
         return out;
     }
 
-    // ─── Top-level actions (Messenger / Topics / … / Admin) ──
     function extractTopActions(menuWrap, userLink) {
         const out = [];
         for (const li of menuWrap.querySelectorAll('.left > li.menu')) {
@@ -452,8 +334,6 @@ const ForumTopMenuModule = (function () {
             const submenu = li.querySelector(':scope > ul');
             const em = a.querySelector('em');
             let badge = null;
-            
-            // Extract label and strip the badge number from it
             let label = a.textContent.replace(/\s+/g, ' ').trim();
             if (em) {
                 const emText = em.textContent.trim();
@@ -464,32 +344,19 @@ const ForumTopMenuModule = (function () {
             }
 
             if (submenu) {
-                out.push({
-                    type: 'submenu',
-                    label,
-                    icon: iconForLabel(label),
-                    badge,
-                    items: extractItems(submenu)
-                });
+                out.push({ type: 'submenu', label, icon: iconForLabel(label), badge, items: extractItems(submenu) });
             } else {
                 out.push({
-                    type: 'link',
-                    label,
-                    href: a.getAttribute('href') || '',
-                    onclick: a.getAttribute('onclick') || '',
-                    role: a.getAttribute('role') || '',
-                    tabindex: a.getAttribute('tabindex') || '',
-                    dataToggle: a.getAttribute('data-toggle') || '',
-                    className: a.className || '',
-                    badge,
-                    icon: iconForLabel(label)
+                    type: 'link', label, href: a.getAttribute('href') || '',
+                    onclick: a.getAttribute('onclick') || '', role: a.getAttribute('role') || '',
+                    tabindex: a.getAttribute('tabindex') || '', dataToggle: a.getAttribute('data-toggle') || '',
+                    className: a.className || '', badge, icon: iconForLabel(label)
                 });
             }
         }
         return out;
     }
-   
-    // ─── Guest data ───────────────────────────────────────────
+
     function extractGuest(menuWrap) {
         const socials = [];
         menuWrap.querySelectorAll('.login_with button[data-url]').forEach(btn => {
@@ -498,7 +365,6 @@ const ForumTopMenuModule = (function () {
             if (service && url) socials.push({ service, url });
         });
 
-        // Clone the legacy login form to the body to keep reCAPTCHA bindings intact
         if (!document.getElementById('legacy-login-puppet')) {
             const legacyForm = menuWrap.querySelector('#loginForm');
             if (legacyForm) {
@@ -508,11 +374,9 @@ const ForumTopMenuModule = (function () {
                 document.body.appendChild(clone);
             }
         }
-
         return { socials };
     }
 
-    // ─── Build: dropdown content for a list of items ─────────
     function buildDropdownBody(items) {
         const frag = document.createDocumentFragment();
         items.forEach(item => {
@@ -523,7 +387,7 @@ const ForumTopMenuModule = (function () {
             if (item.type === 'submenu') {
                 const det = h('details', { className: 'mfn-submenu' });
                 
-                // ── FIX: Combine the attributes into a single object ──
+                // FIXED SYNTAX ERROR HERE
                 const summary = h('summary', { 
                     className: 'mfn-submenu-summary',
                     'data-menu-label': item.label 
@@ -535,7 +399,6 @@ const ForumTopMenuModule = (function () {
                     '<i class="fa-regular fa-chevron-down mfn-chev" aria-hidden="true"></i>';
                 
                 det.appendChild(summary);
-                
                 const body = h('div', { className: 'mfn-submenu-body' });
                 body.appendChild(buildDropdownBody(item.items));
                 det.appendChild(body);
@@ -543,12 +406,9 @@ const ForumTopMenuModule = (function () {
                 return;
             }
             const a = h('a', {
-                className: 'mfn-dd-link' + (item.bold ? ' mfn-dd-link--bold' : '') +
-                           (item.className ? ' ' + item.className : ''),
-                href: item.href || undefined,
-                onclick: item.onclick || undefined,
-                role: item.role || undefined,
-                tabindex: item.tabindex || undefined
+                className: 'mfn-dd-link' + (item.bold ? ' mfn-dd-link--bold' : '') + (item.className ? ' ' + item.className : ''),
+                href: item.href || undefined, onclick: item.onclick || undefined,
+                role: item.role || undefined, tabindex: item.tabindex || undefined
             });
             if (item.dataToggle) a.setAttribute('data-toggle', item.dataToggle);
             a.innerHTML =
@@ -559,19 +419,14 @@ const ForumTopMenuModule = (function () {
         return frag;
     }
 
-    // ─── Build: primary action button (link or submenu) ──────
     function buildTopAction(item) {
         if (item.type === 'submenu') {
             const wrap = h('div', { className: 'mfn-dropdown' });
             const trigger = h('button', {
-                type: 'button',
-                className: 'mfn-action mfn-action--has-menu',
-                'aria-haspopup': 'true',
-                'aria-expanded': 'false',
-                'data-menu-label': item.label,
-                title: item.label,
-                innerHTML: icon(item.icon) +
-                    '<span class="mfn-action-label">' + escapeHtml(item.label) + '</span>' +
+                type: 'button', className: 'mfn-action mfn-action--has-menu',
+                'aria-haspopup': 'true', 'aria-expanded': 'false',
+                'data-menu-label': item.label, title: item.label,
+                innerHTML: icon(item.icon) + '<span class="mfn-action-label">' + escapeHtml(item.label) + '</span>' +
                     (item.badge ? '<span class="mfn-badge">' + escapeHtml(item.badge) + '</span>' : '') +
                     '<i class="fa-regular fa-angle-down mfn-chev" aria-hidden="true"></i>'
             });
@@ -586,44 +441,29 @@ const ForumTopMenuModule = (function () {
         const attrs = {
             type: tag === 'button' ? 'button' : undefined,
             className: 'mfn-action' + (item.className ? ' ' + item.className : ''),
-            role: item.role || undefined,
-            tabindex: item.tabindex || undefined,
+            role: item.role || undefined, tabindex: item.tabindex || undefined,
             href: tag === 'a' ? (item.href || '#') : undefined,
-            onclick: item.onclick || undefined,
-            'data-toggle': item.dataToggle || undefined,
-            innerHTML: icon(item.icon) +
-                '<span class="mfn-action-label">' + escapeHtml(item.label) + '</span>' +
+            onclick: item.onclick || undefined, 'data-toggle': item.dataToggle || undefined,
+            innerHTML: icon(item.icon) + '<span class="mfn-action-label">' + escapeHtml(item.label) + '</span>' +
                 (item.badge ? '<span class="mfn-badge">' + escapeHtml(item.badge) + '</span>' : '')
         };
         return h(tag, attrs);
     }
 
-    // ─── Build: user dropdown (logged-in) ────────────────────
     function buildUserDropdown(user, items, apiUser) {
         const wrap = h('div', { className: 'mfn-dropdown mfn-user-dropdown' });
-        
-        // Generate avatar using the API data if available, otherwise fall back to DOM data
         const avatarHtml = generateAvatarHtml(apiUser, user.username, user.mid, 32);
         const groupClass = getGroupClass(apiUser);
 
-        const trigger = h('button', {
-            type: 'button',
-            className: 'mfn-user-trigger',
-            'aria-haspopup': 'true',
-            'aria-expanded': 'false'
-        });
-        trigger.innerHTML =
-            `<span class="mfn-avatar ${groupClass}">${avatarHtml}</span>` +
+        const trigger = h('button', { type: 'button', className: 'mfn-user-trigger', 'aria-haspopup': 'true', 'aria-expanded': 'false' });
+        trigger.innerHTML = `<span class="mfn-avatar ${groupClass}">${avatarHtml}</span>` +
             '<span class="mfn-user-name">' + escapeHtml(user.username) + '</span>' +
             '<i class="fa-regular fa-chevron-down mfn-chev" aria-hidden="true"></i>';
 
         const panel = h('div', { className: 'mfn-dropdown-panel mfn-user-panel' });
         const head = h('div', { className: 'mfn-user-panel-head' });
-        
-        // Use a larger 44px avatar for the dropdown header
         const lgAvatarHtml = generateAvatarHtml(apiUser, user.username, user.mid, 44);
-        head.innerHTML =
-            `<span class="mfn-avatar mfn-avatar--lg ${groupClass}">${lgAvatarHtml}</span>` +
+        head.innerHTML = `<span class="mfn-avatar mfn-avatar--lg ${groupClass}">${lgAvatarHtml}</span>` +
             '<div class="mfn-user-panel-meta">' +
                 '<a class="mfn-user-panel-name" href="' + escapeHtml(user.profileUrl) + '">' + escapeHtml(user.username) + '</a>' +
                 '<span class="mfn-user-panel-sub">Signed in</span>' +
@@ -637,100 +477,25 @@ const ForumTopMenuModule = (function () {
         return wrap;
     }
 
-    // ─── Build: guest block ──────────────────────────────────
-    function buildGuestBlock(guest) {
-        const frag = document.createDocumentFragment();
-
-        const loginWrap = h('div', { className: 'mfn-dropdown' });
-        const loginTrigger = h('button', {
-            type: 'button',
-            className: 'mfn-action mfn-action--primary',
-            'aria-haspopup': 'true',
-            'aria-expanded': 'false',
-            innerHTML: icon('fa-right-to-bracket') + '<span class="mfn-action-label">Login</span>'
-        });
-
-        const loginPanel = h('div', { className: 'mfn-dropdown-panel mfn-login-panel' });
-        loginPanel.appendChild(
-            h('a', {
-                className: 'mfn-login-main',
-                href: CONFIG.LOGIN_URL,
-                innerHTML: '<i class="fa-regular fa-user" aria-hidden="true"></i> Sign in with username'
-            })
-        );
-        if (guest.socials.length) {
-            loginPanel.appendChild(h('div', { className: 'mfn-login-or', textContent: 'or continue with' }));
-            const socialRow = h('div', { className: 'mfn-social-row' });
-            guest.socials.forEach(s => {
-                const btn = h('button', {
-                    type: 'button',
-                    className: 'mfn-social-btn',
-                    'data-service': s.service,
-                    'data-url': s.url
-                });
-                let brandIcon;
-                if (s.service === 'google')        brandIcon = '<i class="fa-brands fa-google"></i>';
-                else if (s.service === 'facebook') brandIcon = '<i class="fa-brands fa-facebook-f"></i>';
-                else if (s.service === 'telegram') brandIcon = '<i class="fa-brands fa-telegram"></i>';
-                else                               brandIcon = '<i class="fa-regular fa-globe"></i>';
-                btn.innerHTML = brandIcon + '<span>' + escapeHtml(s.service) + '</span>';
-                socialRow.appendChild(btn);
-            });
-            loginPanel.appendChild(socialRow);
-        }
-        loginPanel.appendChild(
-            h('a', {
-                className: 'mfn-register-link',
-                href: CONFIG.REGISTER_URL,
-                innerHTML: 'Create an account <i class="fa-regular fa-arrow-right" aria-hidden="true"></i>'
-            })
-        );
-
-        loginWrap.appendChild(loginTrigger);
-        loginWrap.appendChild(loginPanel);
-        frag.appendChild(loginWrap);
-
-        frag.appendChild(
-            h('a', {
-                className: 'mfn-action mfn-action--ghost',
-                href: CONFIG.REGISTER_URL,
-                innerHTML: icon('fa-user-plus') + '<span class="mfn-action-label">Register</span>'
-            })
-        );
-
-        return frag;
-    }
-
     function buildGuestLoginBar(guest) {
         const wrap = h('div', { className: 'mfn-guest-login-bar' });
-
-        // 1. Inline Form (Desktop)
         const form = h('form', { className: 'mfn-login-inline' });
         form.innerHTML = `
             <input type="text" name="username" placeholder="E-mail or Nickname" autocomplete="username" required>
             <input type="password" name="password" placeholder="Password" autocomplete="current-password" required>
-            <button type="submit" class="mfn-btn mfn-btn--primary">
-                ${icon('fa-right-to-bracket')} Log In
-            </button>
+            <button type="submit" class="mfn-btn mfn-btn--primary">${icon('fa-right-to-bracket')} Log In</button>
         `;
 
         form.addEventListener('submit', (e) => {
             e.preventDefault();
             const u = form.querySelector('input[name="username"]').value;
             const p = form.querySelector('input[name="password"]').value;
-            
             const puppet = document.getElementById('legacy-login-puppet');
             if (puppet) {
-                const legacyUser = puppet.querySelector('input[name="UserName"]');
-                const legacyPass = puppet.querySelector('input[name="PassWord"]');
-                const legacyUserSafe = puppet.querySelector('input[name="UserSafe"]');
-                
-                if (legacyUser) legacyUser.value = u;
-                if (legacyPass) legacyPass.value = p;
-                if (legacyUserSafe) legacyUserSafe.value = '1'; 
-                
-                const submitBtn = puppet.querySelector('input[type="submit"]');
-                if (submitBtn) submitBtn.click();
+                puppet.querySelector('input[name="UserName"]').value = u;
+                puppet.querySelector('input[name="PassWord"]').value = p;
+                puppet.querySelector('input[name="UserSafe"]').value = '1'; 
+                puppet.querySelector('input[type="submit"]').click();
             } else {
                 window.location.href = CONFIG.LOGIN_URL;
             }
@@ -738,81 +503,48 @@ const ForumTopMenuModule = (function () {
 
         wrap.appendChild(form);
 
-        // 2. Register Button (Matching the Log In button style)
-        wrap.appendChild(
-            h('a', {
-                className: 'mfn-btn mfn-btn--ghost',
-                href: CONFIG.REGISTER_URL,
-                innerHTML: icon('fa-user-plus') + ' Register'
-            })
-        );
+        wrap.appendChild(h('a', { className: 'mfn-btn mfn-btn--ghost', href: CONFIG.REGISTER_URL, innerHTML: icon('fa-user-plus') + ' Register' }));
 
-        // 3. Social Dropdown (To save space)
         if (guest.socials.length) {
             const socialWrap = h('div', { className: 'mfn-dropdown' });
             const socialTrigger = h('button', {
-                type: 'button',
-                className: 'mfn-action mfn-action--ghost mfn-social-trigger',
-                'aria-haspopup': 'true',
-                'aria-expanded': 'false',
-                title: 'Alternative login methods',
-                // Changed icon to fa-right-left to denote alternatives
+                type: 'button', className: 'mfn-action mfn-action--ghost mfn-social-trigger',
+                'aria-haspopup': 'true', 'aria-expanded': 'false', title: 'Alternative login methods',
                 innerHTML: icon('fa-right-left') + '<span class="mfn-action-label">Social</span>'
             });
             
             const socialPanel = h('div', { className: 'mfn-dropdown-panel mfn-social-panel' });
             const socialRow = h('div', { className: 'mfn-social-row' });
             guest.socials.forEach(s => {
-                const btn = h('button', {
-                    type: 'button',
-                    className: 'mfn-social-btn',
-                    'data-service': s.service,
-                    'data-url': s.url
-                });
-                let brandIcon;
-                if (s.service === 'google')        brandIcon = '<i class="fa-brands fa-google"></i>';
-                else if (s.service === 'facebook') brandIcon = '<i class="fa-brands fa-facebook-f"></i>';
-                else if (s.service === 'telegram') brandIcon = '<i class="fa-brands fa-telegram"></i>';
-                else                               brandIcon = '<i class="fa-regular fa-globe"></i>';
+                const btn = h('button', { type: 'button', className: 'mfn-social-btn', 'data-service': s.service, 'data-url': s.url });
+                let brandIcon = s.service === 'google' ? '<i class="fa-brands fa-google"></i>' :
+                                s.service === 'facebook' ? '<i class="fa-brands fa-facebook-f"></i>' :
+                                s.service === 'telegram' ? '<i class="fa-brands fa-telegram"></i>' : '<i class="fa-regular fa-globe"></i>';
                 btn.innerHTML = brandIcon + '<span>' + escapeHtml(s.service) + '</span>';
                 socialRow.appendChild(btn);
             });
             socialPanel.appendChild(socialRow);
-            
             socialWrap.appendChild(socialTrigger);
             socialWrap.appendChild(socialPanel);
             wrap.appendChild(socialWrap);
         }
 
-        // 4. Mobile Login Button (Hidden on Desktop)
-        const mobileTrigger = h('button', {
-            type: 'button',
-            className: 'mfn-action mfn-action--primary mfn-mobile-login-trigger',
-            innerHTML: icon('fa-right-to-bracket') + '<span class="mfn-action-label">Login</span>'
-        });
-        
-        mobileTrigger.addEventListener('click', () => {
-            window.location.href = CONFIG.LOGIN_URL;
-        });
+        const mobileTrigger = h('button', { type: 'button', className: 'mfn-action mfn-action--primary mfn-mobile-login-trigger', innerHTML: icon('fa-right-to-bracket') + '<span class="mfn-action-label">Login</span>' });
+        mobileTrigger.addEventListener('click', () => { window.location.href = CONFIG.LOGIN_URL; });
         wrap.appendChild(mobileTrigger);
 
         return wrap;
     }
 
-    // ─── Build: mobile search toggle ─────────────────────────
     function buildMobileSearchToggle(searchForm) {
         const searchToggle = h('button', {
-            type: 'button',
-            className: 'mfn-action mfn-search-toggle',
-            'aria-label': 'Toggle search',
-            innerHTML: '<i class="fa-regular fa-magnifying-glass" aria-hidden="true"></i>'
+            type: 'button', className: 'mfn-action mfn-search-toggle',
+            'aria-label': 'Toggle search', innerHTML: '<i class="fa-regular fa-magnifying-glass" aria-hidden="true"></i>'
         });
-        searchToggle.style.display = 'none'; // shown via CSS media query
-
+        searchToggle.style.display = 'none';
         searchToggle.addEventListener('click', () => {
             searchForm.classList.toggle('mfn-search--mobile-open');
         });
-
         return searchToggle;
     }
 
@@ -821,47 +553,28 @@ const ForumTopMenuModule = (function () {
         const nav = h('nav', { id: CONFIG.NAV_ID, className: 'mfn', 'aria-label': 'Primary' });
         const inner = h('div', { className: 'mfn-inner' });
 
-        // Logo → home
-        inner.appendChild(
-            h('a', {
-                className: 'mfn-logo',
-                href: '/',
-                'aria-label': 'Home',
-                innerHTML: LOGO_SVG
-            })
-        );
+        inner.appendChild(h('a', { className: 'mfn-logo', href: '/', 'aria-label': 'Home', innerHTML: LOGO_SVG }));
 
-        let searchForm = null; // Reference needed for the mobile search toggle
+        let searchForm = null;
 
-        // ── Conditional Center Element: Search (Logged In) vs Login Bar (Guest) ──
         if (data.loggedIn) {
-            // ── Scoped Search Setup ──────────────────────────────────
             const searchWrap = h('div', { className: 'mfn-search-wrap' });
-
-            // 1. Custom Scope Dropdown
             const scopeWrap = h('div', { className: 'mfn-dropdown mfn-scope-dropdown' });
             
-            const scopeTrigger = h('button', {
-                type: 'button',
-                className: 'mfn-scope-trigger',
-                'aria-haspopup': 'true',
-                'aria-expanded': 'false'
-            });
+            const scopeTrigger = h('button', { type: 'button', className: 'mfn-scope-trigger', 'aria-haspopup': 'true', 'aria-expanded': 'false' });
             scopeTrigger.innerHTML = '<span class="mfn-scope-label"><i class="fa-regular fa-folder" aria-hidden="true"></i> Forum</span><i class="fa-regular fa-chevron-down mfn-chev" aria-hidden="true"></i>';
 
             const scopePanel = h('div', { className: 'mfn-dropdown-panel mfn-scope-panel' });
+            
+            // NEW: Added Sections, removed Google
             const scopeOptions = [
                 { value: 'forum', label: 'Forum', icon: 'fa-regular fa-folder' },
-                { value: 'google', label: 'Google', icon: 'fa-brands fa-google' },
-                { value: 'user', label: 'Users', icon: 'fa-regular fa-user' }
+                { value: 'user', label: 'Users', icon: 'fa-regular fa-user' },
+                { value: 'section', label: 'Sections', icon: 'fa-regular fa-layer-group' }
             ];
 
             scopeOptions.forEach(opt => {
-                const btn = h('button', {
-                    type: 'button',
-                    className: 'mfn-dd-link mfn-scope-option',
-                    'data-value': opt.value
-                });
+                const btn = h('button', { type: 'button', className: 'mfn-dd-link mfn-scope-option', 'data-value': opt.value });
                 btn.innerHTML = `<span class="mfn-dd-link-left">${opt.icon ? `<i class="${opt.icon}"></i>` : ''} ${opt.label}</span>`;
                 scopePanel.appendChild(btn);
             });
@@ -870,14 +583,13 @@ const ForumTopMenuModule = (function () {
             scopeWrap.appendChild(scopePanel);
             searchWrap.appendChild(scopeWrap);
 
-            // 2. The Search Form
             const form = h('form', {
                 className: 'mfn-search',
                 action: 'https://perveavenue.forumcommunity.net/',
                 method: 'post',
                 role: 'search'
             });
-            searchForm = form; // Save reference for mobile toggle
+            searchForm = form; 
             
             form.innerHTML =
                 '<label class="mfn-search-label" for="mfn-search-input">Search</label>' +
@@ -889,11 +601,9 @@ const ForumTopMenuModule = (function () {
                 
             searchWrap.appendChild(form);
 
-            // 3. Autocomplete Panel
             const autocompletePanel = h('div', { className: 'mfn-search-autocomplete' });
             searchWrap.appendChild(autocompletePanel);
 
-            // 4. Search State & Logic
             let currentScope = 'forum';
             let searchTimeout = null;
             let searchAbort = null;
@@ -908,107 +618,120 @@ const ForumTopMenuModule = (function () {
             }
 
             function renderAutocomplete() {
-                if (!acResults.length) {
+                if (!acResults.length && currentScope !== 'section') {
                     closeAutocomplete();
                     return;
                 }
                 autocompletePanel.innerHTML = '';
                 acFocusIndex = -1;
 
-                acResults.forEach((user, i) => {
-                    const profileUrl = `/?act=Profile&MID=${user.id}`;
-                    const username = user.name || user.nickname || 'User';
-                    
-                    const avatarHtml = generateAvatarHtml(user, username, user.id, 26);
-                    const groupClass = getGroupClass(user);
-
-                    const item = h('div', {
-                        className: 'mfn-ac-item',
-                        'data-index': i,
-                        'data-url': profileUrl
+                if (currentScope === 'section') {
+                    cachedSections.filter(s => s.name.toLowerCase().includes(searchInput.value.trim().toLowerCase())).forEach((sec, i) => {
+                        const item = h('a', { href: `/?f=${sec.id}`, className: 'mfn-ac-item', 'data-index': i });
+                        item.innerHTML = `<span class="mfn-ac-icon"><i class="fa-regular fa-folder"></i></span><span class="mfn-ac-name">${escapeHtml(sec.name)}</span>`;
+                        autocompletePanel.appendChild(item);
                     });
-                    
-                    item.innerHTML = `
-                        <span class="mfn-ac-avatar-wrap ${groupClass}">${avatarHtml}</span>
-                        <span class="mfn-ac-name">${escapeHtml(username)}</span>
-                    `;
-                    
-                    item.addEventListener('click', () => {
-                        window.location.href = profileUrl;
-                    });
-                    
-                    autocompletePanel.appendChild(item);
-                });
-                autocompletePanel.classList.add('is-active');
-            }
+                } else if (currentScope === 'user') {
+                    acResults.forEach((user, i) => {
+                        const profileUrl = `/?act=Profile&MID=${user.id}`;
+                        const username = user.name || user.nickname || 'User';
+                        const avatarHtml = generateAvatarHtml(user, username, user.id, 26);
+                        const groupClass = getGroupClass(user);
 
-            function updateAcFocus(items) {
-                items.forEach((item, i) => {
-                    item.classList.toggle('is-focused', i === acFocusIndex);
-                });
-                if (items[acFocusIndex]) {
-                    items[acFocusIndex].scrollIntoView({ block: 'nearest' });
+                        const item = h('div', { className: 'mfn-ac-item', 'data-index': i });
+                        item.innerHTML = `
+                            <span class="mfn-ac-avatar-wrap ${groupClass}">${avatarHtml}</span>
+                            <span class="mfn-ac-name">${escapeHtml(username)}</span>
+                            <button type="button" class="mfn-ac-topics-btn" title="View topics by ${escapeHtml(username)}" data-mid="${user.id}">
+                                <i class="fa-regular fa-list" aria-hidden="true"></i>
+                            </button>
+                        `;
+                        
+                        // Click name -> Profile
+                        item.querySelector('.mfn-ac-name').addEventListener('click', () => { window.location.href = profileUrl; });
+                        
+                        // Click topics icon -> Fetch topics
+                        item.querySelector('.mfn-ac-topics-btn').addEventListener('click', async (e) => {
+                            e.preventDefault(); e.stopPropagation();
+                            autocompletePanel.innerHTML = '<div class="mfn-ac-loading"><i class="fa-regular fa-spinner fa-spin"></i> Loading topics...</div>';
+                            try {
+                                const res = await fetch(`/api.php?starter=${user.id}&threads=1`, { credentials: 'same-origin' });
+                                const data = await res.json();
+                                if (data && data.threads && data.threads.length > 0) {
+                                    autocompletePanel.innerHTML = `<div class="mfn-ac-header">Topics by ${escapeHtml(username)}</div>`;
+                                    data.threads.forEach(t => {
+                                        const tItem = h('a', { href: `/?t=${t.id}`, className: 'mfn-ac-topic-item' });
+                                        tItem.innerHTML = `<span class="mfn-ac-topic-title">${escapeHtml(t.title)}</span><span class="mfn-ac-topic-section">${escapeHtml(t.section_name)}</span>`;
+                                        autocompletePanel.appendChild(tItem);
+                                    });
+                                } else {
+                                    autocompletePanel.innerHTML = '<div class="mfn-ac-empty">No topics found.</div>';
+                                }
+                            } catch (err) { autocompletePanel.innerHTML = '<div class="mfn-ac-empty">Failed to load topics.</div>'; }
+                        });
+                        autocompletePanel.appendChild(item);
+                    });
+                }
+
+                if (autocompletePanel.children.length > 0) {
+                    autocompletePanel.classList.add('is-active');
+                } else {
+                    closeAutocomplete();
                 }
             }
 
-            // Input Listener (Debounced API Fetch)
+            function updateAcFocus(items) {
+                items.forEach((item, i) => { item.classList.toggle('is-focused', i === acFocusIndex); });
+                if (items[acFocusIndex]) items[acFocusIndex].scrollIntoView({ block: 'nearest' });
+            }
+
             searchInput.addEventListener('input', (e) => {
-                if (currentScope !== 'user') return;
                 const query = e.target.value.trim();
-                
                 clearTimeout(searchTimeout);
                 if (searchAbort) searchAbort.abort();
-                closeAutocomplete();
                 
+                if (currentScope === 'section') {
+                    renderAutocomplete(); // Filter cached sections locally
+                    return;
+                }
+
+                closeAutocomplete();
                 if (query.length < 2) return;
 
                 searchTimeout = setTimeout(async () => {
                     searchAbort = new AbortController();
                     try {
                         const res = await fetch(`/api.php?search&name=${encodeURIComponent(query)}&n=10&cookie=1`, {
-                            credentials: 'include',
-                            signal: searchAbort.signal
+                            credentials: 'include', signal: searchAbort.signal
                         });
-                        if (!res.ok) throw new Error('HTTP ' + res.status);
                         const data = await res.json();
                         acResults = (data && data.users) ? data.users : [];
                         renderAutocomplete();
                     } catch (err) {
-                        if (err.name !== 'AbortError') console.warn('[TopMenu] User search failed:', err);
+                        if (err.name !== 'AbortError') console.warn('[TopMenu] Search failed:', err);
                     }
                 }, 300);
             });
 
-            // Keyboard Navigation
             searchInput.addEventListener('keydown', (e) => {
-                if (currentScope !== 'user' || !autocompletePanel.classList.contains('is-active')) return;
-                
+                if (!autocompletePanel.classList.contains('is-active')) return;
                 const items = autocompletePanel.querySelectorAll('.mfn-ac-item');
                 if (!items.length) return;
 
                 if (e.key === 'ArrowDown') {
-                    e.preventDefault();
-                    acFocusIndex = (acFocusIndex + 1) % items.length;
-                    updateAcFocus(items);
+                    e.preventDefault(); acFocusIndex = (acFocusIndex + 1) % items.length; updateAcFocus(items);
                 } else if (e.key === 'ArrowUp') {
-                    e.preventDefault();
-                    acFocusIndex = (acFocusIndex - 1 + items.length) % items.length;
-                    updateAcFocus(items);
+                    e.preventDefault(); acFocusIndex = (acFocusIndex - 1 + items.length) % items.length; updateAcFocus(items);
                 } else if (e.key === 'Enter' && acFocusIndex >= 0) {
-                    e.preventDefault();
-                    window.location.href = items[acFocusIndex].getAttribute('data-url');
+                    e.preventDefault(); items[acFocusIndex].click();
                 } else if (e.key === 'Escape') {
                     closeAutocomplete();
                 }
             });
 
-            // Close dropdown when input loses focus (with delay for clicks)
-            searchInput.addEventListener('blur', () => {
-                setTimeout(closeAutocomplete, 200);
-            });
+            searchInput.addEventListener('blur', () => { setTimeout(closeAutocomplete, 200); });
 
-            // 5. Switching Logic
-            scopePanel.addEventListener('click', (e) => {
+            scopePanel.addEventListener('click', async (e) => {
                 const btn = e.target.closest('.mfn-scope-option');
                 if (!btn) return;
                 
@@ -1033,18 +756,28 @@ const ForumTopMenuModule = (function () {
                     searchInput.name = 'keywords';
                     searchInput.placeholder = 'Search forum threads...';
                     form.insertAdjacentHTML('beforeend', `<input type="hidden" name="act" value="Search"><input type="hidden" name="CODE" value="01">`);
-                } else if (scope === 'google') {
-                    form.action = 'https://www.google.com/search';
-                    form.method = 'get';
-                    searchInput.name = 'q';
-                    searchInput.placeholder = 'Search on Google...';
-                    form.insertAdjacentHTML('beforeend', `<input type="hidden" name="as_sitesearch" value="${CONFIG.SITE_FILTER}">`);
                 } else if (scope === 'user') {
                     form.action = 'https://www.forumcommunity.net/';
                     form.method = 'get';
                     searchInput.name = 'keywords';
                     searchInput.placeholder = 'Search members...';
                     form.insertAdjacentHTML('beforeend', `<input type="hidden" name="act" value="cerca"><input type="hidden" name="select" value="utente">`);
+                } else if (scope === 'section') {
+                    form.action = '/'; // Prevent form submission
+                    form.method = 'get';
+                    searchInput.name = 'dummy';
+                    searchInput.placeholder = 'Filter sections...';
+                    form.insertAdjacentHTML('beforeend', `<input type="hidden" name="dummy" value="1">`);
+                    
+                    if (!cachedSections) {
+                        searchInput.placeholder = 'Loading sections...';
+                        try {
+                            const res = await fetch('/api.php');
+                            const data = await res.json();
+                            cachedSections = data.sections || [];
+                        } catch (err) { cachedSections = []; }
+                    }
+                    searchInput.placeholder = 'Filter sections...';
                 }
                 
                 searchInput.focus();
@@ -1053,31 +786,17 @@ const ForumTopMenuModule = (function () {
             inner.appendChild(searchWrap);
             
         } else {
-            // ── Guest: Show Inline Login Bar instead of Search ──
             inner.appendChild(buildGuestLoginBar(data.guest));
         }
 
-        // Actions Group (Right Side)
         const actions = h('div', { className: 'mfn-actions' });
 
-        // Mobile search toggle (Only needed for logged-in users)
-        if (data.loggedIn && searchForm) {
-            actions.appendChild(buildMobileSearchToggle(searchForm));
-        }
+        if (data.loggedIn && searchForm) actions.appendChild(buildMobileSearchToggle(searchForm));
 
-        // Theme Toggle
-        const themeToggle = h('button', {
-            type: 'button',
-            className: 'mfn-action mfn-theme-toggle',
-            'data-theme-toggle': '',
-            'aria-label': 'Toggle theme',
-            title: 'Toggle theme'
-        });
+        const themeToggle = h('button', { type: 'button', className: 'mfn-action mfn-theme-toggle', 'data-theme-toggle': '', 'aria-label': 'Toggle theme', title: 'Toggle theme' });
         themeToggle.innerHTML = '<i class="fa-regular fa-sun-bright" aria-hidden="true"></i>';
-
         actions.appendChild(themeToggle);
 
-        // Render User Dropdown (Logged in only; Guest actions are handled by the center bar)
         if (data.loggedIn) {
             data.actions.forEach(item => actions.appendChild(buildTopAction(item)));
             actions.appendChild(buildUserDropdown(data.user, data.userDropdown, data.apiUser)); 
@@ -1088,14 +807,11 @@ const ForumTopMenuModule = (function () {
         return nav;
     }
 
-    // ─── Scroll behavior (smart sticky) ──────────────────────
     function onScroll() {
         const y = window.scrollY;
         if (!navEl) return;
-
         if (y < CONFIG.SCROLL_THRESHOLD) {
-            navEl.classList.remove(CONFIG.HIDDEN_CLASS);
-            navEl.classList.remove(CONFIG.SCROLLED_CLASS);
+            navEl.classList.remove(CONFIG.HIDDEN_CLASS, CONFIG.SCROLLED_CLASS);
         } else {
             if (y > lastY + CONFIG.SCROLL_DELTA) {
                 navEl.classList.add(CONFIG.HIDDEN_CLASS);
@@ -1116,7 +832,6 @@ const ForumTopMenuModule = (function () {
         }
     }
 
-    // ─── Dropdown toggling ───────────────────────────────────
     function closeAllDropdowns(except) {
         if (!navEl) return;
         navEl.querySelectorAll('.mfn-dropdown.mfn--open').forEach(dd => {
@@ -1128,16 +843,11 @@ const ForumTopMenuModule = (function () {
     }
 
     function attachEventDelegation() {
-        // Click on triggers
         navEl.addEventListener('click', (e) => {
-            const trigger = e.target.closest(
-                // ── ADDED .mfn-social-trigger HERE ──
-                '.mfn-user-trigger, .mfn-action--has-menu, .mfn-action--primary, .mfn-scope-trigger, .mfn-social-trigger'
-            );
+            const trigger = e.target.closest('.mfn-user-trigger, .mfn-action--has-menu, .mfn-action--primary, .mfn-scope-trigger, .mfn-social-trigger');
             if (trigger && navEl.contains(trigger)) {
                 const dd = trigger.closest('.mfn-dropdown');
-                if (!dd) return;
-                if (!dd.querySelector('.mfn-dropdown-panel')) return;
+                if (!dd || !dd.querySelector('.mfn-dropdown-panel')) return;
                 e.preventDefault();
                 const isOpen = dd.classList.contains(CONFIG.OPEN_CLASS);
                 closeAllDropdowns(dd);
@@ -1152,26 +862,21 @@ const ForumTopMenuModule = (function () {
                 return;
             }
 
-            // Social login click → replicate legacy cookie + redirect
             const social = e.target.closest('.mfn-social-btn[data-service][data-url]');
             if (social) {
                 e.preventDefault();
-                document.cookie = 'social-login=' + social.dataset.service +
-                    '; expires=Wed, 1 Jan 2030 00:00:00 GMT; path=/;';
+                document.cookie = 'social-login=' + social.dataset.service + '; expires=Wed, 1 Jan 2030 00:00:00 GMT; path=/;';
                 window.location.href = social.dataset.url;
             }
         });
 
-        // Click outside → close
         document.addEventListener('click', (e) => {
-            if (!navEl) return;
-            if (!navEl.contains(e.target)) {
+            if (navEl && !navEl.contains(e.target)) {
                 closeAllDropdowns();
                 openDropdownTrigger = null;
             }
         });
 
-        // Escape → close
         document.addEventListener('keydown', (e) => {
             if (e.key === 'Escape') {
                 closeAllDropdowns();
@@ -1180,41 +885,27 @@ const ForumTopMenuModule = (function () {
         });
     }
 
-    // ─── Init ────────────────────────────────────────────────
     async function init() {
         const menuWrap = document.querySelector(CONFIG.LEGACY_MENU_SELECTOR);
-        if (!menuWrap) return;
-        if (document.getElementById(CONFIG.NAV_ID)) return;
+        if (!menuWrap || document.getElementById(CONFIG.NAV_ID)) return;
 
-        // 1. Check login state via the new robust fallback
         const loggedIn = isLoggedIn();
         const user = loggedIn ? extractUser() : null;
         
-        // 2. Hydrate from API (vital for mobile, bonus for desktop)
         let apiUser = null;
         if (user && user.mid) {
             apiUser = await fetchUserData(user.mid);
-            
-            // Update the local user object with API data (ensures mobile gets the name/avatar)
             if (apiUser) {
                 user.username = apiUser.nickname || user.username;
                 user.avatarSrc = apiUser.avatar || user.avatarSrc;
             }
         }
 
-        // 3. Build the data object
         const userLink = menuWrap.querySelector('.left .menu > a[href*="act=Profile"]');
         
         const data = {
-            loggedIn,
-            search: extractSearch(menuWrap),
-            user: user,
-            apiUser: apiUser,
-            // Only extract dropdown items if the link exists (Desktop)
-            userDropdown: loggedIn && userLink && userLink.nextElementSibling 
-                ? extractItems(userLink.nextElementSibling) 
-                : [],
-            // Extract top actions (will safely skip userLink if null)
+            loggedIn, search: extractSearch(menuWrap), user, apiUser,
+            userDropdown: loggedIn && userLink && userLink.nextElementSibling ? extractItems(userLink.nextElementSibling) : [],
             actions: loggedIn ? extractTopActions(menuWrap, userLink) : [],
             guest: !loggedIn ? extractGuest(menuWrap) : null
         };
@@ -1226,83 +917,54 @@ const ForumTopMenuModule = (function () {
         attachEventDelegation();
         window.addEventListener('scroll', requestScroll, { passive: true });
 
-        // ── NEW: Watch for late-injected plugin badges ──
         function syncBadges() {
-            // 1. Check top-level items
             menuWrap.querySelectorAll('.left > li.menu > a').forEach(a => {
                 let label = a.textContent.replace(/\s+/g, ' ').trim();
                 const em = a.querySelector('em');
                 let badge = null;
-                
                 if (em && /^\d+$/.test(em.textContent.trim())) {
                     badge = em.textContent.trim();
                     label = label.replace(badge, '').trim();
                 }
-
-                // ── FIX: Scope to .mfn-action ──
                 const modernEl = navEl.querySelector(`.mfn-action[data-menu-label="${label}"]`);
                 if (modernEl) {
                     let badgeEl = modernEl.querySelector('.mfn-badge');
                     if (badge) {
-                        if (!badgeEl) {
-                            badgeEl = document.createElement('span');
-                            badgeEl.className = 'mfn-badge';
-                            modernEl.appendChild(badgeEl);
-                        }
+                        if (!badgeEl) { badgeEl = document.createElement('span'); badgeEl.className = 'mfn-badge'; modernEl.appendChild(badgeEl); }
                         badgeEl.textContent = badge;
-                    } else if (badgeEl) {
-                        badgeEl.remove();
-                    }
+                    } else if (badgeEl) { badgeEl.remove(); }
                 }
             });
 
-            // 2. Check nested submenu items (like "Additional features")
             menuWrap.querySelectorAll('.submenu > a').forEach(a => {
                 let label = a.textContent.replace(/\s+/g, ' ').trim();
                 const em = a.querySelector('em');
                 let badge = null;
-                
                 if (em && /^\d+$/.test(em.textContent.trim())) {
                     badge = em.textContent.trim();
                     label = label.replace(badge, '').trim();
                 }
-
-                // ── FIX: Scope to .mfn-submenu-summary ──
                 const modernEl = navEl.querySelector(`.mfn-submenu-summary[data-menu-label="${label}"]`);
                 if (modernEl) {
                     let badgeEl = modernEl.querySelector('.mfn-badge');
                     if (badge) {
                         if (!badgeEl) {
-                            badgeEl = document.createElement('span');
-                            badgeEl.className = 'mfn-badge';
+                            badgeEl = document.createElement('span'); badgeEl.className = 'mfn-badge';
                             const chev = modernEl.querySelector('.mfn-chev');
-                            if (chev) modernEl.insertBefore(badgeEl, chev);
-                            else modernEl.appendChild(badgeEl);
+                            if (chev) modernEl.insertBefore(badgeEl, chev); else modernEl.appendChild(badgeEl);
                         }
                         badgeEl.textContent = badge;
-                    } else if (badgeEl) {
-                        badgeEl.remove();
-                    }
+                    } else if (badgeEl) { badgeEl.remove(); }
                 }
             });
         }
 
-        // Run once immediately to catch anything that loaded in time
         syncBadges();
-
-        // Watch for the plugin injecting the <em> tags later
-        const badgeObserver = new MutationObserver((mutations) => {
-            // Debounce slightly to prevent firing 10 times in a row if multiple nodes are added
+        const badgeObserver = new MutationObserver(() => {
             clearTimeout(badgeObserver._timer);
             badgeObserver._timer = setTimeout(syncBadges, 100);
         });
-        
-        badgeObserver.observe(menuWrap, {
-            childList: true,
-            subtree: true,
-            characterData: true
-        });
-        // ────────────────────────────────────────────────
+        badgeObserver.observe(menuWrap, { childList: true, subtree: true, characterData: true });
 
         console.log('[TopMenu] Modern nav built (' + (loggedIn ? 'member' : 'guest') + ')');
     }
