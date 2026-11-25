@@ -64,6 +64,34 @@ const ForumTopMenuModule = (function () {
         return '<i class="fa-' + (style || 'regular') + ' ' + name + '" aria-hidden="true"></i>';
     }
 
+       function icon(name, style) {
+        return '<i class="fa-' + (style || 'regular') + ' ' + name + '" aria-hidden="true"></i>';
+    }
+
+    // ── Tippy Polling Loader ──────────────────────────────────
+    function initHeaderTippys() {
+        // If tippy isn't loaded yet, wait 100ms and try again
+        if (typeof window.tippy !== 'function') {
+            setTimeout(initHeaderTippys, 100);
+            return;
+        }
+
+        // Attach tippy to all elements with data-tippy-content in the nav
+        document.querySelectorAll('#modern-forum-nav [data-tippy-content]').forEach(el => {
+            if (el._tippy) return; // Prevent double initialization
+            
+            window.tippy(el, {
+                theme: 'emerald',      // Matches your custom tooltip theme
+                placement: 'bottom',
+                delay: [400, 0],       // Show after 400ms, hide instantly
+                animation: 'fade',
+                touch: false,          // Don't trigger on mobile taps
+                allowHTML: true,
+                appendTo: () => document.body // Prevents z-index clipping
+            });
+        });
+    }
+
     // ── Avatar Utilities ──────────────────────────────────────
     const AVATAR_COLORS = [
         '059669', '10B981', '34D399', '6EE7B7', 'A7F3D0',
@@ -1067,18 +1095,8 @@ const ForumTopMenuModule = (function () {
         menuWrap.parentNode.insertBefore(navEl, menuWrap);
         menuWrap.setAttribute('aria-hidden', 'true');
 
-        // ── NEW: Initialize Tippy Tooltips ──
-        if (window.tippy) {
-            tippy('#modern-forum-nav [data-tippy-content]', {
-                theme: 'emerald',      // Uses your existing tooltip theme
-                placement: 'bottom',
-                delay: [400, 0],       // Show after 400ms, hide instantly
-                animation: 'fade',
-                touch: false,          // Don't trigger on mobile taps
-                appendTo: () => document.body
-            });
-        }
-
+        // ── FIX: Start polling for Tippy ──
+        initHeaderTippys(); 
         attachEventDelegation();
         window.addEventListener('scroll', requestScroll, { passive: true });
 
