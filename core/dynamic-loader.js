@@ -235,7 +235,7 @@ async function bootSystem() {
         // ── Fire-and-forget: nav must render ASAP ─────────────────
         // No dependencies on Phase A/B/C. Loaded in parallel so it
         // doesn't extend any phase's wall-clock time.
-        loadScript("https://cdn.jsdelivr.net/gh/hu6amini/perve_avenue@d4675d1e33a1497cc94bf4f4a7c421f4a391569a/modules/top-menu.js")
+        loadScript("https://cdn.jsdelivr.net/gh/hu6amini/perve_avenue@1e9253fa6ed728c9f84081291f15ae5b6cae190b/modules/top-menu.js")
             .catch(err => console.warn('[Boot] Top menu failed:', err));
 
         // PHASE A: Foundation (media optimizer & event bus)
