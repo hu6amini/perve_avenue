@@ -566,7 +566,6 @@ const ForumTopMenuModule = (function () {
 
             const scopePanel = h('div', { className: 'mfn-dropdown-panel mfn-scope-panel' });
             
-            // NEW: Added Sections, removed Google
             const scopeOptions = [
                 { value: 'forum', label: 'Forum', icon: 'fa-regular fa-folder' },
                 { value: 'user', label: 'Users', icon: 'fa-regular fa-user' },
@@ -583,9 +582,10 @@ const ForumTopMenuModule = (function () {
             scopeWrap.appendChild(scopePanel);
             searchWrap.appendChild(scopeWrap);
 
+            // ── FIXED FORM SETUP ──
             const form = h('form', {
                 className: 'mfn-search',
-                action: 'https://perveavenue.forumcommunity.net/',
+                action: window.location.origin + '/', // Always submit to current domain
                 method: 'post',
                 role: 'search'
             });
@@ -596,8 +596,9 @@ const ForumTopMenuModule = (function () {
                 '<i class="fa-regular fa-magnifying-glass mfn-search-icon" aria-hidden="true"></i>' +
                 '<input id="mfn-search-input" type="search" name="keywords" ' +
                     'placeholder="Search forum threads..." autocomplete="off" maxlength="150" required>' +
-                '<input type="hidden" name="act" value="Search" data-scope-added>' +
-                '<input type="hidden" name="CODE" value="01" data-scope-added>';
+                '<input type="hidden" name="act" value="Search">' +
+                '<input type="hidden" name="CODE" value="01">' +
+                (data.sToken ? `<input type="hidden" name="s" value="${escapeHtml(data.sToken)}">` : '');
                 
             searchWrap.appendChild(form);
 
@@ -611,6 +612,15 @@ const ForumTopMenuModule = (function () {
             let acFocusIndex = -1;
 
             const searchInput = form.querySelector('#mfn-search-input');
+
+            // Prevent native form submit when filtering sections
+            form.addEventListener('submit', (e) => {
+                if (currentScope === 'section') {
+                    e.preventDefault();
+                    const first = autocompletePanel.querySelector('.mfn-ac-item');
+                    if (first) first.click();
+                }
+            });
 
             function closeAutocomplete() {
                 autocompletePanel.classList.remove('is-active');
@@ -647,10 +657,8 @@ const ForumTopMenuModule = (function () {
                             </button>
                         `;
                         
-                        // Click name -> Profile
                         item.querySelector('.mfn-ac-name').addEventListener('click', () => { window.location.href = profileUrl; });
                         
-                        // Click topics icon -> Fetch topics
                         item.querySelector('.mfn-ac-topics-btn').addEventListener('click', async (e) => {
                             e.preventDefault(); e.stopPropagation();
                             autocompletePanel.innerHTML = '<div class="mfn-ac-loading"><i class="fa-regular fa-spinner fa-spin"></i> Loading topics...</div>';
@@ -691,7 +699,7 @@ const ForumTopMenuModule = (function () {
                 if (searchAbort) searchAbort.abort();
                 
                 if (currentScope === 'section') {
-                    renderAutocomplete(); // Filter cached sections locally
+                    renderAutocomplete(); 
                     return;
                 }
 
@@ -748,14 +756,15 @@ const ForumTopMenuModule = (function () {
                 searchInput.value = '';
                 closeAutocomplete();
 
+                // Reset hidden inputs
                 form.querySelectorAll('input[type="hidden"]').forEach(el => el.remove());
 
                 if (scope === 'forum') {
-                    form.action = 'https://perveavenue.forumcommunity.net/';
+                    form.action = window.location.origin + '/';
                     form.method = 'post';
                     searchInput.name = 'keywords';
                     searchInput.placeholder = 'Search forum threads...';
-                    form.insertAdjacentHTML('beforeend', `<input type="hidden" name="act" value="Search"><input type="hidden" name="CODE" value="01">`);
+                    form.insertAdjacentHTML('beforeend', `<input type="hidden" name="act" value="Search"><input type="hidden" name="CODE" value="01">${data.sToken ? `<input type="hidden" name="s" value="${escapeHtml(data.sToken)}">` : ''}`);
                 } else if (scope === 'user') {
                     form.action = 'https://www.forumcommunity.net/';
                     form.method = 'get';
@@ -763,11 +772,10 @@ const ForumTopMenuModule = (function () {
                     searchInput.placeholder = 'Search members...';
                     form.insertAdjacentHTML('beforeend', `<input type="hidden" name="act" value="cerca"><input type="hidden" name="select" value="utente">`);
                 } else if (scope === 'section') {
-                    form.action = '/'; // Prevent form submission
+                    form.action = 'javascript:void(0)';
                     form.method = 'get';
                     searchInput.name = 'dummy';
                     searchInput.placeholder = 'Filter sections...';
-                    form.insertAdjacentHTML('beforeend', `<input type="hidden" name="dummy" value="1">`);
                     
                     if (!cachedSections) {
                         searchInput.placeholder = 'Loading sections...';
@@ -903,8 +911,17 @@ const ForumTopMenuModule = (function () {
 
         const userLink = menuWrap.querySelector('.left .menu > a[href*="act=Profile"]');
         
+        // ── EXTRACT THE SECURITY TOKEN ──
+        // ForumFree puts this token in the legacy menu to prevent CSRF attacks.
+        // We need it to make the native search work.
+        const sToken = menuWrap.querySelector('input[name="s"]')?.value || '';
+        
         const data = {
-            loggedIn, search: extractSearch(menuWrap), user, apiUser,
+            loggedIn, 
+            search: extractSearch(menuWrap), 
+            user, 
+            apiUser,
+            sToken, // Pass it to buildNav
             userDropdown: loggedIn && userLink && userLink.nextElementSibling ? extractItems(userLink.nextElementSibling) : [],
             actions: loggedIn ? extractTopActions(menuWrap, userLink) : [],
             guest: !loggedIn ? extractGuest(menuWrap) : null
