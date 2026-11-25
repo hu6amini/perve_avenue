@@ -7881,6 +7881,75 @@ body.has-docked-editor {
     clip: rect(0 0 0 0); white-space: nowrap; border: 0;
 }
 
+/* ── Autocomplete New Elements ─────────────── */
+.mfn-ac-icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 26px;
+    height: 26px;
+    border-radius: 50%;
+    background: rgba(255, 255, 255, 0.05);
+    color: var(--mfn-fg-muted);
+    margin-right: 10px;
+}
+
+.mfn-ac-topics-btn {
+    margin-left: auto;
+    background: transparent;
+    border: none;
+    color: var(--mfn-fg-muted);
+    cursor: pointer;
+    padding: 6px;
+    border-radius: 6px;
+    transition: background 0.15s, color 0.15s;
+}
+.mfn-ac-topics-btn:hover {
+    background: var(--mfn-accent);
+    color: #0b1913;
+}
+
+.mfn-ac-loading, .mfn-ac-empty {
+    padding: 16px;
+    text-align: center;
+    color: var(--mfn-fg-muted);
+    font-size: 0.875rem;
+}
+
+.mfn-ac-header {
+    padding: 8px 12px;
+    font-size: 0.75rem;
+    font-weight: 600;
+    color: var(--mfn-fg-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    border-bottom: 1px solid var(--mfn-border);
+    margin-bottom: 6px;
+}
+
+.mfn-ac-topic-item {
+    display: flex;
+    flex-direction: column;
+    padding: 10px 12px;
+    border-radius: 6px;
+    text-decoration: none;
+    transition: background 0.15s;
+}
+.mfn-ac-topic-item:hover {
+    background: rgba(255, 255, 255, 0.06);
+}
+.mfn-ac-topic-title {
+    color: var(--mfn-fg);
+    font-size: 0.875rem;
+    font-weight: 500;
+    line-height: 1.3;
+}
+.mfn-ac-topic-section {
+    color: var(--mfn-fg-muted);
+    font-size: 0.75rem;
+    margin-top: 4px;
+}
+
 /* ── Guest Inline Login Bar ─────────────────── */
 .mfn-guest-login-bar {
     display: flex;
