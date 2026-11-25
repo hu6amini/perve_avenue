@@ -290,10 +290,12 @@ const ForumTopMenuModule = (function () {
         return { mid, avatarSrc, username, profileUrl };
     }
 
+    // ─── Recursive menu-item extractor ────────────────────────
     function extractItems(ul) {
         const out = [];
         for (const li of ul.children) {
             if (li.tagName !== 'LI') continue;
+            // native separator (in legacy markup: <li><hr …></li>)
             if (li.querySelector(':scope > hr')) { out.push({ type: 'separator' }); continue; }
             const a = li.querySelector(':scope > a');
             if (!a) continue;
@@ -301,30 +303,163 @@ const ForumTopMenuModule = (function () {
             const submenu = li.querySelector(':scope > ul');
             const em = a.querySelector('em');
             let badge = null;
-            let label = a.textContent.replace(/\s+/g, ' ').trim();
+            
+            // 1. Extract raw label and strip the badge number
+            let rawLabel = a.textContent.replace(/\s+/g, ' ').trim();
             if (em) {
                 const emText = em.textContent.trim();
                 if (/^\d+$/.test(emText)) {
                     badge = emText;
-                    label = label.replace(emText, '').trim();
+                    rawLabel = rawLabel.replace(emText, '').trim();
                 }
             }
 
+            // 2. Force to English based on URL or dictionary
+            const href = a.getAttribute('href') || '';
+            const label = getEnglishLabel(rawLabel, href);
+
             if (submenu) {
-                out.push({ type: 'submenu', label, icon: iconForLabel(label), badge, items: extractItems(submenu) });
+                out.push({
+                    type: 'submenu',
+                    label,
+                    icon: iconForLabel(label),
+                    badge,
+                    items: extractItems(submenu)
+                });
             } else {
                 out.push({
-                    type: 'link', label, href: a.getAttribute('href') || '',
-                    onclick: a.getAttribute('onclick') || '', role: a.getAttribute('role') || '',
-                    tabindex: a.getAttribute('tabindex') || '', dataToggle: a.getAttribute('data-toggle') || '',
-                    className: a.className || '', bold: /font-weight:\s*(600|bold)/i.test(a.getAttribute('style') || ''),
-                    badge, icon: iconForLabel(label)
+                    type: 'link',
+                    label,
+                    href: href,
+                    onclick: a.getAttribute('onclick') || '',
+                    role: a.getAttribute('role') || '',
+                    tabindex: a.getAttribute('tabindex') || '',
+                    dataToggle: a.getAttribute('data-toggle') || '',
+                    className: a.className || '',
+                    bold: /font-weight:\s*(600|bold)/i.test(a.getAttribute('style') || ''),
+                    badge,
+                    icon: iconForLabel(label)
                 });
             }
         }
         return out;
     }
 
+       function getEnglishLabel(originalLabel, href) {
+        if (!href) href = '';
+        
+        // 1. Force English based on URL parameters (100% reliable)
+        if (href.includes('act=Profile')) return 'Profile';
+        if (href.includes('act=Msg&CODE=04')) return 'Send New PM';
+        if (href.includes('act=Msg&CODE=01')) return 'Go to Inbox';
+        if (href.includes('act=Msg&CODE=07')) return 'Edit Folders';
+        if (href.includes('act=Msg&CODE=14')) return 'Archive Messages';
+        if (href.includes('act=Msg&CODE=02')) return 'Contact List';
+        if (href.includes('act=Msg&CODE=16')) return 'Notification centre';
+        if (href.includes('act=UserCP&CODE=00')) return 'Notepad';
+        if (href.includes('act=UserCP&CODE=01')) return 'Edit Profile info';
+        if (href.includes('act=UserCP&CODE=24')) return 'Edit Avatar Settings';
+        if (href.includes('act=UserCP&CODE=22')) return 'Edit Signature';
+        if (href.includes('act=UserCP&CODE=04')) return 'Forum Settings';
+        if (href.includes('act=UserCP&CODE=02')) return 'Email Settings and Notifications';
+        if (href.includes('act=UserCP&CODE=28')) return 'Change Password';
+        if (href.includes('act=UserCP&CODE=26')) return 'Subscriptions';
+        if (href.includes('act=Search&CODE=getactive&pop=1')) return 'Popular topics';
+        if (href.includes('act=Search&CODE=getactive')) return 'Active topics';
+        if (href.includes('act=Search&CODE=02')) return 'My topics';
+        if (href.includes('act=Search') && !href.includes('CODE')) return 'My posts';
+        if (href.includes('act=Members&rep=1')) return 'Top Members';
+        if (href.includes('act=Members')) return 'Members';
+        if (href.includes('act=staff')) return 'Staff';
+        
+        // Admin Links
+        if (href.includes('act=modforum')) return 'Name, categories and address';
+        if (href.includes('act=modsezioni')) return 'Manage sections';
+        if (href.includes('act=modpages')) return 'Custom pages';
+        if (href.includes('act=blog')) return 'Manage Blog';
+        if (href.includes('act=logs')) return 'Logs and data recovery';
+        if (href.includes('act=queue')) return 'Moderation queue';
+        if (href.includes('act=stats')) return 'Stats and options';
+        if (href.includes('act=transfer')) return 'Transfer sections';
+        if (href.includes('act=delforum')) return 'Delete site';
+        if (href.includes('act=gruppi')) return 'Groups';
+        if (href.includes('act=ban')) return 'Ban';
+        if (href.includes('act=userapprove')) return 'User approval';
+        if (href.includes('act=convalida')) return 'Validate user';
+        if (href.includes('act=modnick')) return "Edit user's name";
+        if (href.includes('act=modlivelli')) return 'User ranks';
+        if (href.includes('act=avatar')) return 'Avatars and signatures';
+        if (href.includes('act=mobile')) return 'Mobile/App';
+        if (href.includes('act=modhtml')) return 'HTML code';
+        if (href.includes('act=modcss')) return 'Colors and styles';
+        if (href.includes('act=modimg')) return 'Logo and images';
+        if (href.includes('act=modskin')) return 'Site skin';
+        if (href.includes('act=modemo')) return 'Emoticons';
+        if (href.includes('act=modmenu')) return 'Menu';
+        if (href.includes('act=modtabs')) return 'Tabs';
+        if (href.includes('act=link')) return 'Scripts and codes';
+        if (href.includes('act=top')) return 'Top Forum/Blog';
+        if (href.includes('act=allegati')) return 'Attachments';
+        if (href.includes('act=addtagboard')) return 'Chat/TagBoard';
+
+        // 2. Fallback: Translate known Italian submenus to English
+        const itToEn = {
+            'profilo': 'Profile',
+            'messaggi': 'Messenger',
+            'argomenti': 'Topics',
+            'reazioni': 'Reactions',
+            'notifiche': 'Notifications',
+            'amministrazione': 'Administration',
+            'moderazione': 'Moderation',
+            'sito web': 'Website',
+            'utenti': 'Users',
+            'grafica': 'Graphic',
+            'funzioni aggiuntive': 'Additional features',
+            'segnalazioni': 'Posts reported',
+            'nome, categorie e indirizzo': 'Name, categories and address',
+            'gestione sezioni': 'Manage sections',
+            'pagine personalizzate': 'Custom pages',
+            'gestisci blog': 'Manage Blog',
+            'log e ripristino dati': 'Logs and data recovery',
+            'coda di moderazione': 'Moderation queue',
+            'statistiche e opzioni': 'Stats and options',
+            'sposta sezioni': 'Transfer sections',
+            'elimina sito': 'Delete site',
+            'invia newsletter': 'Send newsletter',
+            'gruppi': 'Groups',
+            'ban': 'Ban',
+            'approvazione utenti': 'User approval',
+            'convalida utente': 'Validate user',
+            'modifica nome utente': "Edit user's name",
+            'livelli utente': 'User ranks',
+            'avatar e firme': 'Avatars and signatures',
+            'mobile/app': 'Mobile/App',
+            'codice html': 'HTML code',
+            'colori e stili': 'Colors and styles',
+            'logo e immagini': 'Logo and images',
+            'skin del sito': 'Site skin',
+            'emoticon': 'Emoticons',
+            'menu': 'Menu',
+            'tabs': 'Tabs',
+            'script e codici': 'Scripts and codes',
+            'top forum/blog': 'Top Forum/Blog',
+            'allegati': 'Attachments',
+            'chat/tagboard': 'Chat/TagBoard',
+            'esci': 'Log Out',
+            'registrati': 'Register',
+            'accedi': 'Login'
+        };
+
+        const lower = originalLabel.toLowerCase();
+        for (const [it, en] of Object.entries(itToEn)) {
+            if (lower === it || lower.includes(it)) return en;
+        }
+
+        // If no match, return the original label (e.g., if it's already English)
+        return originalLabel;
+    }
+
+    // ─── Top-level actions (Messenger / Topics / … / Admin) ──
     function extractTopActions(menuWrap, userLink) {
         const out = [];
         for (const li of menuWrap.querySelectorAll('.left > li.menu')) {
@@ -334,23 +469,41 @@ const ForumTopMenuModule = (function () {
             const submenu = li.querySelector(':scope > ul');
             const em = a.querySelector('em');
             let badge = null;
-            let label = a.textContent.replace(/\s+/g, ' ').trim();
+            
+            // 1. Extract raw label and strip the badge number
+            let rawLabel = a.textContent.replace(/\s+/g, ' ').trim();
             if (em) {
                 const emText = em.textContent.trim();
                 if (/^\d+$/.test(emText)) {
                     badge = emText;
-                    label = label.replace(emText, '').trim();
+                    rawLabel = rawLabel.replace(emText, '').trim();
                 }
             }
 
+            // 2. Force to English based on URL or dictionary
+            const href = a.getAttribute('href') || '';
+            const label = getEnglishLabel(rawLabel, href);
+
             if (submenu) {
-                out.push({ type: 'submenu', label, icon: iconForLabel(label), badge, items: extractItems(submenu) });
+                out.push({
+                    type: 'submenu',
+                    label,
+                    icon: iconForLabel(label),
+                    badge,
+                    items: extractItems(submenu)
+                });
             } else {
                 out.push({
-                    type: 'link', label, href: a.getAttribute('href') || '',
-                    onclick: a.getAttribute('onclick') || '', role: a.getAttribute('role') || '',
-                    tabindex: a.getAttribute('tabindex') || '', dataToggle: a.getAttribute('data-toggle') || '',
-                    className: a.className || '', badge, icon: iconForLabel(label)
+                    type: 'link',
+                    label,
+                    href: href,
+                    onclick: a.getAttribute('onclick') || '',
+                    role: a.getAttribute('role') || '',
+                    tabindex: a.getAttribute('tabindex') || '',
+                    dataToggle: a.getAttribute('data-toggle') || '',
+                    className: a.className || '',
+                    badge,
+                    icon: iconForLabel(label)
                 });
             }
         }
