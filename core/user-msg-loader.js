@@ -211,7 +211,7 @@ whenBodyReady(() => {
         // ── Fire-and-forget: nav must render ASAP ─────────────────
         // Self-contained; no Phase A/B/C/D/E dependencies. Runs
         // in parallel so it doesn't extend any phase's wall-clock.
-        loadScript("https://cdn.jsdelivr.net/gh/hu6amini/perve_avenue@deecdce90b06520954158d9fc768d39290e66eee/modules/top-menu.js")
+        loadScript("https://cdn.jsdelivr.net/gh/hu6amini/perve_avenue@f6b4f88cfdcf99cb63a33b78c1c6de6d78937ace/modules/top-menu.js")
             .catch(err => console.warn('[Boot] Top menu failed:', err));
 
         // Set language only on allowed pages
