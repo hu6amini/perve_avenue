@@ -3050,17 +3050,14 @@ body.modal-open {
   .notify-modal-content { padding: 1rem; }
 }
 
-.forumfree-modal.\.report-modal-notify.Blocker.current, .Blocker {
-  display: none;
-}
-
 /* Hide script 51's staff notification modal — the modern replacement
    (.modern-report-notify-overlay) is what staff should see. The
    critical CSS already hides .ff-modal.modal.report-modal (user side);
    this closes the analogous gap on the notify variant. */
 .ff-modal.modal.report-modal-notify,
 .forumfree-modal.report-modal-notify,
-.report-modal-notify.Blocker {
+.report-modal-notify.Blocker,
+.forumfree-modal.\.report-modal-notify.Blocker.current {
     display: none !important;
     visibility: hidden !important;
 }
