@@ -64,10 +64,6 @@ const ForumTopMenuModule = (function () {
         return '<i class="fa-' + (style || 'regular') + ' ' + name + '" aria-hidden="true"></i>';
     }
 
-       function icon(name, style) {
-        return '<i class="fa-' + (style || 'regular') + ' ' + name + '" aria-hidden="true"></i>';
-    }
-
     // ── Tippy Polling Loader ──────────────────────────────────
     function initHeaderTippys() {
         // If tippy isn't loaded yet, wait 100ms and try again
@@ -323,23 +319,21 @@ const ForumTopMenuModule = (function () {
         const out = [];
         for (const li of ul.children) {
             if (li.tagName !== 'LI') continue;
-            // native separator (in legacy markup: <li><hr …></li>)
             if (li.querySelector(':scope > hr')) { out.push({ type: 'separator' }); continue; }
             const a = li.querySelector(':scope > a');
             if (!a) continue;
 
             const submenu = li.querySelector(':scope > ul');
-            const em = a.querySelector('em');
-            let badge = null;
             
-            // 1. Extract raw label and strip the badge number
+            // ── FIX: ONLY DECLARE em ONCE ──
+            const em = a.querySelector('em'); 
+            let badge = null;
             let rawLabel = a.textContent.replace(/\s+/g, ' ').trim();
-            const em = a.querySelector('em');
+            
             if (em && /^\d+$/.test(em.textContent.trim())) {
                 badge = em.textContent.trim();
                 rawLabel = rawLabel.replace(badge, '').trim();
             } else {
-                // Fallback for plugins (like Reactions) that inject a bare number at the end
                 const match = rawLabel.match(/\s+(\d+)$/);
                 if (match) {
                     badge = match[1];
@@ -347,7 +341,6 @@ const ForumTopMenuModule = (function () {
                 }
             }
 
-            // 2. Force to English based on URL or dictionary
             const href = a.getAttribute('href') || '';
             const label = getEnglishLabel(rawLabel, href);
 
@@ -478,17 +471,16 @@ const ForumTopMenuModule = (function () {
             if (!a || a === userLink) continue;
 
             const submenu = li.querySelector(':scope > ul');
+            
+            // ── FIX: ONLY DECLARE em ONCE ──
             const em = a.querySelector('em');
             let badge = null;
-            
-            // 1. Extract raw label and strip the badge number
             let rawLabel = a.textContent.replace(/\s+/g, ' ').trim();
-            const em = a.querySelector('em');
+            
             if (em && /^\d+$/.test(em.textContent.trim())) {
                 badge = em.textContent.trim();
                 rawLabel = rawLabel.replace(badge, '').trim();
             } else {
-                // Fallback for plugins (like Reactions) that inject a bare number at the end
                 const match = rawLabel.match(/\s+(\d+)$/);
                 if (match) {
                     badge = match[1];
@@ -496,7 +488,6 @@ const ForumTopMenuModule = (function () {
                 }
             }
 
-            // 2. Force to English based on URL or dictionary
             const href = a.getAttribute('href') || '';
             const label = getEnglishLabel(rawLabel, href, true);
 
