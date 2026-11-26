@@ -8528,6 +8528,9 @@ body.has-docked-editor {
 /* ── Mobile ────────────────────────────────── */
 @media (max-width: 860px) {
     :root { --mfn-h: 56px; }
+    body {
+        padding-top: 56px;
+    }
     .mfn-inner { gap: 8px; padding: 0 14px; }
     .mfn-search {
         max-width: none;
