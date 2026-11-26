@@ -620,7 +620,8 @@ const ForumTopMenuModule = (function () {
             role: item.role || undefined, tabindex: item.tabindex || undefined,
             href: tag === 'a' ? (item.href || '#') : undefined,
             onclick: item.onclick || undefined, 'data-toggle': item.dataToggle || undefined,
-            'data-tippy-content': item.label, // <── ADDED
+            'data-menu-label': item.label, // <── ADD THIS LINE
+            'data-tippy-content': item.label,
             innerHTML: icon(item.icon) + '<span class="mfn-action-label">' + escapeHtml(item.label) + '</span>' +
                 (item.badge ? '<span class="mfn-badge">' + escapeHtml(item.badge) + '</span>' : '')
         };
