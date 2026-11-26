@@ -7659,9 +7659,12 @@ body.has-docked-editor {
     position: sticky;
     top: 0;
     z-index: 900;
-    background: color-mix(in srgb, var(--mfn-bg) 88%, transparent);
-    backdrop-filter: blur(14px) saturate(1.3);
+    background-color: #111827; 
+    background: color-mix(in srgb, var(--mfn-bg) 85%, transparent);
+    
+    /* Add the -webkit prefix for Safari support */
     -webkit-backdrop-filter: blur(14px) saturate(1.3);
+    backdrop-filter: blur(14px) saturate(1.3);
     border-bottom: 1px solid var(--mfn-border);
     color: var(--mfn-fg);
     transform: translateY(0);
