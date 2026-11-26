@@ -334,11 +334,16 @@ const ForumTopMenuModule = (function () {
             
             // 1. Extract raw label and strip the badge number
             let rawLabel = a.textContent.replace(/\s+/g, ' ').trim();
-            if (em) {
-                const emText = em.textContent.trim();
-                if (/^\d+$/.test(emText)) {
-                    badge = emText;
-                    rawLabel = rawLabel.replace(emText, '').trim();
+            const em = a.querySelector('em');
+            if (em && /^\d+$/.test(em.textContent.trim())) {
+                badge = em.textContent.trim();
+                rawLabel = rawLabel.replace(badge, '').trim();
+            } else {
+                // Fallback for plugins (like Reactions) that inject a bare number at the end
+                const match = rawLabel.match(/\s+(\d+)$/);
+                if (match) {
+                    badge = match[1];
+                    rawLabel = rawLabel.replace(/\s+\d+$/, '').trim();
                 }
             }
 
@@ -478,11 +483,16 @@ const ForumTopMenuModule = (function () {
             
             // 1. Extract raw label and strip the badge number
             let rawLabel = a.textContent.replace(/\s+/g, ' ').trim();
-            if (em) {
-                const emText = em.textContent.trim();
-                if (/^\d+$/.test(emText)) {
-                    badge = emText;
-                    rawLabel = rawLabel.replace(emText, '').trim();
+            const em = a.querySelector('em');
+            if (em && /^\d+$/.test(em.textContent.trim())) {
+                badge = em.textContent.trim();
+                rawLabel = rawLabel.replace(badge, '').trim();
+            } else {
+                // Fallback for plugins (like Reactions) that inject a bare number at the end
+                const match = rawLabel.match(/\s+(\d+)$/);
+                if (match) {
+                    badge = match[1];
+                    rawLabel = rawLabel.replace(/\s+\d+$/, '').trim();
                 }
             }
 
@@ -1102,20 +1112,38 @@ const ForumTopMenuModule = (function () {
 
         function syncBadges() {
             menuWrap.querySelectorAll('.left > li.menu > a').forEach(a => {
-                let label = a.textContent.replace(/\s+/g, ' ').trim();
+                let rawLabel = a.textContent.replace(/\s+/g, ' ').trim();
                 const em = a.querySelector('em');
                 let badge = null;
+                
                 if (em && /^\d+$/.test(em.textContent.trim())) {
                     badge = em.textContent.trim();
-                    label = label.replace(badge, '').trim();
+                    rawLabel = rawLabel.replace(badge, '').trim();
+                } else {
+                    // Check for trailing numbers (Reactions plugin)
+                    const match = rawLabel.match(/\s+(\d+)$/);
+                    if (match) {
+                        badge = match[1];
+                        rawLabel = rawLabel.replace(/\s+\d+$/, '').trim();
+                    }
                 }
+
+                const href = a.getAttribute('href') || '';
+                const label = getEnglishLabel(rawLabel, href, true);
                 const modernEl = navEl.querySelector(`.mfn-action[data-menu-label="${label}"]`);
+                
                 if (modernEl) {
                     let badgeEl = modernEl.querySelector('.mfn-badge');
                     if (badge) {
-                        if (!badgeEl) { badgeEl = document.createElement('span'); badgeEl.className = 'mfn-badge'; modernEl.appendChild(badgeEl); }
+                        if (!badgeEl) { 
+                            badgeEl = document.createElement('span'); 
+                            badgeEl.className = 'mfn-badge'; 
+                            modernEl.appendChild(badgeEl); 
+                        }
                         badgeEl.textContent = badge;
-                    } else if (badgeEl) { badgeEl.remove(); }
+                    } else if (badgeEl) { 
+                        badgeEl.remove(); 
+                    }
                 }
             });
 
@@ -1142,11 +1170,54 @@ const ForumTopMenuModule = (function () {
             });
         }
 
+        // ── 1. Initial Badge Sync ──
         syncBadges();
-        const badgeObserver = new MutationObserver(() => {
+
+        // ── 2. Submenu Rebuilder (Fixes late plugin injections) ──
+        function rebuildSubmenus() {
+            menuWrap.querySelectorAll('.submenu').forEach(legacySub => {
+                const legacyLink = legacySub.querySelector(':scope > a');
+                if (!legacyLink) return;
+                
+                let rawLabel = legacyLink.textContent.replace(/\s+/g, ' ').trim();
+                const em = legacyLink.querySelector('em');
+                if (em) rawLabel = rawLabel.replace(em.textContent.trim(), '').trim();
+                
+                const label = getEnglishLabel(rawLabel, '', false);
+                const legacyUl = legacySub.querySelector(':scope > ul');
+                if (!legacyUl) return;
+
+                const modernSummary = navEl.querySelector(`.mfn-submenu-summary[data-menu-label="${label}"]`);
+                if (modernSummary) {
+                    const modernBody = modernSummary.nextElementSibling;
+                    if (modernBody && modernBody.classList.contains('mfn-submenu-body')) {
+                        modernBody.innerHTML = '';
+                        modernBody.appendChild(buildDropdownBody(extractItems(legacyUl)));
+                    }
+                }
+            });
+        }
+
+        // ── 3. The Observer ──
+        const badgeObserver = new MutationObserver((mutations) => {
+            let needsRebuild = false;
+            
+            for (const m of mutations) {
+                // Check if a plugin just injected a new <li> into the legacy menu
+                if (m.type === 'childList' && m.addedNodes.length > 0) {
+                    const addedLi = Array.from(m.addedNodes).find(n => n.nodeType === 1 && n.tagName === 'LI');
+                    if (addedLi && m.target.tagName === 'UL') {
+                        needsRebuild = true;
+                    }
+                }
+            }
+
+            if (needsRebuild) rebuildSubmenus();
+
             clearTimeout(badgeObserver._timer);
             badgeObserver._timer = setTimeout(syncBadges, 100);
         });
+        
         badgeObserver.observe(menuWrap, { childList: true, subtree: true, characterData: true });
 
         console.log('[TopMenu] Modern nav built (' + (loggedIn ? 'member' : 'guest') + ')');
