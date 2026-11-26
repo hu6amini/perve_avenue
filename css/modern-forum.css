@@ -8510,7 +8510,7 @@ body.has-docked-editor {
     .mfn-action-label {
         display: none; /* Hide text */
     }
-    .mfn-chev {
+    .mfn-action .mfn-chev {
         display: none; /* Hide the chevron on dropdown triggers */
     }
     .mfn-action {
