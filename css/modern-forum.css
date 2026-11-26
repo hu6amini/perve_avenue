@@ -8220,7 +8220,7 @@ body.has-docked-editor {
     margin-left: -2px;
 }
 
-.mfn-chev:not(.mfn-submenu-summary .mfn-chev, .mfn-scope-trigger .mfn-chev) {
+.mfn-action .mfn-chev {
    display: none !important;
 }
 
