@@ -8219,7 +8219,7 @@ body.has-docked-editor {
     margin-left: -2px;
 }
 
-.mfn-action .mfn-chev {
+.mfn-action .mfn-chev, .mfn-user-trigger .mfn-chev {
    display: none !important;
 }
 
