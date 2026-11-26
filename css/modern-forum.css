@@ -7682,7 +7682,6 @@ body.has-docked-editor {
     gap: 16px;
     max-width: 1200px;
     margin: 0 auto;
-    padding: 0 20px;
     height: var(--mfn-h);
     flex-wrap: nowrap;
 }
