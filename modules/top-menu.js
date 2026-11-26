@@ -357,6 +357,8 @@ const ForumTopMenuModule = (function () {
                     type: 'link',
                     label,
                     href: href,
+                    id: a.getAttribute('id') || '',
+                    liClass: li.className || '',
                     onclick: a.getAttribute('onclick') || '',
                     role: a.getAttribute('role') || '',
                     tabindex: a.getAttribute('tabindex') || '',
@@ -504,6 +506,8 @@ const ForumTopMenuModule = (function () {
                     type: 'link',
                     label,
                     href: href,
+                    id: a.getAttribute('id') || '',
+                    liClass: li.className || '',
                     onclick: a.getAttribute('onclick') || '',
                     role: a.getAttribute('role') || '',
                     tabindex: a.getAttribute('tabindex') || '',
@@ -571,6 +575,11 @@ const ForumTopMenuModule = (function () {
                 role: item.role || undefined, tabindex: item.tabindex || undefined
             });
             if (item.dataToggle) a.setAttribute('data-toggle', item.dataToggle);
+                       // ── ADD THIS BRIDGE ──
+            if (item.label === 'Posts reported' || (item.liClass && item.liClass.includes('report_menu'))) {
+                a.setAttribute('data-legacy-selector', '.menuwrap .report_menu a');
+            }
+            // ─────────────────────
             a.innerHTML =
                 '<span class="mfn-dd-link-left">' + icon(item.icon) + ' ' + escapeHtml(item.label) + '</span>' +
                 (item.badge ? '<span class="mfn-badge">' + escapeHtml(item.badge) + '</span>' : '');
@@ -611,6 +620,13 @@ const ForumTopMenuModule = (function () {
             innerHTML: icon(item.icon) + '<span class="mfn-action-label">' + escapeHtml(item.label) + '</span>' +
                 (item.badge ? '<span class="mfn-badge">' + escapeHtml(item.badge) + '</span>' : '')
         };
+        // ── ADD THIS BRIDGE ──
+        if (item.id && item.id.startsWith('n')) {
+            attrs['data-legacy-selector'] = '#' + item.id;
+        } else if (item.label === 'Notifications') {
+            attrs['data-legacy-selector'] = '.menuwrap a[id^="n"]';
+        }
+        // ─────────────────────
         return h(tag, attrs);
     }
    
@@ -1017,6 +1033,24 @@ const ForumTopMenuModule = (function () {
 
     function attachEventDelegation() {
         navEl.addEventListener('click', (e) => {
+            // ── LEGACY CLICK BRIDGE ──
+            const bridge = e.target.closest('[data-legacy-selector]');
+            if (bridge) {
+                e.preventDefault();
+                e.stopPropagation();
+                closeAllDropdowns(); // Close our modern dropdown
+                
+                const legacySelector = bridge.getAttribute('data-legacy-selector');
+                const legacyEl = document.querySelector(legacySelector);
+                if (legacyEl) {
+                    legacyEl.click(); // Trigger the original forum script
+                } else {
+                    console.warn('[TopMenu] Legacy target not found:', legacySelector);
+                }
+                return;
+            }
+            // ─────────────────────────
+
             const trigger = e.target.closest('.mfn-user-trigger, .mfn-action--has-menu, .mfn-action--primary, .mfn-scope-trigger, .mfn-social-trigger');
             if (trigger && navEl.contains(trigger)) {
                 const dd = trigger.closest('.mfn-dropdown');
