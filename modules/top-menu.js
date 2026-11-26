@@ -575,11 +575,15 @@ const ForumTopMenuModule = (function () {
                 role: item.role || undefined, tabindex: item.tabindex || undefined
             });
             if (item.dataToggle) a.setAttribute('data-toggle', item.dataToggle);
-                       // ── ADD THIS BRIDGE ──
-            if (item.label === 'Posts reported' || (item.liClass && item.liClass.includes('report_menu'))) {
+            // ── LEGACY BRIDGE ──
+            if (item.dataToggle) {
+                a.setAttribute('data-legacy-selector', `.menuwrap [data-toggle="${item.dataToggle}"]`);
+            } else if (item.className && item.className.includes('sn-open-modal')) {
+                a.setAttribute('data-legacy-selector', '.menuwrap .sn-open-modal');
+            } else if (item.label === 'Posts reported' || (item.liClass && item.liClass.includes('report_menu'))) {
                 a.setAttribute('data-legacy-selector', '.menuwrap .report_menu a');
             }
-            // ─────────────────────
+            // ───────────────────
             a.innerHTML =
                 '<span class="mfn-dd-link-left">' + icon(item.icon) + ' ' + escapeHtml(item.label) + '</span>' +
                 (item.badge ? '<span class="mfn-badge">' + escapeHtml(item.badge) + '</span>' : '');
@@ -620,13 +624,18 @@ const ForumTopMenuModule = (function () {
             innerHTML: icon(item.icon) + '<span class="mfn-action-label">' + escapeHtml(item.label) + '</span>' +
                 (item.badge ? '<span class="mfn-badge">' + escapeHtml(item.badge) + '</span>' : '')
         };
-        // ── ADD THIS BRIDGE ──
+        // ── LEGACY BRIDGE ──
         if (item.id && item.id.startsWith('n')) {
             attrs['data-legacy-selector'] = '#' + item.id;
         } else if (item.label === 'Notifications') {
             attrs['data-legacy-selector'] = '.menuwrap a[id^="n"]';
+        } else if (item.dataToggle) {
+            // Covers Reactions (data-toggle="emoji-notice-modal") and others
+            attrs['data-legacy-selector'] = `.menuwrap [data-toggle="${item.dataToggle}"]`;
+        } else if (item.liClass && item.liClass.includes('st-emoji-notice')) {
+            attrs['data-legacy-selector'] = '.menuwrap .st-emoji-notice a';
         }
-        // ─────────────────────
+        // ───────────────────
         return h(tag, attrs);
     }
    
