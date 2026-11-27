@@ -40,6 +40,7 @@
   transition: transform 0.2s cubic-bezier(0.4, 0, 0.2, 1), box-shadow 0.2s ease;
   overflow: hidden;
   will-change: transform;
+  scroll-margin-top: 64px;
 }
 .post-card:hover {
   box-shadow: var(--shadow-md);
