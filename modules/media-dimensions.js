@@ -1,604 +1,728 @@
 // =============================================
-// MEDIA DIMENSION EXTRACTOR - Skips all post images
+// MEDIA DIMENSION EXTRACTOR - Skips all post images (API-enhanced)
 // =============================================
 
 'use strict';
 
-// ===== USER TIMING: mark script start =====
 if (typeof performance !== 'undefined' && performance.mark) {
-    performance.mark('media-dimensions-start');
+    performance.mark('media-dimensions-start');
 }
-// ==========================================
 
 class MediaDimensionExtractor {
-    #observerId = null;
-    #processedMedia = new WeakSet();
-    #dimensionCache = new Map();
-    #lruMap = new Map();
-    #imageLoadHandler = null;
-    #imageLoadAbortController = new AbortController();
-    #cacheHits = 0;
-    #cacheMisses = 0;
-    #smallContextElements = null;
-    #MAX_CACHE_SIZE = 500;
-    #pendingImages = new Set();
-    #weservReady = false;
-    #observerReady = false;
+    #observerId = null;
+    #processedMedia = new WeakSet();
+    #dimensionCache = new Map();
+    #lruMap = new Map();
+    #imageLoadHandler = null;
+    #imageLoadAbortController = new AbortController();
+    #cacheHits = 0;
+    #cacheMisses = 0;
+    #smallContextElements = null;
+    #MAX_CACHE_SIZE = 500;
+    #STORAGE_PREFIX = 'mde_dim_v1:';
+    #STORAGE_TTL_MS = 6 * 60 * 60 * 1000;
+    #pendingImages = new Set();
+    #weservReady = false;
+    #observerReady = false;
 
-    // Configuration timeouts for dependency waiting
-    static #DEPENDENCY_WAIT_TIMEOUT = 5000;  // ms: Wait for forum observer
-    static #WESERV_WAIT_TIMEOUT = 3000;       // ms: Wait for Weserv image optimizer
+    static #DEPENDENCY_WAIT_TIMEOUT = 5000;
+    static #WESERV_WAIT_TIMEOUT = 3000;
 
-    static #IFRAME_SIZES = new Map([
-        ['youtube', ['560', '315']],
-        ['youtu', ['560', '315']],
-        ['vimeo', ['640', '360']],
-        ['soundcloud', ['100%', '166']],
-        ['twitter', ['550', '400']],
-        ['x.com', ['550', '400']]
-    ]);
+    static #IFRAME_SIZES = new Map([
+        ['youtube', ['560', '315']],
+        ['youtu', ['560', '315']],
+        ['vimeo', ['640', '360']],
+        ['soundcloud', ['100%', '166']],
+        ['twitter', ['550', '400']],
+        ['x.com', ['550', '400']]
+    ]);
 
-    static #EMOJI_PATTERNS = [
-        /twemoji/iu,
-        /emoji/iu,
-        /smiley/iu
-    ];
+    static #EMOJI_PATTERNS = [
+        /twemoji/iu,
+        /emoji/iu,
+        /smiley/iu
+    ];
 
-    static #SMALL_CONTEXT_SELECTORS = '.modern-quote, .quote-content, .modern-spoiler, .spoiler-content, .signature, .post-signature';
-    
-    // Emoji sizes for different contexts
-    static #EMOJI_SIZE_NORMAL = 20;
-    static #EMOJI_SIZE_SMALL = 18;
-    static #BROKEN_IMAGE_SIZE = { width: 600, height: 400 };
-    static #BATCH_SIZE = 50;
+    static #SMALL_CONTEXT_SELECTORS = '.modern-quote, .quote-content, .modern-spoiler, .spoiler-content, .signature, .post-signature';
 
-    constructor() {
-        this.#imageLoadHandler = this.#handleImageLoad.bind(this);
-        this.#cacheContextElements();
-    }
+    static #EMOJI_SIZE_NORMAL = 20;
+    static #EMOJI_SIZE_SMALL = 18;
+    static #BROKEN_IMAGE_SIZE = { width: 600, height: 400 };
+    static #BATCH_SIZE = 50;
 
-    // ----- SKIP POST IMAGES: helper to check if element is inside a post -----
-    #isInsidePost(element) {
-        return element.closest?.('.post, .post-card') !== null;
-    }
+    constructor() {
+        this.#imageLoadHandler = this.#handleImageLoad.bind(this);
+        this.#cacheContextElements();
+        this.#restoreStorageCache();
+    }
 
-    async #waitForDependencies() {
-        if (!globalThis.forumObserver) {
-            await new Promise((resolve) => {
-                const handler = () => {
-                    window.removeEventListener('forum-observer-ready', handler);
-                    resolve();
-                };
-                window.addEventListener('forum-observer-ready', handler);
-                setTimeout(resolve, MediaDimensionExtractor.#DEPENDENCY_WAIT_TIMEOUT);
-            });
-        }
-        this.#observerReady = true;
-        
-        const processedImages = document.querySelectorAll('img[data-optimized="true"]');
-        if (processedImages.length > 0) {
-            this.#weservReady = true;
-            return;
-        }
-        
-        await new Promise((resolve) => {
-            const handler = () => {
-                window.removeEventListener('weserv-ready', handler);
-                resolve();
-            };
-            window.addEventListener('weserv-ready', handler);
-            setTimeout(resolve, MediaDimensionExtractor.#WESERV_WAIT_TIMEOUT);
-        });
-        this.#weservReady = true;
-    }
+    #isInsidePost(element) {
+        return element.closest?.('.post, .post-card') !== null;
+    }
 
-    async #init() {
-        await this.#waitForDependencies();
-        
-        this.#setupObserver();
-        this.#cacheContextElements();
-        
-        if (this.#pendingImages.size > 0) {
-            console.log('Processing ' + this.#pendingImages.size + ' pending images');
-            this.#pendingImages.forEach(img => {
-                if (img.isConnected) {
-                    this.#processImage(img);
-                }
-            });
-            this.#pendingImages.clear();
-        }
-        
-        queueMicrotask(() => {
-            window.dispatchEvent(new CustomEvent('dimension-extractor-ready', {
-                detail: { timestamp: Date.now() }
-            }));
-            console.log('📐 Dimension extractor ready (skipping posts)');
+    #isValidHttpUrl(url) {
+        if (!url || typeof url !== 'string') return false;
+        var trimmed = url.trim();
+        if (!/^https?:\/\/[^\/\s]+\.[^\/\s]+/i.test(trimmed)) return false;
+        try {
+            var parsed = new URL(trimmed, window.location.origin);
+            return parsed.protocol === 'http:' || parsed.protocol === 'https:';
+        } catch (e) {
+            return false;
+        }
+    }
 
-            if (typeof performance !== 'undefined' && performance.mark) {
-                performance.mark('media-dimensions-ready');
-                try {
-                    performance.measure('media-dimensions-load-time', 'media-dimensions-start', 'media-dimensions-ready');
-                } catch (e) {}
-            }
-        });
-    }
+    #decodeEntities(str) {
+        if (!str || typeof str !== 'string') return '';
+        var ta = document.createElement('textarea');
+        ta.innerHTML = str;
+        var once = ta.value;
+        if (once.indexOf('&') !== -1) {
+            ta.innerHTML = once;
+            return ta.value;
+        }
+        return once;
+    }
 
-    #cacheContextElements() {
-        this.#smallContextElements = new Set(
-            document.querySelectorAll(MediaDimensionExtractor.#SMALL_CONTEXT_SELECTORS)
-        );
-    }
+    #restoreStorageCache() {
+        try {
+            var now = Date.now();
+            for (var i = 0; i < sessionStorage.length; i++) {
+                var key = sessionStorage.key(i);
+                if (!key || key.indexOf(this.#STORAGE_PREFIX) !== 0) continue;
+                var raw = sessionStorage.getItem(key);
+                if (!raw) continue;
+                var parsed = JSON.parse(raw);
+                if (!parsed || !parsed.ts || now - parsed.ts > this.#STORAGE_TTL_MS) {
+                    sessionStorage.removeItem(key);
+                    continue;
+                }
+                var w = parsed.width | 0;
+                var h = parsed.height | 0;
+                if (w > 0 && h > 0) {
+                    var cacheKey = key.slice(this.#STORAGE_PREFIX.length);
+                    this.#dimensionCache.set(cacheKey, { width: w, height: h });
+                    this.#lruMap.set(cacheKey, parsed.ts);
+                }
+            }
+        } catch (e) {}
+    }
 
-    #setupObserver() {
-        if (!globalThis.forumObserver) return;
-        
-        this.#observerId = globalThis.forumObserver.register({
-            id: 'media-dimension-extractor',
-            callback: (node) => {
-                this.#processMedia(node);
-            },
-            selector: 'img, iframe, video',
-            priority: 'high'
-        });
-        
-        this.#processAllMediaBatched();
-    }
+    #persistDimension(cacheKey, width, height, ts) {
+        try {
+            sessionStorage.setItem(
+                this.#STORAGE_PREFIX + cacheKey,
+                JSON.stringify({ width: width, height: height, ts: ts })
+            );
+        } catch (e) {}
+    }
 
-    #processAllMediaBatched() {
-        const batches = [
-            Array.from(document.images),
-            Array.from(document.getElementsByTagName('iframe')),
-            Array.from(document.getElementsByTagName('video'))
-        ];
-        
-        requestAnimationFrame(() => {
-            this.#processBatch(batches, 0, 0);
-        });
-    }
+    #readCachedApiPayload(endpoint) {
+        try {
+            var raw = sessionStorage.getItem('mfs_api:' + endpoint);
+            if (!raw) return null;
+            var parsed = JSON.parse(raw);
+            return parsed && parsed.data ? parsed.data : null;
+        } catch (e) {
+            return null;
+        }
+    }
 
-    #processBatch(batches, batchIndex, elementIndex) {
-        const BATCH_SIZE = MediaDimensionExtractor.#BATCH_SIZE;
-        let processedCount = 0;
-        
-        while (batchIndex < batches.length && processedCount < BATCH_SIZE) {
-            const batch = batches[batchIndex];
-            
-            while (elementIndex < batch.length && processedCount < BATCH_SIZE) {
-                const element = batch[elementIndex];
-                if (!this.#processedMedia.has(element)) {
-                    this.#processSingleMedia(element);
-                    processedCount++;
-                }
-                elementIndex++;
-            }
-            
-            if (elementIndex >= batch.length) {
-                batchIndex++;
-                elementIndex = 0;
-            }
-        }
-        
-        if (batchIndex < batches.length) {
-            requestAnimationFrame(() => {
-                this.#processBatch(batches, batchIndex, elementIndex);
-            });
-        }
-    }
+    #seedFromApiPayloads() {
+        var homeData = this.#readCachedApiPayload('/api.php');
+        if (homeData && Array.isArray(homeData.sections)) {
+            for (var i = 0; i < homeData.sections.length; i++) {
+                var sec = homeData.sections[i];
+                if (sec && this.#isValidHttpUrl(sec.targhetta)) {
+                    var secSrc = this.#decodeEntities(sec.targhetta).trim();
+                    if (this.#isValidHttpUrl(secSrc) && !this.#dimensionCache.has(this.#getCacheKey(secSrc))) {
+                        this.#cacheDimension(secSrc, 48, 48);
+                    }
+                }
+            }
+        }
 
-    // ----- MAIN PROCESSING METHODS (with skip checks) -----
-    #processMedia(node) {
-        if (!node || !node.isConnected) return;
-        if (this.#isInsidePost(node)) return;   // <-- SKIP POSTS
-        if (this.#processedMedia.has(node)) return;
+        var search = window.location.search || '';
+        var secMatch = search.match(/[?&]f=(\d+)/);
+        if (secMatch && secMatch[1]) {
+            var secEndpoint = '/api.php?f=' + secMatch[1];
+            var secData = this.#readCachedApiPayload(secEndpoint);
+            if (secData && Array.isArray(secData.threads)) {
+                var holder = document.createElement('div');
+                for (var t = 0; t < secData.threads.length; t++) {
+                    var thread = secData.threads[t];
+                    if (!thread || !thread.desc) continue;
+                    holder.innerHTML = this.#decodeEntities(thread.desc);
+                    var imgs = holder.querySelectorAll('img[src]');
+                    for (var k = 0; k < imgs.length; k++) {
+                        var imgEl = imgs[k];
+                        var src = (imgEl.getAttribute('src') || '').trim();
+                        if (!this.#isValidHttpUrl(src)) continue;
+                        var w = parseInt(imgEl.getAttribute('width'), 10);
+                        var h = parseInt(imgEl.getAttribute('height'), 10);
+                        if (w > 0 && h > 0) {
+                            this.#cacheDimension(src, w, h);
+                        }
+                    }
+                }
+            }
+        }
+    }
 
-        const tag = node.tagName;
-        switch(tag) {
-            case 'IMG':
-                this.#processImage(node);
-                break;
-            case 'IFRAME':
-                this.#processIframe(node);
-                break;
-            case 'VIDEO':
-                this.#processVideo(node);
-                break;
-            default:
-                this.#processNestedMedia(node);
-        }
-    }
+    async #waitForDependencies() {
+        if (!globalThis.forumObserver) {
+            await new Promise((resolve) => {
+                const handler = () => {
+                    window.removeEventListener('forum-observer-ready', handler);
+                    resolve();
+                };
+                window.addEventListener('forum-observer-ready', handler);
+                setTimeout(resolve, MediaDimensionExtractor.#DEPENDENCY_WAIT_TIMEOUT);
+            });
+        }
+        this.#observerReady = true;
 
-    #processNestedMedia(node) {
-        if (!node || !node.isConnected) return;
-        if (this.#isInsidePost(node)) return;   // <-- SKIP POSTS
-        if (this.#isInsideProseMirror(node)) return;
-        
-        const images = node.getElementsByTagName('img');
-        const iframes = node.getElementsByTagName('iframe');
-        const videos = node.getElementsByTagName('video');
+        const processedImages = document.querySelectorAll('img[data-optimized]');
+        if (processedImages.length > 0) {
+            this.#weservReady = true;
+            return;
+        }
 
-        for (let i = 0, len = images.length; i < len; i++) {
-            const img = images[i];
-            if (this.#isInsidePost(img)) continue;   // <-- SKIP POSTS
-            if (this.#isInsideProseMirror(img)) continue;
-            if (img.isConnected && !this.#processedMedia.has(img)) {
-                this.#processImage(img);
-            }
-        }
-        
-        for (let i = 0, len = iframes.length; i < len; i++) {
-            const iframe = iframes[i];
-            if (this.#isInsidePost(iframe)) continue;   // <-- SKIP POSTS
-            if (iframe.isConnected && !this.#processedMedia.has(iframe)) {
-                this.#processIframe(iframe);
-            }
-        }
-        
-        for (let i = 0, len = videos.length; i < len; i++) {
-            const video = videos[i];
-            if (this.#isInsidePost(video)) continue;   // <-- SKIP POSTS
-            if (video.isConnected && !this.#processedMedia.has(video)) {
-                this.#processVideo(video);
-            }
-        }
-    }
+        await new Promise((resolve) => {
+            const handler = () => {
+                window.removeEventListener('weserv-ready', handler);
+                resolve();
+            };
+            window.addEventListener('weserv-ready', handler);
+            setTimeout(resolve, MediaDimensionExtractor.#WESERV_WAIT_TIMEOUT);
+        });
+        this.#weservReady = true;
+    }
 
-    #processSingleMedia(media) {
-        if (!media || !media.isConnected) return;
-        if (this.#isInsidePost(media)) return;   // <-- SKIP POSTS
-        if (this.#processedMedia.has(media)) return;
-        if (this.#isInsideProseMirror(media)) return;
+    async #init() {
+        this.#seedFromApiPayloads();
+        await this.#waitForDependencies();
 
-        const tag = media.tagName;
-        switch(tag) {
-            case 'IMG':
-                this.#processImage(media);
-                break;
-            case 'IFRAME':
-                this.#processIframe(media);
-                break;
-            case 'VIDEO':
-                this.#processVideo(media);
-                break;
-        }
+        this.#setupObserver();
+        this.#cacheContextElements();
 
-        this.#processedMedia.add(media);
-    }
+        if (this.#pendingImages.size > 0) {
+            console.log('Processing ' + this.#pendingImages.size + ' pending images');
+            this.#pendingImages.forEach(img => {
+                if (img.isConnected) {
+                    this.#processImage(img);
+                }
+            });
+            this.#pendingImages.clear();
+        }
 
-    #isInsideProseMirror(element) {
-        return element.closest('.tiptap, .ProseMirror') !== null;
-    }
+        queueMicrotask(() => {
+            window.dispatchEvent(new CustomEvent('dimension-extractor-ready', {
+                detail: { timestamp: Date.now() }
+            }));
+            console.log('Dimension extractor ready (skipping posts)');
 
-    #processImage(img) {
-        if (this.#isInsidePost(img)) return;   // <-- SKIP POSTS
-        if (this.#isInsideProseMirror(img)) return;
-        
-        const isTwemoji = img.src.includes('twemoji') || 
-                        img.classList.contains('twemoji') ||
-                        img.classList.contains('emoji') ||
-                        (img.alt && (img.alt.includes(':)') || img.alt.includes(':(') || img.alt.includes('emoji')));
-        
-        if (isTwemoji) {
-    // Sizing, vertical-align, display, and aspect-ratio are owned by
-    // CSS (.twemoji rule in critical.css). Do not touch the element.
-    this.#processedMedia.add(img);
-    return;
+            if (typeof performance !== 'undefined' && performance.mark) {
+                performance.mark('media-dimensions-ready');
+                try {
+                    performance.measure('media-dimensions-load-time', 'media-dimensions-start', 'media-dimensions-ready');
+                } catch (e) {}
+            }
+        });
+    }
+
+    #cacheContextElements() {
+        this.#smallContextElements = new Set(
+            document.querySelectorAll(MediaDimensionExtractor.#SMALL_CONTEXT_SELECTORS)
+        );
+    }
+
+    #setupObserver() {
+        if (!globalThis.forumObserver) return;
+
+        this.#observerId = globalThis.forumObserver.register({
+            id: 'media-dimension-extractor',
+            callback: (node) => {
+                this.#processMedia(node);
+            },
+            selector: 'img, iframe, video',
+            priority: 'high'
+        });
+
+        this.#processAllMediaBatched();
+    }
+
+    #processAllMediaBatched() {
+        const batches = [
+            Array.from(document.images),
+            Array.from(document.getElementsByTagName('iframe')),
+            Array.from(document.getElementsByTagName('video'))
+        ];
+
+        requestAnimationFrame(() => {
+            this.#processBatch(batches, 0, 0);
+        });
+    }
+
+    #processBatch(batches, batchIndex, elementIndex) {
+        const BATCH_SIZE = MediaDimensionExtractor.#BATCH_SIZE;
+        let processedCount = 0;
+
+        while (batchIndex < batches.length && processedCount < BATCH_SIZE) {
+            const batch = batches[batchIndex];
+
+            while (elementIndex < batch.length && processedCount < BATCH_SIZE) {
+                const element = batch[elementIndex];
+                if (!this.#processedMedia.has(element)) {
+                    this.#processSingleMedia(element);
+                    processedCount++;
+                }
+                elementIndex++;
+            }
+
+            if (elementIndex >= batch.length) {
+                batchIndex++;
+                elementIndex = 0;
+            }
+        }
+
+        if (batchIndex < batches.length) {
+            requestAnimationFrame(() => {
+                this.#processBatch(batches, batchIndex, elementIndex);
+            });
+        }
+    }
+
+    #processMedia(node) {
+        if (!node || !node.isConnected) return;
+        if (this.#isInsidePost(node)) return;
+        if (this.#processedMedia.has(node)) return;
+
+        const tag = node.tagName;
+        switch (tag) {
+            case 'IMG':
+                this.#processImage(node);
+                break;
+            case 'IFRAME':
+                this.#processIframe(node);
+                break;
+            case 'VIDEO':
+                this.#processVideo(node);
+                break;
+            default:
+                this.#processNestedMedia(node);
+        }
+    }
+
+    #processNestedMedia(node) {
+        if (!node || !node.isConnected) return;
+        if (this.#isInsidePost(node)) return;
+        if (this.#isInsideProseMirror(node)) return;
+
+        const images = node.getElementsByTagName('img');
+        const iframes = node.getElementsByTagName('iframe');
+        const videos = node.getElementsByTagName('video');
+
+        for (let i = 0, len = images.length; i < len; i++) {
+            const img = images[i];
+            if (this.#isInsidePost(img)) continue;
+            if (this.#isInsideProseMirror(img)) continue;
+            if (img.isConnected && !this.#processedMedia.has(img)) {
+                this.#processImage(img);
+            }
+        }
+
+        for (let i = 0, len = iframes.length; i < len; i++) {
+            const iframe = iframes[i];
+            if (this.#isInsidePost(iframe)) continue;
+            if (iframe.isConnected && !this.#processedMedia.has(iframe)) {
+                this.#processIframe(iframe);
+            }
+        }
+
+        for (let i = 0, len = videos.length; i < len; i++) {
+            const video = videos[i];
+            if (this.#isInsidePost(video)) continue;
+            if (video.isConnected && !this.#processedMedia.has(video)) {
+                this.#processVideo(video);
+            }
+        }
+    }
+
+    #processSingleMedia(media) {
+        if (!media || !media.isConnected) return;
+        if (this.#isInsidePost(media)) return;
+        if (this.#processedMedia.has(media)) return;
+        if (this.#isInsideProseMirror(media)) return;
+
+        const tag = media.tagName;
+        switch (tag) {
+            case 'IMG':
+                this.#processImage(media);
+                break;
+            case 'IFRAME':
+                this.#processIframe(media);
+                break;
+            case 'VIDEO':
+                this.#processVideo(media);
+                break;
+        }
+
+        this.#processedMedia.add(media);
+    }
+
+    #isInsideProseMirror(element) {
+        return element.closest('.tiptap, .ProseMirror') !== null;
+    }
+
+    #processImage(img) {
+        if (this.#isInsidePost(img)) return;
+        if (this.#isInsideProseMirror(img)) return;
+
+        const isTwemoji = img.src.includes('twemoji') ||
+            img.classList.contains('twemoji') ||
+            img.classList.contains('emoji') ||
+            (img.alt && (img.alt.includes(':)') || img.alt.includes(':(') || img.alt.includes('emoji')));
+
+        if (isTwemoji) {
+            this.#processedMedia.add(img);
+            return;
+        }
+
+        if (!this.#isValidHttpUrl(img.src)) {
+            this.#processedMedia.add(img);
+            return;
+        }
+
+        if (!this.#weservReady && !img.hasAttribute('data-optimized')) {
+            this.#pendingImages.add(img);
+            return;
+        }
+
+        const cacheKey = this.#getCacheKey(img.src);
+        const cached = this.#dimensionCache.get(cacheKey);
+        if (cached) {
+            this.#cacheHits++;
+            if (!img.hasAttribute('width') || !img.hasAttribute('height')) {
+                img.setAttribute('width', cached.width);
+                img.setAttribute('height', cached.height);
+                img.style.aspectRatio = cached.width + ' / ' + cached.height;
+            }
+            this.#processedMedia.add(img);
+            return;
+        }
+        this.#cacheMisses++;
+
+        const widthAttr = img.getAttribute('width');
+        const heightAttr = img.getAttribute('height');
+
+        if (widthAttr !== null && heightAttr !== null) {
+            const width = widthAttr | 0;
+            const height = heightAttr | 0;
+            if (width > 0 && height > 0) {
+                if (img.complete && img.naturalWidth) {
+                    const wDiff = Math.abs(img.naturalWidth - width);
+                    const hDiff = Math.abs(img.naturalHeight - height);
+                    if (wDiff > width * 0.5 || hDiff > height * 0.5) {
+                        this.#setImageDimensions(img, img.naturalWidth, img.naturalHeight);
+                        return;
+                    }
+                }
+                img.style.aspectRatio = width + ' / ' + height;
+                this.#processedMedia.add(img);
+                return;
+            }
+        }
+
+        if (this.#isLikelyEmoji(img)) {
+            const size = this.#isInSmallContext(img) ?
+                MediaDimensionExtractor.#EMOJI_SIZE_SMALL :
+                MediaDimensionExtractor.#EMOJI_SIZE_NORMAL;
+            img.setAttribute('width', size);
+            img.setAttribute('height', size);
+            img.style.aspectRatio = size + ' / ' + size;
+            this.#cacheDimension(img.src, size, size);
+            this.#processedMedia.add(img);
+            return;
+        }
+
+        if (img.complete && img.naturalWidth) {
+            this.#setImageDimensions(img, img.naturalWidth, img.naturalHeight);
+        } else {
+            this.#setupImageLoadListener(img);
+        }
+    }
+
+    #getCacheKey(src) {
+        if (src.length > 100) {
+            return 'h' + this.#hashString(src);
+        }
+        return src;
+    }
+
+    #hashString(str) {
+        let hash = 0;
+        for (let i = 0; i < str.length; i++) {
+            hash = ((hash << 5) - hash) + str.charCodeAt(i);
+            hash = hash | 0;
+        }
+        return hash;
+    }
+
+    #isLikelyEmoji(img) {
+        const src = img.src;
+        const className = img.className;
+        return MediaDimensionExtractor.#EMOJI_PATTERNS.some((pattern) => {
+            return pattern.test(src) || pattern.test(className);
+        }) || (src.includes('imgbox') && img.alt && img.alt.includes('emoji'));
+    }
+
+    #isInSmallContext(img) {
+        if (!this.#smallContextElements || this.#smallContextElements.size === 0) {
+            this.#cacheContextElements();
+        }
+        let element = img;
+        while (element) {
+            if (element.classList) {
+                const classList = element.classList;
+                if (classList.contains('signature') ||
+                    classList.contains('post-signature') ||
+                    classList.contains('modern-quote') ||
+                    classList.contains('quote-content') ||
+                    classList.contains('modern-spoiler') ||
+                    classList.contains('spoiler-content')) {
+                    return true;
+                }
+                if (this.#smallContextElements && this.#smallContextElements.has(element)) {
+                    return true;
+                }
+            }
+            element = element.parentElement;
+        }
+        return false;
+    }
+
+    #setupImageLoadListener(img) {
+        if (img.__dimensionExtractorHandler) return;
+        img.__dimensionExtractorHandler = this.#imageLoadHandler;
+        const signal = this.#imageLoadAbortController.signal;
+        img.addEventListener('load', this.#imageLoadHandler, { once: true, signal });
+        img.addEventListener('error', this.#imageLoadHandler, { once: true, signal });
+        img.style.maxWidth = '100%';
+    }
+
+    #handleImageLoad(e) {
+        const img = e.target;
+        delete img.__dimensionExtractorHandler;
+        if (img.naturalWidth) {
+            this.#setImageDimensions(img, img.naturalWidth, img.naturalHeight);
+        } else if (this.#isValidHttpUrl(img.src)) {
+            const brokenSize = MediaDimensionExtractor.#BROKEN_IMAGE_SIZE;
+            this.#setImageDimensions(img, brokenSize.width, brokenSize.height);
+        } else {
+            this.#processedMedia.add(img);
+        }
+    }
+
+    #setImageDimensions(img, width, height) {
+        const currentWidth = img.getAttribute('width');
+        const currentHeight = img.getAttribute('height');
+
+        if (!currentWidth || currentWidth === '0' || currentWidth === 'auto') {
+            img.setAttribute('width', width);
+        }
+        if (!currentHeight || currentHeight === '0' || currentHeight === 'auto') {
+            img.setAttribute('height', height);
+        }
+        img.style.aspectRatio = width + '/' + height;
+        img.style.removeProperty('height');
+        this.#cacheDimension(img.src, width, height);
+        this.#processedMedia.add(img);
+    }
+
+    #cacheDimension(src, width, height) {
+        if (!this.#isValidHttpUrl(src)) return;
+        const cacheKey = this.#getCacheKey(src);
+        if (this.#dimensionCache.size >= this.#MAX_CACHE_SIZE) {
+            const oldestEntry = this.#lruMap.entries().next().value;
+            if (oldestEntry) {
+                this.#dimensionCache.delete(oldestEntry[0]);
+                this.#lruMap.delete(oldestEntry[0]);
+            }
+        }
+        const now = Date.now();
+        this.#dimensionCache.set(cacheKey, { width: width, height: height });
+        this.#lruMap.set(cacheKey, now);
+        this.#persistDimension(cacheKey, width, height, now);
+    }
+
+    #processIframe(iframe) {
+        if (this.#isInsidePost(iframe)) return;
+        const src = iframe.src || '';
+        let width = '100%';
+        let height = '400';
+
+        MediaDimensionExtractor.#IFRAME_SIZES.forEach((sizes, domain) => {
+            if (src.includes(domain)) {
+                width = sizes[0];
+                height = sizes[1];
+                return true;
+            }
+        });
+
+        iframe.setAttribute('width', width);
+        iframe.setAttribute('height', height);
+
+        if (width !== '100%') {
+            const widthNum = width | 0;
+            const heightNum = height | 0;
+            if (widthNum > 0 && heightNum > 0) {
+                const parent = iframe.parentNode;
+                if (parent && document.contains(iframe) && !parent.classList.contains('iframe-wrapper')) {
+                    try {
+                        const wrapper = document.createElement('div');
+                        wrapper.className = 'iframe-wrapper';
+                        const paddingBottom = (heightNum / widthNum * 100) + '%';
+                        wrapper.style.cssText = 'position:relative;width:100%;padding-bottom:' + paddingBottom + ';overflow:hidden';
+                        if (parent && iframe.parentNode === parent) {
+                            parent.insertBefore(wrapper, iframe);
+                            wrapper.appendChild(iframe);
+                            iframe.style.cssText = 'position:absolute;top:0;left:0;width:100%;height:100%;border:0';
+                        }
+                    } catch (e) {
+                        console.debug('Iframe wrapper creation failed:', e.message);
+                    }
+                }
+            }
+        }
+
+        if (!iframe.hasAttribute('title')) {
+            iframe.setAttribute('title', 'Embedded content');
+        }
+    }
+
+    #processVideo(video) {
+        if (this.#isInsidePost(video)) return;
+        if (!video.hasAttribute('controls')) {
+            video.setAttribute('controls', '');
+        }
+        if (!video.style.width) {
+            video.style.width = '100%';
+            video.style.maxWidth = '800px';
+            video.style.height = 'auto';
+        }
+    }
+
+    #cleanup() {
+        if (globalThis.forumObserver && this.#observerId) {
+            globalThis.forumObserver.unregister(this.#observerId);
+        }
+        this.#imageLoadAbortController.abort();
+        const images = document.images;
+        for (let i = 0, len = images.length; i < len; i++) {
+            const img = images[i];
+            if (img.__dimensionExtractorHandler) {
+                delete img.__dimensionExtractorHandler;
+            }
+        }
+    }
+
+    extractDimensionsForElement(element) {
+        if (!element) return;
+        if (this.#isInsidePost(element)) return;
+        if (element.matches('img, iframe, video')) {
+            this.#processSingleMedia(element);
+        } else {
+            this.#processNestedMedia(element);
+        }
+    }
+
+    forceReprocessElement(element) {
+        if (!element) return;
+        if (this.#isInsidePost(element)) return;
+        this.#processedMedia.delete(element);
+        if (element.tagName === 'IMG' && element.src) {
+            const cacheKey = this.#getCacheKey(element.src);
+            if (this.#dimensionCache.has(cacheKey)) {
+                this.#dimensionCache.delete(cacheKey);
+                this.#lruMap.delete(cacheKey);
+            }
+        }
+        this.#processSingleMedia(element);
+    }
+
+    refresh() {
+        console.log('Refreshing dimension extractor');
+        this.#seedFromApiPayloads();
+        const images = document.querySelectorAll('img:not([width])');
+        images.forEach(img => {
+            if (this.#isInsidePost(img)) return;
+            this.#processedMedia.delete(img);
+            this.#processImage(img);
+        });
+        if (this.#pendingImages.size > 0) {
+            this.#pendingImages.forEach(img => {
+                if (img.isConnected && !this.#isInsidePost(img)) {
+                    this.#processImage(img);
+                }
+            });
+            this.#pendingImages.clear();
+        }
+    }
+
+    clearCache() {
+        this.#dimensionCache.clear();
+        this.#lruMap.clear();
+        this.#cacheHits = 0;
+        this.#cacheMisses = 0;
+        try {
+            var keysToRemove = [];
+            for (var i = 0; i < sessionStorage.length; i++) {
+                var k = sessionStorage.key(i);
+                if (k && k.indexOf(this.#STORAGE_PREFIX) === 0) {
+                    keysToRemove.push(k);
+                }
+            }
+            for (var j = 0; j < keysToRemove.length; j++) {
+                sessionStorage.removeItem(keysToRemove[j]);
+            }
+        } catch (e) {}
+    }
+
+    getPerformanceStats() {
+        const total = this.#cacheHits + this.#cacheMisses;
+        const hitRate = total > 0 ? ((this.#cacheHits / total) * 100).toFixed(1) : 0;
+        return {
+            cacheHits: this.#cacheHits,
+            cacheMisses: this.#cacheMisses,
+            cacheHitRate: hitRate + '%',
+            cacheSize: this.#dimensionCache.size,
+            processedMedia: this.#processedMedia.size,
+            pendingImages: this.#pendingImages.size,
+            weservReady: this.#weservReady
+        };
+    }
+
+    destroy() {
+        this.#cleanup();
+    }
+
+    static async createAndInit() {
+        const instance = new MediaDimensionExtractor();
+        await instance.#init();
+        return instance;
+    }
 }
 
-        if (!this.#weservReady && !img.hasAttribute('data-optimized')) {
-            this.#pendingImages.add(img);
-            return;
-        }
-
-        const cacheKey = this.#getCacheKey(img.src);
-        const cached = this.#dimensionCache.get(cacheKey);
-        if (cached) {
-            this.#cacheHits++;
-            if (!img.hasAttribute('width') || !img.hasAttribute('height')) {
-                img.setAttribute('width', cached.width);
-                img.setAttribute('height', cached.height);
-                img.style.aspectRatio = cached.width + ' / ' + cached.height;
-            }
-            this.#processedMedia.add(img);
-            return;
-        }
-        this.#cacheMisses++;
-
-        const widthAttr = img.getAttribute('width');
-        const heightAttr = img.getAttribute('height');
-
-        if (widthAttr !== null && heightAttr !== null) {
-            const width = widthAttr | 0;
-            const height = heightAttr | 0;
-            if (width > 0 && height > 0) {
-                if (img.complete && img.naturalWidth) {
-                    const wDiff = Math.abs(img.naturalWidth - width);
-                    const hDiff = Math.abs(img.naturalHeight - height);
-                    if (wDiff > width * 0.5 || hDiff > height * 0.5) {
-                        this.#setImageDimensions(img, img.naturalWidth, img.naturalHeight);
-                        return;
-                    }
-                }
-                img.style.aspectRatio = width + ' / ' + height;
-                this.#processedMedia.add(img);
-                return;
-            }
-        }
-        
-        if (this.#isLikelyEmoji(img)) {
-            const size = this.#isInSmallContext(img) ? 
-                MediaDimensionExtractor.#EMOJI_SIZE_SMALL : 
-                MediaDimensionExtractor.#EMOJI_SIZE_NORMAL;
-            img.setAttribute('width', size);
-            img.setAttribute('height', size);
-            img.style.aspectRatio = size + ' / ' + size;
-            this.#cacheDimension(img.src, size, size);
-            this.#processedMedia.add(img);
-            return;
-        }
-        
-        if (img.complete && img.naturalWidth) {
-            this.#setImageDimensions(img, img.naturalWidth, img.naturalHeight);
-        } else {
-            this.#setupImageLoadListener(img);
-        }
-    }
-
-    #getCacheKey(src) {
-        if (src.length > 100) {
-            return 'h' + this.#hashString(src);
-        }
-        return src;
-    }
-
-    #hashString(str) {
-        let hash = 0;
-        for (let i = 0; i < str.length; i++) {
-            hash = ((hash << 5) - hash) + str.charCodeAt(i);
-            hash = hash | 0;
-        }
-        return hash;
-    }
-
-    #isLikelyEmoji(img) {
-        const src = img.src;
-        const className = img.className;
-        return MediaDimensionExtractor.#EMOJI_PATTERNS.some((pattern) => {
-            return pattern.test(src) || pattern.test(className);
-        }) || (src.includes('imgbox') && img.alt && img.alt.includes('emoji'));
-    }
-
-    #isInSmallContext(img) {
-        if (!this.#smallContextElements || this.#smallContextElements.size === 0) {
-            this.#cacheContextElements();
-        }
-        let element = img;
-        while (element) {
-            if (element.classList) {
-                const classList = element.classList;
-                if (classList.contains('signature') || 
-                    classList.contains('post-signature') ||
-                    classList.contains('modern-quote') ||
-                    classList.contains('quote-content') ||
-                    classList.contains('modern-spoiler') ||
-                    classList.contains('spoiler-content')) {
-                    return true;
-                }
-                if (this.#smallContextElements && this.#smallContextElements.has(element)) {
-                    return true;
-                }
-            }
-            element = element.parentElement;
-        }
-        return false;
-    }
-
-    #setupImageLoadListener(img) {
-        if (img.__dimensionExtractorHandler) return;
-        img.__dimensionExtractorHandler = this.#imageLoadHandler;
-        const signal = this.#imageLoadAbortController.signal;
-        img.addEventListener('load', this.#imageLoadHandler, { once: true, signal });
-        img.addEventListener('error', this.#imageLoadHandler, { once: true, signal });
-        img.style.maxWidth = '100%';
-    }
-
-    #handleImageLoad(e) {
-        const img = e.target;
-        delete img.__dimensionExtractorHandler;
-        if (img.naturalWidth) {
-            this.#setImageDimensions(img, img.naturalWidth, img.naturalHeight);
-        } else {
-            const brokenSize = MediaDimensionExtractor.#BROKEN_IMAGE_SIZE;
-            this.#setImageDimensions(img, brokenSize.width, brokenSize.height);
-        }
-    }
-
-    #setImageDimensions(img, width, height) {
-        const currentWidth = img.getAttribute('width');
-        const currentHeight = img.getAttribute('height');
-        
-        if (!currentWidth || currentWidth === '0' || currentWidth === 'auto') {
-            img.setAttribute('width', width);
-        }
-        if (!currentHeight || currentHeight === '0' || currentHeight === 'auto') {
-            img.setAttribute('height', height);
-        }
-        img.style.aspectRatio = width + '/' + height;
-        img.style.removeProperty('height');
-        this.#cacheDimension(img.src, width, height);
-        this.#processedMedia.add(img);
-    }
-    
-    #cacheDimension(src, width, height) {
-        const cacheKey = this.#getCacheKey(src);
-        if (this.#dimensionCache.size >= this.#MAX_CACHE_SIZE) {
-            const oldestEntry = this.#lruMap.entries().next().value;
-            if (oldestEntry) {
-                this.#dimensionCache.delete(oldestEntry[0]);
-                this.#lruMap.delete(oldestEntry[0]);
-            }
-        }
-        this.#dimensionCache.set(cacheKey, { width, height });
-        this.#lruMap.set(cacheKey, performance.now());
-    }
-
-    #processIframe(iframe) {
-        if (this.#isInsidePost(iframe)) return;   // <-- SKIP POSTS
-        const src = iframe.src || '';
-        let width = '100%';
-        let height = '400';
-
-        MediaDimensionExtractor.#IFRAME_SIZES.forEach((sizes, domain) => {
-            if (src.includes(domain)) {
-                width = sizes[0];
-                height = sizes[1];
-                return true;
-            }
-        });
-
-        iframe.setAttribute('width', width);
-        iframe.setAttribute('height', height);
-
-        if (width !== '100%') {
-            const widthNum = width | 0;
-            const heightNum = height | 0;
-            if (widthNum > 0 && heightNum > 0) {
-                const parent = iframe.parentNode;
-                if (parent && document.contains(iframe) && !parent.classList.contains('iframe-wrapper')) {
-                    try {
-                        const wrapper = document.createElement('div');
-                        wrapper.className = 'iframe-wrapper';
-                        const paddingBottom = (heightNum / widthNum * 100) + '%';
-                        wrapper.style.cssText = 'position:relative;width:100%;padding-bottom:' + paddingBottom + ';overflow:hidden';
-                        if (parent && iframe.parentNode === parent) {
-                            parent.insertBefore(wrapper, iframe);
-                            wrapper.appendChild(iframe);
-                            iframe.style.cssText = 'position:absolute;top:0;left:0;width:100%;height:100%;border:0';
-                        }
-                    } catch (e) {
-                        console.debug('Iframe wrapper creation failed:', e.message);
-                    }
-                }
-            }
-        }
-
-        if (!iframe.hasAttribute('title')) {
-            iframe.setAttribute('title', 'Embedded content');
-        }
-    }
-
-    #processVideo(video) {
-        if (this.#isInsidePost(video)) return;   // <-- SKIP POSTS
-        if (!video.hasAttribute('controls')) {
-            video.setAttribute('controls', '');
-        }
-        if (!video.style.width) {
-            video.style.width = '100%';
-            video.style.maxWidth = '800px';
-            video.style.height = 'auto';
-        }
-    }
-
-    #cleanup() {
-        if (globalThis.forumObserver && this.#observerId) {
-            globalThis.forumObserver.unregister(this.#observerId);
-        }
-        this.#imageLoadAbortController.abort();
-        const images = document.images;
-        for (let i = 0, len = images.length; i < len; i++) {
-            const img = images[i];
-            if (img.__dimensionExtractorHandler) {
-                delete img.__dimensionExtractorHandler;
-            }
-        }
-    }
-
-    // ===== PUBLIC API =====
-    extractDimensionsForElement(element) {
-        if (!element) return;
-        if (this.#isInsidePost(element)) return;   // <-- SKIP POSTS
-        if (element.matches('img, iframe, video')) {
-            this.#processSingleMedia(element);
-        } else {
-            this.#processNestedMedia(element);
-        }
-    }
-
-    forceReprocessElement(element) {
-        if (!element) return;
-        if (this.#isInsidePost(element)) return;   // <-- SKIP POSTS
-        this.#processedMedia.delete(element);
-        if (element.tagName === 'IMG' && element.src) {
-            const cacheKey = this.#getCacheKey(element.src);
-            if (this.#dimensionCache.has(cacheKey)) {
-                this.#dimensionCache.delete(cacheKey);
-                this.#lruMap.delete(cacheKey);
-            }
-        }
-        this.#processSingleMedia(element);
-    }
-
-    refresh() {
-        console.log('Refreshing dimension extractor');
-        const images = document.querySelectorAll('img:not([width])');
-        images.forEach(img => {
-            if (this.#isInsidePost(img)) return;   // <-- SKIP POSTS
-            this.#processedMedia.delete(img);
-            this.#processImage(img);
-        });
-        if (this.#pendingImages.size > 0) {
-            this.#pendingImages.forEach(img => {
-                if (img.isConnected && !this.#isInsidePost(img)) {
-                    this.#processImage(img);
-                }
-            });
-            this.#pendingImages.clear();
-        }
-    }
-
-    clearCache() {
-        this.#dimensionCache.clear();
-        this.#lruMap.clear();
-        this.#cacheHits = 0;
-        this.#cacheMisses = 0;
-    }
-
-    getPerformanceStats() {
-        const total = this.#cacheHits + this.#cacheMisses;
-        const hitRate = total > 0 ? ((this.#cacheHits / total) * 100).toFixed(1) : 0;
-        return {
-            cacheHits: this.#cacheHits,
-            cacheMisses: this.#cacheMisses,
-            cacheHitRate: hitRate + '%',
-            cacheSize: this.#dimensionCache.size,
-            processedMedia: this.#processedMedia.size,
-            pendingImages: this.#pendingImages.size,
-            weservReady: this.#weservReady
-        };
-    }
-
-    destroy() {
-        this.#cleanup();
-    }
-
-    static async createAndInit() {
-        const instance = new MediaDimensionExtractor();
-        await instance.#init();
-        return instance;
-    }
-}
-
-// Module export (global)
 var MediaDimensionsModule = {
-    initialized: false,
-    instance: null,
-    initialize: async function() {
-        if (this.initialized) return this.instance;
-        this.instance = await MediaDimensionExtractor.createAndInit();
-        this.initialized = true;
-        return this.instance;
-    },
-    name: 'media-dimensions',
-    dependencies: ['forumObserver']
+    initialized: false,
+    instance: null,
+    initialize: async function() {
+        if (this.initialized) return this.instance;
+        this.instance = await MediaDimensionExtractor.createAndInit();
+        this.initialized = true;
+        return this.instance;
+    },
+    name: 'media-dimensions',
+    dependencies: ['forumObserver']
 };
-
-// DO NOT auto-initialise; the enhancer will call initialize()
