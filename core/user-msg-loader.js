@@ -220,7 +220,7 @@ whenBodyReady(() => {
         // PHASE A: Foundation (media optimizer & event bus)
         const phaseAStart = performance.now();
             const resultsA = await Promise.allSettled([
-                loadScript("https://cdn.jsdelivr.net/gh/hu6amini/perve_avenue@43f6fbe8e34ec7354583d31f1aab49230e0c4ccc/media-optimizer.min.js"),
+                loadScript("https://cdn.jsdelivr.net/gh/hu6amini/perve_avenue@9e04af41beaed68bef4eb46f6409596868f5877f/media-optimizer.min.js"),
                 loadScript("https://cdn.jsdelivr.net/gh/hu6amini/perve_avenue@1977fabb5553b0f825fa92671a03b2ae26c67702/core/event-bus.min.js")
             ]);
             const failedA = resultsA.filter(r => r.status === 'rejected');
