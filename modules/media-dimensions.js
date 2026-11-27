@@ -25,6 +25,10 @@ class MediaDimensionExtractor {
     #weservReady = false;
     #observerReady = false;
 
+    // Shared API cache (same key format as media-optimizer: mfs_api:<endpoint>)
+    #apiMemoryCache = new Map();
+    #API_CACHE_TTL_MS = 3 * 60 * 1000;
+
     static #DEPENDENCY_WAIT_TIMEOUT = 5000;
     static #WESERV_WAIT_TIMEOUT = 3000;
 
@@ -62,10 +66,8 @@ class MediaDimensionExtractor {
 
     #isValidHttpUrl(url) {
         if (!url || typeof url !== 'string') return false;
-        var trimmed = url.trim();
-        if (!/^https?:\/\/[^\/\s]+\.[^\/\s]+/i.test(trimmed)) return false;
         try {
-            var parsed = new URL(trimmed, window.location.origin);
+            var parsed = new URL(url.trim(), window.location.origin);
             return parsed.protocol === 'http:' || parsed.protocol === 'https:';
         } catch (e) {
             return false;
@@ -84,15 +86,21 @@ class MediaDimensionExtractor {
         return once;
     }
 
+    // FIX Bug 1: collect keys first, then delete (avoid index shift during iteration)
     #restoreStorageCache() {
         try {
             var now = Date.now();
+            var keys = [];
             for (var i = 0; i < sessionStorage.length; i++) {
-                var key = sessionStorage.key(i);
-                if (!key || key.indexOf(this.#STORAGE_PREFIX) !== 0) continue;
+                var k = sessionStorage.key(i);
+                if (k && k.indexOf(this.#STORAGE_PREFIX) === 0) keys.push(k);
+            }
+            for (var j = 0; j < keys.length; j++) {
+                var key = keys[j];
                 var raw = sessionStorage.getItem(key);
                 if (!raw) continue;
-                var parsed = JSON.parse(raw);
+                var parsed;
+                try { parsed = JSON.parse(raw); } catch (e) { parsed = null; }
                 if (!parsed || !parsed.ts || now - parsed.ts > this.#STORAGE_TTL_MS) {
                     sessionStorage.removeItem(key);
                     continue;
@@ -117,54 +125,81 @@ class MediaDimensionExtractor {
         } catch (e) {}
     }
 
-    #readCachedApiPayload(endpoint) {
+    // Shared cache contract with media-optimizer: key = 'mfs_api:<endpoint>',
+    // value = JSON { ts, data }. Whoever fetches first populates; everyone else hits cache.
+    async #fetchCachedApiPayload(endpoint) {
+        var now = Date.now();
+
+        var mem = this.#apiMemoryCache.get(endpoint);
+        if (mem && now - mem.ts < this.#API_CACHE_TTL_MS) {
+            return mem.data;
+        }
+
         try {
             var raw = sessionStorage.getItem('mfs_api:' + endpoint);
-            if (!raw) return null;
-            var parsed = JSON.parse(raw);
-            return parsed && parsed.data ? parsed.data : null;
+            if (raw) {
+                var parsed = JSON.parse(raw);
+                if (parsed && parsed.ts && now - parsed.ts < this.#API_CACHE_TTL_MS) {
+                    this.#apiMemoryCache.set(endpoint, parsed);
+                    return parsed.data;
+                }
+            }
+        } catch (e) {}
+
+        try {
+            var res = await fetch(endpoint, { credentials: 'same-origin' });
+            if (!res.ok) return null;
+            var data = await res.json();
+            var entry = { ts: now, data: data };
+            this.#apiMemoryCache.set(endpoint, entry);
+            try {
+                sessionStorage.setItem('mfs_api:' + endpoint, JSON.stringify(entry));
+            } catch (e) {}
+            return data;
         } catch (e) {
             return null;
         }
     }
 
-    #seedFromApiPayloads() {
-        var homeData = this.#readCachedApiPayload('/api.php');
-        if (homeData && Array.isArray(homeData.sections)) {
-            for (var i = 0; i < homeData.sections.length; i++) {
-                var sec = homeData.sections[i];
-                if (sec && this.#isValidHttpUrl(sec.targhetta)) {
-                    var secSrc = this.#decodeEntities(sec.targhetta).trim();
-                    if (this.#isValidHttpUrl(secSrc) && !this.#dimensionCache.has(this.#getCacheKey(secSrc))) {
-                        this.#cacheDimension(secSrc, 48, 48);
-                    }
-                }
-            }
-        }
+    // Seeds section badge dimensions (48x48) from /api.php.
+    //
+    // NOTE: The old ?f=<id> branch was removed — live verification against the API confirmed
+    // that threads[].desc never carries width/height attributes (0/30 and 0/1 across sections).
+    // Setting dims for .tmb elements is already handled by #handleImageLoad + #setImageDimensions
+    // on load, so no seed is needed there.
+    //
+    // FUTURE HOOK — post-image dims from ?t=:
+    // If a post-preview module is ever added (something that actually paints .post images),
+    // seed message dims here. 85% of post images in messages[].content carry reliable
+    // width/height attributes (verified: 11/13 across a 3-page topic). Sketch:
+    //
+    //   var topicMatch = window.location.search.match(/[?&]t=(\d+)/);
+    //   if (topicMatch) {
+    //       var self = this;
+    //       this.#fetchCachedApiPayload('/api.php?t=' + topicMatch[1]).then(function (data) {
+    //           (data?.messages || []).forEach(function (m) {
+    //               var holder = document.createElement('div');
+    //               holder.innerHTML = m.content || '';
+    //               holder.querySelectorAll('img[width][height]').forEach(function (img) {
+    //                   var w = parseInt(img.getAttribute('width'), 10);
+    //                   var h = parseInt(img.getAttribute('height'), 10);
+    //                   if (w > 0 && h > 0 && self.#isValidHttpUrl(img.src)) {
+    //                       self.#cacheDimension(img.src, w, h);
+    //                   }
+    //               });
+    //           });
+    //       }).catch(function () {});
+    //   }
+    async #seedFromApiPayloads() {
+        var homeData = await this.#fetchCachedApiPayload('/api.php');
+        if (!homeData || !Array.isArray(homeData.sections)) return;
 
-        var search = window.location.search || '';
-        var secMatch = search.match(/[?&]f=(\d+)/);
-        if (secMatch && secMatch[1]) {
-            var secEndpoint = '/api.php?f=' + secMatch[1];
-            var secData = this.#readCachedApiPayload(secEndpoint);
-            if (secData && Array.isArray(secData.threads)) {
-                var holder = document.createElement('div');
-                for (var t = 0; t < secData.threads.length; t++) {
-                    var thread = secData.threads[t];
-                    if (!thread || !thread.desc) continue;
-                    holder.innerHTML = this.#decodeEntities(thread.desc);
-                    var imgs = holder.querySelectorAll('img[src]');
-                    for (var k = 0; k < imgs.length; k++) {
-                        var imgEl = imgs[k];
-                        var src = (imgEl.getAttribute('src') || '').trim();
-                        if (!this.#isValidHttpUrl(src)) continue;
-                        var w = parseInt(imgEl.getAttribute('width'), 10);
-                        var h = parseInt(imgEl.getAttribute('height'), 10);
-                        if (w > 0 && h > 0) {
-                            this.#cacheDimension(src, w, h);
-                        }
-                    }
-                }
+        for (var i = 0; i < homeData.sections.length; i++) {
+            var sec = homeData.sections[i];
+            if (!sec || !this.#isValidHttpUrl(sec.targhetta)) continue;
+            var secSrc = this.#decodeEntities(sec.targhetta).trim();
+            if (this.#isValidHttpUrl(secSrc) && !this.#dimensionCache.has(this.#getCacheKey(secSrc))) {
+                this.#cacheDimension(secSrc, 48, 48);
             }
         }
     }
@@ -200,7 +235,8 @@ class MediaDimensionExtractor {
     }
 
     async #init() {
-        this.#seedFromApiPayloads();
+        // Fire-and-forget: seeds section badges without blocking observer setup.
+        this.#seedFromApiPayloads().catch(() => {});
         await this.#waitForDependencies();
 
         this.#setupObserver();
@@ -653,7 +689,7 @@ class MediaDimensionExtractor {
 
     refresh() {
         console.log('Refreshing dimension extractor');
-        this.#seedFromApiPayloads();
+        this.#seedFromApiPayloads().catch(() => {});
         const images = document.querySelectorAll('img:not([width])');
         images.forEach(img => {
             if (this.#isInsidePost(img)) return;
@@ -673,6 +709,7 @@ class MediaDimensionExtractor {
     clearCache() {
         this.#dimensionCache.clear();
         this.#lruMap.clear();
+        this.#apiMemoryCache.clear();
         this.#cacheHits = 0;
         this.#cacheMisses = 0;
         try {
