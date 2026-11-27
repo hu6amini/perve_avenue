@@ -1,21 +1,20 @@
-/*media attributes - optimized version with adaptive debouncing*/
-(function() {
+/* media attributes - API-aware optimized version with adaptive debouncing */
+(function () {
     'use strict';
 
-    // ===== CONFIGURATION =====
-    var DEBUG = false; // Set to true for verbose logging
-    
+    var DEBUG = false;
+
     var CONFIG = {
         cdn: 'https://images.weserv.nl/',
-        cdnFallback: 'https://cdn.jsdelivr.net/gh/',
         lazy: 'lazy',
         async: 'async',
         cache: '1y',
-        posterTimeout: 8000, // timeout for poster generation
+        posterTimeout: 8000,
+        apiCacheTtlMs: 3 * 60 * 1000,
         debounce: {
-            smallBatchDelay: 16,  // One frame (60fps) for responsive feel
-            largeBatchDelay: 100, // More batching for bulk operations
-            batchSizeThreshold: 50 // Switch threshold
+            smallBatchDelay: 16,
+            largeBatchDelay: 100,
+            batchSizeThreshold: 50
         },
         quality: {
             jpg: '90',
@@ -35,19 +34,21 @@
             'dicebear.com', 'api.dicebear.com',
             'forum-user-avatar', 'forum-likes-avatar',
             'avatar-size-', 'images.weserv.nl', 'wsrv.nl',
+            'res.cloudinary.com',
+            'img.forumfree.net/html/emoticons',
+            '/emojis/',
             'data:image'
         ]
     };
 
-    // ===== PERFORMANCE TRACKING =====
     if (typeof performance !== 'undefined' && performance.mark) {
         performance.mark('weserv-start');
     }
 
-    // ===== STATE MANAGEMENT =====
     var state = {
         processed: new WeakSet(),
-        skipRegex: null, // Will be compiled from CONFIG.skipPatterns
+        skipRegex: null,
+        apiMemoryCache: {},
         stats: {
             total: 0,
             optimized: 0,
@@ -71,7 +72,6 @@
         }
     };
 
-    // ===== UTILITY FUNCTIONS =====
     function log(message, data) {
         if (DEBUG) {
             console.log(message, data || '');
@@ -82,15 +82,58 @@
         console.warn(message, data || '');
     }
 
+    function isValidHttpUrl(url) {
+        if (!url || typeof url !== 'string') return false;
+        var trimmed = url.trim();
+        if (!/^https?:\/\/[^\/\s]+\.[^\/\s]+/i.test(trimmed)) return false;
+        try {
+            var parsed = new URL(trimmed, window.location.origin);
+            return parsed.protocol === 'http:' || parsed.protocol === 'https:';
+        } catch (e) {
+            return false;
+        }
+    }
+
+    function decodeHtmlEntities(str) {
+        if (!str || typeof str !== 'string') return '';
+        var textarea = document.createElement('textarea');
+        textarea.innerHTML = str;
+        var once = textarea.value;
+        if (once.indexOf('&') !== -1) {
+            textarea.innerHTML = once;
+            return textarea.value;
+        }
+        return once;
+    }
+
+    function extractImageUrlsFromHtml(htmlOrEscaped) {
+        var urls = [];
+        var seen = {};
+        var decoded = decodeHtmlEntities(htmlOrEscaped || '');
+        if (!decoded) return urls;
+
+        var container = document.createElement('div');
+        container.innerHTML = decoded;
+        var imgs = container.querySelectorAll('img[src]');
+        for (var i = 0; i < imgs.length; i++) {
+            var src = imgs[i].getAttribute('src');
+            if (isValidHttpUrl(src) && !seen[src]) {
+                seen[src] = true;
+                urls.push(src);
+            }
+        }
+        return urls;
+    }
+
     function compileSkipRegex() {
         try {
-            var escapedPatterns = CONFIG.skipPatterns.map(function(p) {
+            var escapedPatterns = CONFIG.skipPatterns.map(function (p) {
                 return p.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
             });
             state.skipRegex = new RegExp(escapedPatterns.join('|'), 'i');
-            log('✅ Skip regex compiled with', CONFIG.skipPatterns.length + ' patterns');
+            log('Skip regex compiled with ' + CONFIG.skipPatterns.length + ' patterns');
         } catch (e) {
-            warn('⚠️ Failed to compile skip regex:', e.message);
+            warn('Failed to compile skip regex:', e.message);
             state.skipRegex = null;
         }
     }
@@ -101,11 +144,12 @@
 
     function shouldSkip(url, el) {
         if (!url || typeof url !== 'string') return true;
-        
-        var lower = url.toLowerCase();
-        if (lower.indexOf('data:') === 0) return true;
+        var trimmed = url.trim();
+        var lower = trimmed.toLowerCase();
 
-        // Use compiled regex for efficiency
+        if (lower.indexOf('data:') === 0) return true;
+        if (!isValidHttpUrl(trimmed)) return true;
+
         if (state.skipRegex && state.skipRegex.test(lower)) return true;
 
         if (el) {
@@ -123,7 +167,6 @@
 
     function detectFormat(url) {
         if (!url || typeof url !== 'string') return 'unknown';
-        
         var lower = url.toLowerCase();
         if (lower.indexOf('.jpg') !== -1 || lower.indexOf('.jpeg') !== -1) return 'jpeg';
         if (lower.indexOf('.png') !== -1) return 'png';
@@ -135,15 +178,14 @@
         return 'unknown';
     }
 
-    // ===== VIDEO POSTER GENERATION =====
     function createSvgPoster(video) {
         var width = video.getAttribute('width') || 640;
         var height = video.getAttribute('height') || 360;
 
         var svg = '<svg width="' + width + '" height="' + height + '" xmlns="http://www.w3.org/2000/svg">' +
-                  '<rect width="100%" height="100%" fill="#2a2a2a"/>' +
-                  '<text x="50%" y="50%" font-family="Arial" font-size="16" fill="#ffffff" text-anchor="middle" dy=".3em">🎬 Video</text>' +
-                  '</svg>';
+            '<rect width="100%" height="100%" fill="#2a2a2a"/>' +
+            '<text x="50%" y="50%" font-family="Arial" font-size="16" fill="#ffffff" text-anchor="middle" dy=".3em">Video</text>' +
+            '</svg>';
 
         var poster = 'data:image/svg+xml,' + encodeURIComponent(svg);
         video.setAttribute('poster', poster);
@@ -151,30 +193,27 @@
     }
 
     function setPosterWithTimeout(video, posterUrl, posterType) {
-        var timeoutId = setTimeout(function() {
+        var timeoutId = setTimeout(function () {
             if (!video.hasAttribute('data-poster-loaded')) {
                 createSvgPoster(video);
                 video.setAttribute('data-poster-loaded', 'timeout');
-                log('⏱️ Poster timeout, using SVG fallback');
             }
         }, CONFIG.posterTimeout);
 
         var img = new Image();
-        img.onload = function() {
+        img.onload = function () {
             clearTimeout(timeoutId);
             video.setAttribute('poster', posterUrl);
             video.setAttribute('data-poster-type', posterType);
             video.setAttribute('data-poster-loaded', 'true');
             state.videos.withPoster++;
-            log('✅ Poster loaded:', posterType);
         };
-        img.onerror = function() {
+        img.onerror = function () {
             clearTimeout(timeoutId);
             if (!video.hasAttribute('data-poster-loaded')) {
                 createSvgPoster(video);
                 video.setAttribute('data-poster-loaded', 'fallback');
                 state.videos.withPoster++;
-                log('ℹ️ Poster fallback to SVG');
             }
         };
         img.src = posterUrl;
@@ -182,7 +221,7 @@
 
     function generateVideoPoster(video) {
         var videoSrc = video.src || (video.querySelector('source[src]') ? video.querySelector('source[src]').src : null);
-        if (!videoSrc) {
+        if (!videoSrc || !isValidHttpUrl(videoSrc)) {
             createSvgPoster(video);
             video.setAttribute('data-poster-loaded', 'true');
             state.videos.withPoster++;
@@ -193,127 +232,44 @@
         var posterUrl = null;
         var posterType = 'unknown';
 
-        // ===== TENOR =====
         if (lowerSrc.indexOf('tenor.com') !== -1) {
             posterUrl = videoSrc.replace('.webm', '.gif').replace('.mp4', '.gif');
             posterType = 'tenor-gif';
-        }
-        // ===== GIPHY =====
-        else if (lowerSrc.indexOf('giphy.com') !== -1 || lowerSrc.indexOf('media.giphy.com') !== -1) {
+        } else if (lowerSrc.indexOf('giphy.com') !== -1 || lowerSrc.indexOf('media.giphy.com') !== -1) {
             var giphyMatches = videoSrc.match(/\/media\/([^\/]+)\//);
-            if (giphyMatches) {
-                posterUrl = 'https://media.giphy.com/media/' + giphyMatches[1] + '/giphy.gif';
-                posterType = 'giphy-gif';
-            } else {
-                posterUrl = videoSrc.replace('.mp4', '.gif');
-                posterType = 'giphy-gif';
-            }
-        }
-        // ===== IMGUR =====
-        else if (lowerSrc.indexOf('imgur.com') !== -1) {
+            posterUrl = giphyMatches
+                ? ('https://media.giphy.com/media/' + giphyMatches[1] + '/giphy.gif')
+                : videoSrc.replace('.mp4', '.gif');
+            posterType = 'giphy-gif';
+        } else if (lowerSrc.indexOf('imgur.com') !== -1) {
             var imgurMatches = videoSrc.match(/imgur\.com\/([^\/\.]+)/);
             if (imgurMatches) {
                 posterUrl = 'https://i.imgur.com/' + imgurMatches[1] + '.gif';
                 posterType = 'imgur-gif';
             }
-        }
-        // ===== REDDIT =====
-        else if (lowerSrc.indexOf('reddit.com') !== -1 || lowerSrc.indexOf('redd.it') !== -1) {
-            if (lowerSrc.indexOf('v.redd.it') !== -1) {
-                var redditId = videoSrc.split('/').pop().split('?')[0];
-                posterUrl = 'https://external-preview.redd.it/' + redditId + '?auto=webp&s=thumbnail';
-                posterType = 'reddit-preview';
-            }
-        }
-        // ===== TWITTER/X =====
-        else if (lowerSrc.indexOf('twitter.com') !== -1 || lowerSrc.indexOf('x.com') !== -1) {
-            var twitterMatches = videoSrc.match(/\/tweet_video\/([^\/\.]+)/);
-            if (twitterMatches) {
-                posterUrl = 'https://video.twimg.com/tweet_video_thumb/' + twitterMatches[1] + '.jpg';
-                posterType = 'twitter-thumb';
-            }
-        }
-        // ===== TIKTOK =====
-        else if (lowerSrc.indexOf('tiktok.com') !== -1) {
-            var tiktokMatches = videoSrc.match(/\/video\/(\d+)/);
-            if (tiktokMatches) {
-                posterUrl = 'https://www.tiktok.com/api/img/?itemId=' + tiktokMatches[1];
-                posterType = 'tiktok-thumb';
-            }
-        }
-        // ===== YOUTUBE =====
-        else if (lowerSrc.indexOf('youtube.com') !== -1 || lowerSrc.indexOf('youtu.be') !== -1) {
+        } else if (lowerSrc.indexOf('youtube.com') !== -1 || lowerSrc.indexOf('youtu.be') !== -1) {
             var youtubeMatches = videoSrc.match(/(?:youtube\.com\/(?:[^\/]+\/.+\/|(?:v|e(?:mbed)?)\/|.*[?&]v=)|youtu\.be\/)([^"&?\/\s]{11})/);
             if (youtubeMatches) {
-                var youtubeId = youtubeMatches[1];
-                posterUrl = 'https://img.youtube.com/vi/' + youtubeId + '/maxresdefault.jpg';
+                posterUrl = 'https://img.youtube.com/vi/' + youtubeMatches[1] + '/maxresdefault.jpg';
                 posterType = 'youtube-thumb';
-                setPosterWithTimeout(video, posterUrl, posterType);
-                return;
             }
-        }
-        // ===== VIMEO =====
-        else if (lowerSrc.indexOf('vimeo.com') !== -1) {
+        } else if (lowerSrc.indexOf('vimeo.com') !== -1) {
             var vimeoMatches = videoSrc.match(/vimeo\.com\/(\d+)/);
             if (vimeoMatches) {
                 posterUrl = 'https://i.vimeocdn.com/video/' + vimeoMatches[1] + '_640.jpg';
                 posterType = 'vimeo-thumb';
             }
         }
-        // ===== IMGPLAY =====
-        else if (lowerSrc.indexOf('imgplay.io') !== -1 || lowerSrc.indexOf('imgplay') !== -1) {
-            posterUrl = videoSrc.replace('.mp4', '.jpg').replace('.webm', '.jpg');
-            posterType = 'imgplay-thumb';
-        }
-        // ===== CLIPCHAMP =====
-        else if (lowerSrc.indexOf('clipchamp.com') !== -1) {
-            posterUrl = videoSrc.replace('/video/', '/thumbnail/') + '.jpg';
-            posterType = 'clipchamp-thumb';
-        }
-        // ===== FACEBOOK =====
-        else if (lowerSrc.indexOf('facebook.com') !== -1 || lowerSrc.indexOf('fbcdn.net') !== -1) {
-            var fbMatches = videoSrc.match(/\/v\/(\d+)/);
-            if (fbMatches) {
-                posterUrl = 'https://graph.facebook.com/' + fbMatches[1] + '/picture';
-                posterType = 'facebook-thumb';
-            }
-        }
-        // ===== INSTAGRAM =====
-        else if (lowerSrc.indexOf('instagram.com') !== -1 || lowerSrc.indexOf('cdninstagram.com') !== -1) {
-            var instaMatches = videoSrc.match(/\/p\/([^\/]+)/);
-            if (instaMatches) {
-                posterUrl = 'https://www.instagram.com/p/' + instaMatches[1] + '/media/?size=t';
-                posterType = 'instagram-thumb';
-            }
-        }
-        // ===== DAILYMOTION =====
-        else if (lowerSrc.indexOf('dailymotion.com') !== -1) {
-            var dmMatches = videoSrc.match(/\/video\/([^_]+)/);
-            if (dmMatches) {
-                posterUrl = 'https://www.dailymotion.com/thumbnail/video/' + dmMatches[1];
-                posterType = 'dailymotion-thumb';
-            }
-        }
-        // ===== TWITCH =====
-        else if (lowerSrc.indexOf('twitch.tv') !== -1 || lowerSrc.indexOf('clips.twitch.tv') !== -1) {
-            var twitchMatches = videoSrc.match(/\/clip\/([^\/]+)/i);
-            if (twitchMatches) {
-                posterUrl = 'https://clips-media-assets.twitch.tv/' + twitchMatches[1] + '-preview.jpg';
-                posterType = 'twitch-thumb';
-            }
-        }
 
-        if (posterUrl) {
+        if (posterUrl && isValidHttpUrl(posterUrl)) {
             setPosterWithTimeout(video, posterUrl, posterType);
         } else {
             createSvgPoster(video);
             video.setAttribute('data-poster-loaded', 'true');
             state.videos.withPoster++;
-            log('ℹ️ SVG fallback for:', videoSrc.substring(0, 60));
         }
     }
 
-    // ===== VIDEO HANDLING =====
     function setupVideoLazyLoading(video) {
         if (state.processed.has(video)) return;
         state.processed.add(video);
@@ -327,14 +283,11 @@
         if (!video.hasAttribute('preload') || video.getAttribute('preload') === '') {
             var preloadValue = hasAutoplay ? CONFIG.video.autoplayPreload : CONFIG.video.preload;
             video.setAttribute('preload', preloadValue);
-
             if (!hasAutoplay && preloadValue === 'none') {
                 state.videos.preloadNone++;
             }
-        } else {
-            if (video.getAttribute('preload') === 'none') {
-                state.videos.preloadNone++;
-            }
+        } else if (video.getAttribute('preload') === 'none') {
+            state.videos.preloadNone++;
         }
 
         if (!video.poster) {
@@ -354,7 +307,6 @@
         video.setAttribute('data-video-processed', 'true');
     }
 
-    // ===== LAZY LOADING & DECODING =====
     function applyLazyAttributes(el) {
         if (!isMediaElement(el)) return el;
 
@@ -362,7 +314,6 @@
             if (!el.hasAttribute('loading') || el.getAttribute('loading') === '') {
                 el.setAttribute('loading', CONFIG.lazy);
             }
-
             if (!el.src || el.src === '' || el.src === window.location.href) {
                 el.setAttribute('data-placeholder', 'true');
             }
@@ -372,7 +323,6 @@
             if (!el.hasAttribute('loading') || el.getAttribute('loading') === '') {
                 el.setAttribute('loading', CONFIG.lazy);
             }
-
             if (!el.hasAttribute('decoding') || el.getAttribute('decoding') === '') {
                 el.setAttribute('decoding', CONFIG.async);
             }
@@ -385,52 +335,48 @@
         return el;
     }
 
-    // ===== WESERV OPTIMIZATION =====
-function buildWeservUrl(img) {
-    var originalSrc = img.src;
-    var originalFormat = detectFormat(originalSrc);
-    
-    // Always output WebP (static or animated)
-    var outputFormat = 'webp';
-    var quality = CONFIG.quality.webp;   // 85
-    
-    var params = [
-        'maxage=' + CONFIG.cache,
-        'q=' + quality,
-        'il'                           // interlace / better loading
-    ];
-    
-    // Animated GIF → animated WebP (keep all frames, infinite loop)
-    if (originalFormat === 'gif') {
-        params.push('n=-1');           // process all frames
-        params.push('loop=0');         // infinite loop
+    function buildWeservUrlFromSrc(originalSrc) {
+        var originalFormat = detectFormat(originalSrc);
+        var outputFormat = 'webp';
+        var quality = CONFIG.quality.webp;
+
+        var params = [
+            'maxage=' + CONFIG.cache,
+            'q=' + quality,
+            'il'
+        ];
+
+        if (originalFormat === 'gif') {
+            params.push('n=-1');
+            params.push('loop=0');
+        }
+
+        if (originalFormat === 'png') {
+            params.push('af');
+            params.push('l=9');
+        }
+
+        var filename = originalSrc.split('/').pop().split('?')[0].split('#')[0];
+        if (filename && /^[a-zA-Z0-9._-]+$/.test(filename)) {
+            params.push('filename=' + encodeURIComponent(filename));
+        }
+
+        var optimizedSrc = CONFIG.cdn + '?url=' + encodeURIComponent(originalSrc) + '&output=' + outputFormat;
+        if (params.length) {
+            optimizedSrc = optimizedSrc + '&' + params.join('&');
+        }
+
+        return {
+            url: optimizedSrc,
+            format: outputFormat,
+            quality: quality,
+            params: params
+        };
     }
-    
-    // Preserve transparency / lossless hints for PNG sources
-    if (originalFormat === 'png') {
-        params.push('af');
-        params.push('l=9');
+
+    function buildWeservUrl(img) {
+        return buildWeservUrlFromSrc(img.src);
     }
-    
-    var filename = originalSrc.split('/').pop().split('?')[0].split('#')[0];
-    if (filename && /^[a-zA-Z0-9._-]+$/.test(filename)) {
-        params.push('filename=' + encodeURIComponent(filename));
-    }
-    
-    var encodedUrl = encodeURIComponent(originalSrc);
-    var optimizedSrc = CONFIG.cdn + '?url=' + encodedUrl + '&output=' + outputFormat;
-    
-    if (params.length) {
-        optimizedSrc = optimizedSrc + '&' + params.join('&');
-    }
-    
-    return {
-        url: optimizedSrc,
-        format: outputFormat,
-        quality: quality,
-        params: params
-    };
-}
 
     function optimizeImage(img) {
         if (!img || !img.src || img.src.indexOf('data:') === 0) return;
@@ -439,12 +385,11 @@ function buildWeservUrl(img) {
 
         if (state.processed.has(img)) return;
 
-        var skip = shouldSkip(img.src, img);
-        if (skip) {
+        if (shouldSkip(img.src, img)) {
             state.processed.add(img);
             state.stats.skipped++;
             img.setAttribute('data-optimized', 'skipped');
-            log('⊘ Skipped:', img.src.substring(0, 50));
+            log('Skipped:', img.src.substring(0, 60));
             return;
         }
 
@@ -460,19 +405,100 @@ function buildWeservUrl(img) {
         state.stats.byFormat[optimization.format] = (state.stats.byFormat[optimization.format] || 0) + 1;
         state.stats.byQuality[optimization.quality] = (state.stats.byQuality[optimization.quality] || 0) + 1;
 
-        img.onerror = function() {
+        img.onerror = function () {
             state.stats.failed++;
             img.setAttribute('data-optimized', 'failed');
             img.src = originalSrc;
             img.onerror = null;
-            warn('⚠️ Optimization failed, reverted:', originalSrc.substring(0, 50));
+            warn('Optimization failed, reverted:', originalSrc.substring(0, 60));
         };
 
         img.src = optimization.url;
         img.setAttribute('data-optimized', 'true');
         img.setAttribute('data-format', optimization.format);
         img.setAttribute('data-quality', optimization.quality);
-        log('✅ Optimized:', originalSrc.substring(0, 50));
+        log('Optimized:', originalSrc.substring(0, 60));
+    }
+
+    // ===== /api.php DISCOVERY PRELOAD & NORMALIZATION =====
+    function fetchCachedApi(endpoint) {
+        var now = Date.now();
+        var mem = state.apiMemoryCache[endpoint];
+        if (mem && now - mem.ts < CONFIG.apiCacheTtlMs) {
+            return Promise.resolve(mem.data);
+        }
+
+        try {
+            var raw = sessionStorage.getItem('mfs_api:' + endpoint);
+            if (raw) {
+                var parsed = JSON.parse(raw);
+                if (parsed && now - parsed.ts < CONFIG.apiCacheTtlMs) {
+                    state.apiMemoryCache[endpoint] = parsed;
+                    return Promise.resolve(parsed.data);
+                }
+            }
+        } catch (e) {}
+
+        return fetch(endpoint, { credentials: 'same-origin' })
+            .then(function (res) {
+                if (!res.ok) throw new Error('HTTP ' + res.status);
+                return res.json();
+            })
+            .then(function (data) {
+                var entry = { ts: now, data: data };
+                state.apiMemoryCache[endpoint] = entry;
+                try {
+                    sessionStorage.setItem('mfs_api:' + endpoint, JSON.stringify(entry));
+                } catch (e) {}
+                return data;
+            });
+    }
+
+    function preloadOptimizedUrl(url) {
+        if (!url || shouldSkip(url, null)) return;
+        var opt = buildWeservUrlFromSrc(url);
+        var link = document.createElement('link');
+        link.rel = 'preload';
+        link.as = 'image';
+        link.href = opt.url;
+        link.setAttribute('data-mfs-preload', 'true');
+        document.head.appendChild(link);
+    }
+
+    function discoverApiMediaFromContext() {
+        var search = window.location.search || '';
+        var topicMatch = search.match(/[?&]t=(\d+)/);
+        var sectionMatch = search.match(/[?&]f=(\d+)/);
+
+        if (topicMatch && topicMatch[1]) {
+            fetchCachedApi('/api.php?t=' + encodeURIComponent(topicMatch[1]))
+                .then(function (topicData) {
+                    var msgs = (topicData && topicData.messages) || [];
+                    if (msgs.length > 0 && msgs[0].content) {
+                        var firstUrls = extractImageUrlsFromHtml(msgs[0].content);
+                        if (firstUrls.length > 0) {
+                            preloadOptimizedUrl(firstUrls[0]);
+                        }
+                    }
+                })
+                .catch(function () {});
+        } else if (sectionMatch && sectionMatch[1]) {
+            fetchCachedApi('/api.php?f=' + encodeURIComponent(sectionMatch[1]))
+                .then(function (secData) {
+                    var threads = (secData && secData.threads) || [];
+                    for (var i = 0; i < threads.length; i++) {
+                        if (threads[i] && threads[i].desc) {
+                            var thumbUrls = extractImageUrlsFromHtml(threads[i].desc);
+                            for (var j = 0; j < thumbUrls.length; j++) {
+                                if (!shouldSkip(thumbUrls[j], null)) {
+                                    buildWeservUrlFromSrc(thumbUrls[j]);
+                                }
+                            }
+                        }
+                    }
+                })
+                .catch(function () {});
+        }
     }
 
     // ===== ADAPTIVE DEBOUNCED MUTATION OBSERVER =====
@@ -487,56 +513,17 @@ function buildWeservUrl(img) {
         var startTime = performance.now ? performance.now() : Date.now();
         var processedCount = 0;
 
-        if (typeof requestAnimationFrame !== 'undefined') {
-            requestAnimationFrame(function() {
-                nodesToProcess.forEach(function(node) {
-                    if (node.nodeType !== 1) return;
-
-                    if (node.tagName === 'IMG') {
-                        applyLazyAttributes(node);
-                        optimizeImage(node);
-                        processedCount++;
-                    } else if (node.tagName === 'IFRAME' || node.tagName === 'VIDEO') {
-                        applyLazyAttributes(node);
-                        processedCount++;
-                    }
-
-                    if (node.querySelectorAll) {
-                        var allMedia = node.querySelectorAll('img, iframe, video');
-                        for (var j = 0; j < allMedia.length; j++) {
-                            var el = allMedia[j];
-                            applyLazyAttributes(el);
-                            if (el.tagName === 'IMG') {
-                                optimizeImage(el);
-                            }
-                            processedCount++;
-                        }
-                    }
-                });
-
-                isProcessing = false;
-
-                // Update metrics
-                if (performance.now) {
-                    var processTime = performance.now() - startTime;
-                    state.processingMetrics.lastProcessTime = processTime;
-                    state.processingMetrics.batchesProcessed++;
-                    state.processingMetrics.averageBatchSize = 
-                        (state.processingMetrics.averageBatchSize * (state.processingMetrics.batchesProcessed - 1) + processedCount) / 
-                        state.processingMetrics.batchesProcessed;
-                    log('⚡ Processed batch:', processedCount + ' nodes in ' + Math.round(processTime) + 'ms');
-                }
-            });
-        } else {
-            // Fallback for browsers without requestAnimationFrame
-            nodesToProcess.forEach(function(node) {
+        var runBatch = function () {
+            nodesToProcess.forEach(function (node) {
                 if (node.nodeType !== 1) return;
 
                 if (node.tagName === 'IMG') {
                     applyLazyAttributes(node);
                     optimizeImage(node);
+                    processedCount++;
                 } else if (node.tagName === 'IFRAME' || node.tagName === 'VIDEO') {
                     applyLazyAttributes(node);
+                    processedCount++;
                 }
 
                 if (node.querySelectorAll) {
@@ -547,138 +534,114 @@ function buildWeservUrl(img) {
                         if (el.tagName === 'IMG') {
                             optimizeImage(el);
                         }
+                        processedCount++;
                     }
                 }
             });
+
             isProcessing = false;
+
+            if (performance.now) {
+                var processTime = performance.now() - startTime;
+                state.processingMetrics.lastProcessTime = processTime;
+                state.processingMetrics.batchesProcessed++;
+                state.processingMetrics.averageBatchSize =
+                    (state.processingMetrics.averageBatchSize * (state.processingMetrics.batchesProcessed - 1) + processedCount) /
+                    state.processingMetrics.batchesProcessed;
+            }
+        };
+
+        if (typeof requestAnimationFrame !== 'undefined') {
+            requestAnimationFrame(runBatch);
+        } else {
+            runBatch();
         }
     }
 
-    var mutationObserver = new MutationObserver(function(mutations) {
-        mutations.forEach(function(mutation) {
+    var mutationObserver = new MutationObserver(function (mutations) {
+        mutations.forEach(function (mutation) {
             if (mutation.type !== 'childList') return;
-
             for (var i = 0; i < mutation.addedNodes.length; i++) {
                 pendingMutations.push(mutation.addedNodes[i]);
             }
         });
 
-        // Adaptive debouncing: shorter delay for small batches (responsive), longer for large (efficient)
-        var adaptiveDelay = pendingMutations.length > CONFIG.debounce.batchSizeThreshold ?
-            CONFIG.debounce.largeBatchDelay :
-            CONFIG.debounce.smallBatchDelay;
-
-        log('📦 Queued mutations:', pendingMutations.length + ' (delay: ' + adaptiveDelay + 'ms)');
+        var adaptiveDelay = pendingMutations.length > CONFIG.debounce.batchSizeThreshold
+            ? CONFIG.debounce.largeBatchDelay
+            : CONFIG.debounce.smallBatchDelay;
 
         clearTimeout(mutationTimeout);
-        mutationTimeout = setTimeout(function() {
+        mutationTimeout = setTimeout(function () {
             var nodesToProcess = pendingMutations.slice();
             pendingMutations = [];
             processPendingMutations(nodesToProcess);
         }, adaptiveDelay);
     });
 
-    // ===== CONSOLIDATED IMAGE PROXY (SINGLE ENTRY POINT) =====
     function setupImageProxy() {
         var srcDescriptor = Object.getOwnPropertyDescriptor(HTMLImageElement.prototype, 'src');
-        if (!srcDescriptor || !srcDescriptor.set) {
-            log('⚠️ Cannot hook HTMLImageElement.src');
-            return;
-        }
+        if (!srcDescriptor || !srcDescriptor.set) return;
 
         Object.defineProperty(HTMLImageElement.prototype, 'src', {
-            set: function(value) {
+            set: function (value) {
                 srcDescriptor.set.call(this, value);
                 if (value && typeof value === 'string' && value.indexOf('data:') !== 0 && this.isConnected) {
-                    // Defer optimization to avoid blocking
+                    var self = this;
                     if (typeof requestAnimationFrame !== 'undefined') {
-                        requestAnimationFrame(function() {
-                            optimizeImage(this);
-                        }.bind(this));
+                        requestAnimationFrame(function () { optimizeImage(self); });
                     } else {
-                        setTimeout(function() {
-                            optimizeImage(this);
-                        }.bind(this), 0);
+                        setTimeout(function () { optimizeImage(self); }, 0);
                     }
                 }
             },
             get: srcDescriptor.get,
             configurable: true
         });
-
-        log('✅ Image proxy installed');
     }
 
     function setupElementProxy() {
         var originalSetAttribute = Element.prototype.setAttribute;
-        Element.prototype.setAttribute = function(name, value) {
+        Element.prototype.setAttribute = function (name, value) {
             originalSetAttribute.call(this, name, value);
-
             if (name === 'src' && this.tagName === 'IMG' && value && value.indexOf('data:') !== 0) {
+                var self = this;
                 if (typeof requestAnimationFrame !== 'undefined') {
-                    requestAnimationFrame(function() {
-                        optimizeImage(this);
-                    }.bind(this));
+                    requestAnimationFrame(function () { optimizeImage(self); });
                 } else {
-                    setTimeout(function() {
-                        optimizeImage(this);
-                    }.bind(this), 0);
+                    setTimeout(function () { optimizeImage(self); }, 0);
                 }
             }
         };
-
-        log('✅ Element proxy installed');
     }
 
-    // ===== INITIALIZATION =====
     function init() {
         if (state.initDone) return;
         state.initDone = true;
 
-        log('🚀 Initializing weserv optimizer...');
-
-        // Compile regex patterns
         compileSkipRegex();
-
-        // Setup proxies
         setupImageProxy();
         setupElementProxy();
 
-        // Batch process existing media
         var allMedia = document.querySelectorAll('img, iframe, video');
-        var imageCount = 0;
-
         for (var i = 0; i < allMedia.length; i++) {
             var el = allMedia[i];
             applyLazyAttributes(el);
             if (el.tagName === 'IMG') {
                 optimizeImage(el);
-                imageCount++;
             }
         }
 
-        log('✅ Processed ' + imageCount + ' existing images');
+        discoverApiMediaFromContext();
 
-        // Setup mutation observer
         if (document.body) {
-            mutationObserver.observe(document.body, {
-                childList: true,
-                subtree: true
-            });
+            mutationObserver.observe(document.body, { childList: true, subtree: true });
             state.mutationObserverActive = true;
-            log('✅ Mutation observer active (adaptive debouncing: 16-100ms)');
         } else {
-            var bodyCheck = setInterval(function() {
+            var bodyCheck = setInterval(function () {
                 if (document.body) {
                     clearInterval(bodyCheck);
-                    mutationObserver.observe(document.body, {
-                        childList: true,
-                        subtree: true
-                    });
+                    mutationObserver.observe(document.body, { childList: true, subtree: true });
                     state.mutationObserverActive = true;
-                    log('✅ Mutation observer active (adaptive debouncing: 16-100ms)');
-
-                    // Reprocess any missed media
                     var missedImages = document.querySelectorAll('img:not([data-optimized])');
                     for (var j = 0; j < missedImages.length; j++) {
                         optimizeImage(missedImages[j]);
@@ -687,8 +650,7 @@ function buildWeservUrl(img) {
             }, 50);
         }
 
-        // ===== DISPATCH READY EVENT =====
-        setTimeout(function() {
+        setTimeout(function () {
             window.dispatchEvent(new CustomEvent('weserv-ready', {
                 detail: {
                     stats: {
@@ -706,17 +668,12 @@ function buildWeservUrl(img) {
                 performance.mark('weserv-ready-dispatched');
                 try {
                     performance.measure('weserv-load-time', 'weserv-start', 'weserv-ready-dispatched');
-                } catch (e) {
-                    log('Performance measurement unavailable:', e.message);
-                }
+                } catch (e) {}
             }
-
-            log('📢 Dispatched weserv-ready event with ' + state.stats.optimized + ' images optimized');
         }, 100);
 
-        // ===== PERFORMANCE REPORT (on page load) =====
-        window.addEventListener('load', function() {
-            setTimeout(function() {
+        window.addEventListener('load', function () {
+            setTimeout(function () {
                 if (typeof requestIdleCallback !== 'undefined') {
                     requestIdleCallback(generatePerformanceReport, { timeout: 3000 });
                 } else {
@@ -726,7 +683,6 @@ function buildWeservUrl(img) {
         });
     }
 
-    // ===== PERFORMANCE REPORT GENERATION =====
     function generatePerformanceReport() {
         try {
             var finalImages = document.querySelectorAll('img');
@@ -742,12 +698,10 @@ function buildWeservUrl(img) {
                 if (finalImages[i].getAttribute('loading') === CONFIG.lazy) lazyCount++;
                 if (finalImages[i].getAttribute('decoding') === CONFIG.async) asyncCount++;
             }
-
             for (var j = 0; j < finalIframes.length; j++) {
                 if (finalIframes[j].getAttribute('loading') === CONFIG.lazy) lazyCount++;
                 if (finalIframes[j].getAttribute('data-placeholder') === 'true') placeholderCount++;
             }
-
             for (var k = 0; k < finalVideos.length; k++) {
                 if (finalVideos[k].getAttribute('preload') === 'none') lazyCount++;
                 if (finalVideos[k].poster) videosWithPoster++;
@@ -777,16 +731,14 @@ function buildWeservUrl(img) {
             console.log('Videos missing poster:', finalVideos.length - videosWithPoster);
 
             if (state.stats.failed > 0) {
-                console.warn('⚠️ Optimization failures:', state.stats.failed);
+                console.warn('Optimization failures:', state.stats.failed);
             }
-
             console.log('=== REPORT COMPLETE ===');
         } catch (e) {
             warn('Error generating performance report:', e.message);
         }
     }
 
-    // ===== START INITIALIZATION =====
     if (document.readyState === 'loading') {
         document.addEventListener('DOMContentLoaded', init);
     } else {
