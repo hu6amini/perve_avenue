@@ -11,6 +11,7 @@
         cache: '1y',
         posterTimeout: 8000,
         apiCacheTtlMs: 3 * 60 * 1000,
+        preloadCap: 3,
         debounce: {
             smallBatchDelay: 16,
             largeBatchDelay: 100,
@@ -82,12 +83,12 @@
         console.warn(message, data || '');
     }
 
+    // FIX Bug 2: use URL parsing instead of regex so protocol-relative URLs (//cdn/x.jpg)
+    // are resolved against window.location.origin instead of rejected.
     function isValidHttpUrl(url) {
         if (!url || typeof url !== 'string') return false;
-        var trimmed = url.trim();
-        if (!/^https?:\/\/[^\/\s]+\.[^\/\s]+/i.test(trimmed)) return false;
         try {
-            var parsed = new URL(trimmed, window.location.origin);
+            var parsed = new URL(url.trim(), window.location.origin);
             return parsed.protocol === 'http:' || parsed.protocol === 'https:';
         } catch (e) {
             return false;
@@ -421,6 +422,8 @@
     }
 
     // ===== /api.php DISCOVERY PRELOAD & NORMALIZATION =====
+    // Shared cache contract with media-dimensions: key = 'mfs_api:<endpoint>',
+    // value = JSON { ts, data }. TTL 3 minutes.
     function fetchCachedApi(endpoint) {
         var now = Date.now();
         var mem = state.apiMemoryCache[endpoint];
@@ -454,8 +457,19 @@
             });
     }
 
+    // FIX Bug 3: dedupe against DOM, cap concurrent preloads, skip if image already being
+    // fetched (in DOM in either original or optimized form). Preloading races the browser
+    // otherwise and causes double fetches.
     function preloadOptimizedUrl(url) {
         if (!url || shouldSkip(url, null)) return;
+
+        for (var i = 0; i < document.images.length; i++) {
+            var img = document.images[i];
+            if (img.src === url || img.getAttribute('data-original') === url) return;
+        }
+
+        if (document.querySelectorAll('link[data-mfs-preload]').length >= CONFIG.preloadCap) return;
+
         var opt = buildWeservUrlFromSrc(url);
         var link = document.createElement('link');
         link.rel = 'preload';
@@ -463,6 +477,18 @@
         link.href = opt.url;
         link.setAttribute('data-mfs-preload', 'true');
         document.head.appendChild(link);
+    }
+
+    // FIX §2E: preconnect to weserv once per page. Old ?f= branch called buildWeservUrlFromSrc
+    // with no side effect (dead loop) — replaced with a single preconnect.
+    function addWeservPreconnect() {
+        var origin = CONFIG.cdn.replace(/\/$/, '');
+        if (document.querySelector('link[rel="preconnect"][href="' + origin + '"]')) return;
+        var pc = document.createElement('link');
+        pc.rel = 'preconnect';
+        pc.href = origin;
+        pc.crossOrigin = 'anonymous';
+        document.head.appendChild(pc);
     }
 
     function discoverApiMediaFromContext() {
@@ -483,21 +509,11 @@
                 })
                 .catch(function () {});
         } else if (sectionMatch && sectionMatch[1]) {
-            fetchCachedApi('/api.php?f=' + encodeURIComponent(sectionMatch[1]))
-                .then(function (secData) {
-                    var threads = (secData && secData.threads) || [];
-                    for (var i = 0; i < threads.length; i++) {
-                        if (threads[i] && threads[i].desc) {
-                            var thumbUrls = extractImageUrlsFromHtml(threads[i].desc);
-                            for (var j = 0; j < thumbUrls.length; j++) {
-                                if (!shouldSkip(thumbUrls[j], null)) {
-                                    buildWeservUrlFromSrc(thumbUrls[j]);
-                                }
-                            }
-                        }
-                    }
-                })
-                .catch(function () {});
+            // Section pages: desc HTML has no width/height (verified against live API),
+            // so per-thumbnail preloading would race the browser and add no value. Just
+            // warm the connection and prime the cache for other consumers.
+            addWeservPreconnect();
+            fetchCachedApi('/api.php?f=' + encodeURIComponent(sectionMatch[1])).catch(function () {});
         }
     }
 
