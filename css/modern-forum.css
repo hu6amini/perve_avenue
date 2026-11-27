@@ -8502,29 +8502,6 @@ body.has-docked-editor {
 }
 .mfn-register-link:hover { color: color-mix(in srgb, var(--mfn-accent) 80%, #fff); }
 
-/* ── Responsive Squeeze ────────────────────── */
-/* If the screen is smaller than 1450px, hide the text labels 
-   for top-level actions. This solves the Admin view overcrowding. */
-@media (max-width: 1450px) {
-    .mfn-action-label {
-        display: none; /* Hide text */
-    }
-    .mfn-action .mfn-chev {
-        display: none; /* Hide the chevron on dropdown triggers */
-    }
-    .mfn-action {
-        padding: 0 10px;
-    }
-    
-    /* If the user dropdown text is also taking too much space */
-    .mfn-user-name {
-        display: none;
-    }
-    .mfn-user-trigger {
-        padding: 3px;
-        border-radius: 50%;
-    }
-}
 /* ── Mobile ────────────────────────────────── */
 @media (max-width: 860px) {
     :root { --mfn-h: 56px; }
