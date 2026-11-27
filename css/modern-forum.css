@@ -6113,6 +6113,10 @@ body#topic #fastreply     { scroll-margin-top: var(--space-lg); }
  background: var(--surface-color); 
  border-radius: 0;
 }
+#topic .modern-editor-container .modern-replying-as {
+ border-top-left-radius: var(--radius);
+ border-top-right-radius: var(--radius);
+}
 .modern-editor-container .modern-actions     { background: var(--bg-color); }
 .modern-editor-container .modern-wysiwyg     { max-height: 60vh; }
 .modern-editor-container .modern-preview     { margin: var(--space-md) var(--pad-6); }
