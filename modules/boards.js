@@ -86,11 +86,13 @@ const ForumBoardsModule = (function () {
    // =========================================================================
     // API MIGRATION FLAG
     // =========================================================================
-    // Four convert* functions have an API fast-path (boards, topics,
-    // stats, online page). Set to false to force every path back to
-    // the DOM scraper. The remaining functions (latest posts, members,
-    // groups legend hrefs, group page) stay DOM-only — no API endpoints
-    // exist for them.
+    // Three convert* functions have an API fast-path: the board list
+    // (convertBoardsViaApi), the latest-posts sidebar (RSS), and the
+    // stats block (getStatsFromApi — counts, newest member, online
+    // users when the index returns them in a usable shape). Set to
+    // false to force every path back to the DOM scraper. Section topic
+    // lists, the online page, members, group pages, the groups legend
+    // and the "most online" record stay DOM-based.
     const ENABLE_API_BOARDS = true;
 
     // Cached forum index — convertBoards() and convertStats() both
@@ -2310,6 +2312,78 @@ const ForumBoardsModule = (function () {
         return { count: postsData.length };
     }
    
+    // ─── Stats from the cached forum index (/api.php) ────────────────────
+    // Field names verified against the index dump: members, posts, topics,
+    // totalVisits, monthVisits, topForum, lastMemberId, lastMemberName,
+    // guestsOnline, anonOnline, usersOnline[]. Anything missing or
+    // malformed is simply left out, so the caller keeps the DOM value.
+    function _isNum(v) {
+        return v !== null && v !== '' && v !== undefined && isFinite(Number(v));
+    }
+    function _fmtNum(v) {
+        return Number(v).toLocaleString('en-US');
+    }
+    function _decodeEntities(str) {
+        if (!str || typeof str !== 'string' || str.indexOf('&') === -1) return str || '';
+        var ta = document.createElement('textarea');
+        ta.innerHTML = str;
+        return ta.value;
+    }
+
+    async function getStatsFromApi() {
+        var idx = await fetchForumIndex();
+        var st = idx && idx.stats;
+        if (!st || typeof st !== 'object') return null;
+        // Require the three core counters; otherwise treat the response
+        // as unusable and let the DOM scraper handle everything.
+        if (!_isNum(st.members) || !_isNum(st.posts) || !_isNum(st.topics)) return null;
+
+        var stats = {
+            posts: _fmtNum(st.posts),
+            topics: _fmtNum(st.topics),
+            members: _fmtNum(st.members)
+        };
+        if (_isNum(st.totalVisits)) stats.totalVisits = _fmtNum(st.totalVisits);
+        if (_isNum(st.monthVisits)) stats.monthlyVisits = _fmtNum(st.monthVisits);
+        if (_isNum(st.topForum))    stats.topForum = st.topForum + 'º';
+        if (_isNum(st.lastMemberId) && st.lastMemberName) {
+            stats.newestMember = {
+                name: _decodeEntities(String(st.lastMemberName)),
+                url: '/?act=Profile&MID=' + st.lastMemberId,
+                mid: String(st.lastMemberId)
+            };
+        }
+
+        var online = { counts: {} };
+        if (_isNum(st.guestsOnline)) online.counts.guests = parseInt(st.guestsOnline, 10);
+        if (_isNum(st.anonOnline))   online.counts.anon = parseInt(st.anonOnline, 10);
+
+        // Online users: only trusted when every entry has an id and a
+        // name. An empty or oddly-shaped list means "don't know", not
+        // "nobody is online", so the DOM list is kept in that case.
+        if (Array.isArray(st.usersOnline) && st.usersOnline.length > 0) {
+            var list = [];
+            var ok = true;
+            st.usersOnline.forEach(function (u) {
+                if (!u || typeof u !== 'object') { ok = false; return; }
+                var id = u.id != null ? u.id : u.mid;
+                var name = u.nickname || u.name || u.username;
+                if (id == null || !name) { ok = false; return; }
+                list.push({
+                    username: _decodeEntities(String(name)),
+                    profileUrl: '/?act=Profile&MID=' + id,
+                    mid: String(id),
+                    groupClass: u.group && u.group.name ? getGroupClass(u) : 'group-member'
+                });
+            });
+            if (ok && list.length > 0) {
+                online.users = list;
+                online.counts.members = list.length;
+            }
+        }
+        return { stats: stats, online: online };
+    }
+
     async function convertStats() {
         if (conversionInProgress) return;
         conversionInProgress = true;
@@ -2322,6 +2396,21 @@ const ForumBoardsModule = (function () {
 
             var onlineData = extractOnlineUsers(legacyStats);
             var statsData = extractForumStatistics(legacyStats);
+
+            // API values win where present; DOM-only fields (e.g. the
+            // "most online" record) and any missing values are kept.
+            if (ENABLE_API_BOARDS) {
+                try {
+                    var apiStats = await getStatsFromApi();
+                    if (apiStats) {
+                        statsData = Object.assign({}, statsData, apiStats.stats);
+                        Object.assign(onlineData.counts, apiStats.online.counts);
+                        if (apiStats.online.users) onlineData.users = apiStats.online.users;
+                    }
+                } catch (e) {
+                    console.warn('[BoardsModule] Stats API failed, using DOM values:', e);
+                }
+            }
 
             await fetchOnlineUsers(onlineData.users);
 
