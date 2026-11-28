@@ -498,8 +498,8 @@
     // Page-lifetime prefetch handoff. Topic / section JSON must stay fresh
     // (a reply or new topic must show up immediately), so it is NOT written to
     // the 3-minute sessionStorage cache. Instead the in-flight request is
-    // parked in memory; posts.js / boards.js take() it once (<10 s old) instead
-    // of issuing the same request again. Endpoint strings must match theirs.
+    // parked in memory and shared (<10 s) with posts.js / boards.js /
+    // breadcrumbs.js via ForumApiPrefetch.start(). Endpoint strings must match.
     var prefetchStore = {};
     function startApiPrefetch(endpoint) {
         var p = fetch(endpoint, { credentials: 'same-origin', cache: 'no-store' })
@@ -508,12 +508,14 @@
         prefetchStore[endpoint] = { ts: Date.now(), promise: p };
         return p;
     }
+    // start(endpoint): join the in-flight / recent (<10 s) request for this
+    // exact endpoint, or begin one. Every consumer (posts.js, boards.js,
+    // breadcrumbs.js) calls this, so the page issues the request once.
     globalThis.ForumApiPrefetch = {
-        take: function (endpoint) {
+        start: function (endpoint) {
             var entry = prefetchStore[endpoint];
-            if (!entry) return null;
-            delete prefetchStore[endpoint];
-            return (Date.now() - entry.ts <= 10000) ? entry.promise : null;
+            if (entry && Date.now() - entry.ts <= 10000) return entry.promise;
+            return startApiPrefetch(endpoint);
         }
     };
 
