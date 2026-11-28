@@ -328,7 +328,7 @@ whenBodyReady(() => {
 
                 if (onPage(PAGE_GATES.mediaContent)) {
                     enhTasks.push(
-                        loadScript("https://cdn.jsdelivr.net/gh/hu6amini/perve_avenue@151c5f3d7261d38364c8f59934c1d7b87d72238b/modules/posts.min.js")
+                        loadScript("https://cdn.jsdelivr.net/gh/hu6amini/perve_avenue@a64f619bf32dc8408200ae14cf5b75598443ce9d/modules/posts.min.js")
                     );
                 }
 
