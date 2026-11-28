@@ -854,18 +854,6 @@ function postProcessPreviewContent(el) {
     });
 }
 
-    // msg.user.id is 0 for the founder/admin. Recover the real MID from the
-    // avatar URL (.../fc<mid>/...) or from the topic starter if this is the OP.
-    function resolveMessageUserId(msg, topicData) {
-        const user = (msg && msg.user) || {};
-        if (user.id && String(user.id) !== '0') return user.id;
-        const m = (user.avatar || '').match(/\/fc(\d+)\//);
-        if (m) return parseInt(m[1], 10);
-        const starter = topicData && topicData.starter;
-        if (starter && starter.nickname && starter.nickname === user.nickname) return starter.id;
-        return null;
-    }
-
     function getSignatureHtml($post) {
         const signature = $post.querySelector('.signature');
         if (!signature) return '';
@@ -4925,9 +4913,9 @@ function extractEditInfoFromContent(html) {
     };
 }
 
-function deriveAvailableActions({ message, info, viewerMid, viewerPerm, authorMid }) {
+function deriveAvailableActions({ message, info, viewerMid, viewerPerm }) {
     const isOpen = info?.open_topic === 1 && info?.read_only === 0;
-    const isSelf = viewerMid != null && String(authorMid ?? message.user?.id) === String(viewerMid);
+    const isSelf = viewerMid != null && String(message.user?.id) === String(viewerMid);
 
     const perm = viewerPerm || {};
     const isGlobalStaff = perm.founder === 1 || perm.admin === 1 || perm.global_mod === 1;
@@ -4952,14 +4940,25 @@ function deriveAvailableActions({ message, info, viewerMid, viewerPerm, authorMi
     };
 }
 
+function renderApiAttachment(att) {
+    if (!att || !att.url) return '';
+    const name = att.name || 'attachment';
+    const ext = (name.includes('.') ? name.split('.').pop() : '').toLowerCase();
+    // API reports a generic MIME type (a .zip comes back as text/plain), so go by extension.
+    const isImage = ['jpg', 'jpeg', 'png', 'gif', 'webp', 'avif', 'bmp', 'svg'].includes(ext);
+    if (isImage) return buildModernImageAttachment(att.url, name, null, null, att.url);
+    return buildModernFileAttachment(name, att.url, parseInt(att.hits, 10) || 0, ext ? ext.toUpperCase() : 'FILE');
+}
+
 function buildPostDataFromApi({ message, topicData, apiUser, viewerContext, postNumber }) {
-    const resolvedMid = resolveMessageUserId(message, topicData);
     const user = message.user || {};
     const info = message.info || {};
     const points = info.points || {};
 
     let contentHtml = transformContentHtmlString(message.content || '');
     contentHtml = contentHtml.replace(/<p>\s*<\/p>/g, '');
+    // Attachments come as a separate field in the API, not inside content
+    contentHtml += renderApiAttachment(message.attachment);
 
     const rank = deriveRankFromTitles(topicData.titles, apiUser?.messages ?? 0);
     const customTitle = user.title ? sanitizeHTML(user.title) : '';
@@ -4984,8 +4983,9 @@ function buildPostDataFromApi({ message, topicData, apiUser, viewerContext, post
     // ever starts returning signatures, the first branch wins automatically
     // and the DOM lookup becomes a no-op.
     let signatureHtml = '';
-    if (user.signature) {
-        signatureHtml = paragraphizeHtml(user.signature);
+    const apiSignature = user.signature || apiUser?.signature || '';
+    if (apiSignature) {
+        signatureHtml = paragraphizeHtml(apiSignature);
     } else {
         const legacyPost = document.getElementById(CONFIG.POST_ID_PREFIX + message.id);
         if (legacyPost) {
@@ -4995,7 +4995,7 @@ function buildPostDataFromApi({ message, topicData, apiUser, viewerContext, post
 
     const data = {
         postId: String(message.id),
-        mid: resolvedMid != null ? String(resolvedMid) : null,
+        mid: user.id != null ? String(user.id) : null,
         originalPost: null,
         username: user.nickname || 'Unknown',
         groupText: user.group?.name || 'Member',
@@ -5018,8 +5018,7 @@ function buildPostDataFromApi({ message, topicData, apiUser, viewerContext, post
             message,
             info: topicData.info,
             viewerMid: viewerContext.mid,
-            viewerPerm: viewerContext.permission,
-            authorMid: resolvedMid
+            viewerPerm: viewerContext.permission
         }),
         isMemberPostsPage: false,
         hideActions: false,
@@ -5153,7 +5152,7 @@ const topicData = await fetchTopicPage(topicId, postStartOffset);
 
 const mids = [...new Set(
     topicData.messages
-        .map(m => resolveMessageUserId(m, topicData))
+        .map(m => m.user?.id)
         .filter(id => id != null)
         .map(String)
 )];
@@ -5171,8 +5170,7 @@ const mids = [...new Set(
 
     for (let i = 0; i < topicData.messages.length; i++) {
         const message = topicData.messages[i];
-        const resolvedMid = resolveMessageUserId(message, topicData);
-        const apiUser = resolvedMid != null ? userDataCache.get(String(resolvedMid)) : null;
+        const apiUser = message.user?.id ? userDataCache.get(String(message.user.id)) : null;
         const data = buildPostDataFromApi({
             message, topicData, apiUser, viewerContext,
             postNumber: postStartOffset + i + 1
