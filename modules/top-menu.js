@@ -29,7 +29,6 @@ const ForumTopMenuModule = (function () {
     let lastY = 0;
     let ticking = false;
     let openDropdownTrigger = null;
-    const userApiCache = new Map();
     let cachedSections = null; // Cache for the Sections API
 
     // ─── Helpers ──────────────────────────────────────────────
@@ -163,60 +162,44 @@ function getGroupClass(user) {
         }
     }
 
+    // ─── Viewer / user lookups via the shared ForumApiCache ───
+    // Same endpoint string as boards.js / posts.js so one request serves all
+    // modules (3 min TTL, sessionStorage-backed, in-flight deduped).
+    const API_TIMEOUT_MS = 3000;
+
+    function userEndpoint(mid) {
+        return '/api.php?mid=' + encodeURIComponent(String(mid));
+    }
+
+    function pickUser(data, mid) {
+        if (!data || typeof data !== 'object') return null;
+        const user = data['m' + mid] || data.info || null;
+        return user && user.id ? user : null;
+    }
+
+    // Synchronous: returns the cached user or null. Never touches the network.
+    function peekUserData(mid) {
+        const cache = globalThis.ForumApiCache;
+        if (!cache || mid == null) return null;
+        return pickUser(cache.peek(userEndpoint(mid)), mid);
+    }
+
     async function fetchUserData(mid) {
+        if (mid == null) return null;
+        const ep = userEndpoint(mid);
+        const cache = globalThis.ForumApiCache;
+        let timer;
         try {
-            const res = await fetch(`/api.php?mid=${mid}`);
-            if (!res.ok) return null;
-            const data = await res.json();
-            return data['m' + mid] || data.info || null;
+            const request = cache
+                ? cache.get(ep)
+                : fetch(ep, { credentials: 'same-origin' }).then(r => r.ok ? r.json() : null);
+            const timeout = new Promise(resolve => { timer = setTimeout(() => resolve(null), API_TIMEOUT_MS); });
+            return pickUser(await Promise.race([request, timeout]), mid);
         } catch (e) {
             console.warn('[TopMenu] Failed to fetch user data', e);
             return null;
-        }
-    }
-
-    function normalizeAvatarUrl(url) {
-        if (!url || typeof url !== 'string') return '';
-        const trimmed = url.trim();
-        if (!trimmed) return '';
-        if (trimmed.startsWith('//')) return 'https:' + trimmed;
-        if (trimmed.startsWith('http://') && window.location.protocol === 'https:') {
-            return trimmed.replace(/^http:\/\//i, 'https://');
-        }
-        return trimmed;
-    }
-
-    function buildAvatarHtml(avatarSrc, username) {
-        const cleanSrc = normalizeAvatarUrl(avatarSrc);
-        if (cleanSrc) {
-            return '<img src="' + escapeHtml(cleanSrc) + '" alt="" loading="lazy" class="mfn-avatar-img">';
-        }
-        const initial = (username || 'U').charAt(0).toUpperCase();
-        return '<span class="mfn-avatar-fallback">' + escapeHtml(initial) + '</span>';
-    }
-
-    async function fetchUserByMid(mid) {
-        if (mid == null) return null;
-        const key = String(mid).trim();
-        if (!/^\d+$/.test(key)) return null;
-        if (userApiCache.has(key)) return userApiCache.get(key);
-
-        try {
-            const resp = await fetch(
-                window.location.origin + '/api.php?mid=' + encodeURIComponent(key),
-                { credentials: 'same-origin' }
-            );
-            if (!resp.ok) return null;
-            const data = await resp.json();
-            const user = data['m' + key] || data.info || null;
-            if (user && (user.id || user.nickname || user.avatar)) {
-                userApiCache.set(key, user);
-                return user;
-            }
-            return null;
-        } catch (err) {
-            console.warn('[TopMenu] API user fetch failed for MID ' + key + ':', err);
-            return null;
+        } finally {
+            clearTimeout(timer);
         }
     }
 
@@ -857,6 +840,13 @@ function getGroupClass(user) {
                                         tItem.innerHTML = `<span class="mfn-ac-topic-title">${escapeHtml(t.title)}</span><span class="mfn-ac-topic-section">${escapeHtml(t.section_name)}</span>`;
                                         autocompletePanel.appendChild(tItem);
                                     });
+                                    const total = parseInt(data.count, 10);
+                                    if (total > data.threads.length) {
+                                        const more = document.createElement('div');
+                                        more.className = 'mfn-ac-empty';
+                                        more.textContent = 'Showing ' + data.threads.length + ' of ' + total + ' topics';
+                                        autocompletePanel.appendChild(more);
+                                    }
                                 } else {
                                     autocompletePanel.innerHTML = '<div class="mfn-ac-empty">No topics found.</div>';
                                 }
@@ -965,9 +955,10 @@ function getGroupClass(user) {
                     if (!cachedSections) {
                         searchInput.placeholder = 'Loading sections...';
                         try {
-                            const res = await fetch('/api.php');
-                            const data = await res.json();
-                            cachedSections = data.sections || [];
+                            const data = globalThis.ForumApiCache
+                                ? await globalThis.ForumApiCache.get('/api.php')
+                                : await (await fetch('/api.php')).json();
+                            cachedSections = (data && data.sections) || [];
                         } catch (err) { cachedSections = []; }
                     }
                     searchInput.placeholder = 'Filter sections...';
@@ -1103,12 +1094,18 @@ function getGroupClass(user) {
         const loggedIn = isLoggedIn();
         const user = loggedIn ? extractUser() : null;
         
+        // Never block the header on the network: use the cached profile if
+        // there is one, otherwise render from the legacy menu data and
+        // upgrade avatar / group colour in place when the API answers.
         let apiUser = null;
+        let apiUserPending = null;
         if (user && user.mid) {
-            apiUser = await fetchUserData(user.mid);
+            apiUser = peekUserData(user.mid);
             if (apiUser) {
                 user.username = apiUser.nickname || user.username;
                 user.avatarSrc = apiUser.avatar || user.avatarSrc;
+            } else {
+                apiUserPending = fetchUserData(user.mid);
             }
         }
 
@@ -1133,6 +1130,28 @@ function getGroupClass(user) {
         navEl = buildNav(data);
         menuWrap.parentNode.insertBefore(navEl, menuWrap);
         menuWrap.setAttribute('aria-hidden', 'true');
+
+        if (apiUserPending) {
+            apiUserPending.then(function (u) {
+                if (!u || !navEl) return;
+                user.username = u.nickname || user.username;
+                user.avatarSrc = u.avatar || user.avatarSrc;
+                const groupClass = getGroupClass(u);
+                const small = navEl.querySelector('.mfn-user-trigger .mfn-avatar');
+                if (small) {
+                    small.className = 'mfn-avatar ' + groupClass;
+                    small.innerHTML = generateAvatarHtml(u, user.username, user.mid, 32);
+                }
+                const large = navEl.querySelector('.mfn-user-panel-head .mfn-avatar');
+                if (large) {
+                    large.className = 'mfn-avatar mfn-avatar--lg ' + groupClass;
+                    large.innerHTML = generateAvatarHtml(u, user.username, user.mid, 44);
+                }
+                navEl.querySelectorAll('.mfn-user-name, .mfn-user-panel-name').forEach(function (el) {
+                    el.textContent = user.username;
+                });
+            });
+        }
 
         // ── FIX: Start polling for Tippy ──
         initHeaderTippys(); 
