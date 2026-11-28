@@ -569,38 +569,42 @@ function parseDateFromTitle(title) {
         return { type: 'initial', initial: safeInitial, bgColor: bgColor };
     }
 
-    function getUserBannerUrl(user) {
-    const contacts = user && user.contacts;
-    if (!contacts) return null;
+function getUserBannerUrl(user) {
+    const rawTitle = user && typeof user.title === 'string' ? user.title.trim() : '';
+    if (!rawTitle) return null;
 
-    // Collect candidate strings whether contacts is an object or an array
-    const values = Array.isArray(contacts)
-        ? contacts.map(c => (typeof c === 'string' ? c : (c && (c.value || c.url || c.text)) || ''))
-        : Object.values(contacts).map(v => (typeof v === 'string' ? v : (v && (v.value || v.url)) || ''));
+    let bannerUrl = null;
 
-    for (let i = 0; i < values.length; i++) {
-        let raw = String(values[i] || '').trim();
-        if (!raw) continue;
-
-        // Support raw URLs or [img]URL[/img] BBCode
-        const bbMatch = raw.match(/\[img\](https?:\/\/[^\s[\]]+)\[\/img\]/i);
-        if (bbMatch) raw = bbMatch[1];
-
-        // Match direct image URLs or known image hosts
-        if (!isValidAvatarUrl(raw)) continue;
-        if (!/\.(png|jpe?g|webp|gif|avif)(\?.*|#.*)?$/i.test(raw) && raw.indexOf('upload.forumfree.net') === -1) {
-            continue;
+    // 1. Primary format: [IMG]https://...[/IMG] (case-insensitive)
+    const imgTagMatch = rawTitle.match(/\[img\]([\s\S]*?)\[\/img\]/i);
+    if (imgTagMatch && imgTagMatch[1]) {
+        const candidate = decodeHtmlEntities(imgTagMatch[1]).trim();
+        if (isValidAvatarUrl(candidate)) {
+            bannerUrl = candidate;
         }
-
-        if (raw.startsWith('//')) raw = 'https:' + raw;
-        if (raw.startsWith('http://') && window.location.protocol === 'https:') {
-            raw = raw.replace('http://', 'https://');
-        }
-
-        return optimizeImageUrl(raw, 600, 200);
     }
 
-    return null;
+    // 2. Fallback if user.title contains an autolinked <a href="...">
+    if (!bannerUrl && /<a\b[^>]*href=/i.test(rawTitle)) {
+        const tmp = document.createElement('div');
+        tmp.innerHTML = rawTitle;
+        const anchor = tmp.querySelector('a[href]');
+        if (anchor) {
+            const href = decodeHtmlEntities(anchor.getAttribute('href') || '').trim();
+            if (isValidAvatarUrl(href)) {
+                bannerUrl = href;
+            }
+        }
+    }
+
+    if (!bannerUrl) return null;
+
+    if (bannerUrl.startsWith('//')) bannerUrl = 'https:' + bannerUrl;
+    if (bannerUrl.startsWith('http://') && window.location.protocol === 'https:') {
+        bannerUrl = bannerUrl.replace('http://', 'https://');
+    }
+
+    return optimizeImageUrl(bannerUrl, 600, 200);
 }
 
     // ============================================================================
