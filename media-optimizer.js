@@ -425,6 +425,10 @@
     // Shared cache contract with media-dimensions: key = 'mfs_api:<endpoint>',
     // value = JSON { ts, data }. TTL 3 minutes.
     function fetchCachedApi(endpoint) {
+        // Prefer the shared ForumApiCache (in-flight dedupe, one storage
+        // contract for every module). The private copy below is a fallback
+        // for pages where api-cache.js didn't load.
+        if (globalThis.ForumApiCache) return globalThis.ForumApiCache.get(endpoint);
         var now = Date.now();
         var mem = state.apiMemoryCache[endpoint];
         if (mem && now - mem.ts < CONFIG.apiCacheTtlMs) {
@@ -491,13 +495,45 @@
         document.head.appendChild(pc);
     }
 
+    // Page-lifetime prefetch handoff. Topic / section JSON must stay fresh
+    // (a reply or new topic must show up immediately), so it is NOT written to
+    // the 3-minute sessionStorage cache. Instead the in-flight request is
+    // parked in memory; posts.js / boards.js take() it once (<10 s old) instead
+    // of issuing the same request again. Endpoint strings must match theirs.
+    var prefetchStore = {};
+    function startApiPrefetch(endpoint) {
+        var p = fetch(endpoint, { credentials: 'same-origin', cache: 'no-store' })
+            .then(function (res) { return res.ok ? res.json() : null; })
+            .catch(function () { return null; });
+        prefetchStore[endpoint] = { ts: Date.now(), promise: p };
+        return p;
+    }
+    globalThis.ForumApiPrefetch = {
+        take: function (endpoint) {
+            var entry = prefetchStore[endpoint];
+            if (!entry) return null;
+            delete prefetchStore[endpoint];
+            return (Date.now() - entry.ts <= 10000) ? entry.promise : null;
+        }
+    };
+
     function discoverApiMediaFromContext() {
         var search = window.location.search || '';
         var topicMatch = search.match(/[?&]t=(\d+)/);
         var sectionMatch = search.match(/[?&]f=(\d+)/);
+        var stRaw = (search.match(/[?&]st=([^&#]*)/) || [])[1];
+        var hasStParam = stRaw !== undefined;
+        var stNum = hasStParam && /^\d+$/.test(stRaw) ? parseInt(stRaw, 10) : 0;
 
         if (topicMatch && topicMatch[1]) {
-            fetchCachedApi('/api.php?t=' + encodeURIComponent(topicMatch[1]))
+            // st=lastpost / firstpost etc. need posts.js to resolve the real
+            // offset first, so there is nothing safe to prefetch for them.
+            if (hasStParam && !/^\d+$/.test(stRaw)) return;
+            // Same endpoint string posts.js builds (t first, st only if > 0) —
+            // and the current page, not page 1.
+            var topicEndpoint = '/api.php?t=' + encodeURIComponent(topicMatch[1]) +
+                (stNum > 0 ? '&st=' + stNum : '');
+            startApiPrefetch(topicEndpoint)
                 .then(function (topicData) {
                     var msgs = (topicData && topicData.messages) || [];
                     if (msgs.length > 0 && msgs[0].content) {
@@ -509,11 +545,15 @@
                 })
                 .catch(function () {});
         } else if (sectionMatch && sectionMatch[1]) {
-            // Section pages: desc HTML has no width/height (verified against live API),
-            // so per-thumbnail preloading would race the browser and add no value. Just
-            // warm the connection and prime the cache for other consumers.
+            // Section pages: thumbnails have no width/height in desc, so
+            // per-thumbnail preloading would only race the browser. Warm the
+            // connection and start the section request that boards.js will
+            // take over (same endpoint string as its fetchSectionFromApi).
             addWeservPreconnect();
-            fetchCachedApi('/api.php?f=' + encodeURIComponent(sectionMatch[1])).catch(function () {});
+            if (!hasStParam || /^\d+$/.test(stRaw)) {
+                startApiPrefetch('/api.php?f=' + encodeURIComponent(sectionMatch[1]) +
+                    (stNum > 0 ? '&st=' + stNum : ''));
+            }
         }
     }
 
