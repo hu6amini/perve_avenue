@@ -569,6 +569,40 @@ function parseDateFromTitle(title) {
         return { type: 'initial', initial: safeInitial, bgColor: bgColor };
     }
 
+    function getUserBannerUrl(user) {
+    const contacts = user && user.contacts;
+    if (!contacts) return null;
+
+    // Collect candidate strings whether contacts is an object or an array
+    const values = Array.isArray(contacts)
+        ? contacts.map(c => (typeof c === 'string' ? c : (c && (c.value || c.url || c.text)) || ''))
+        : Object.values(contacts).map(v => (typeof v === 'string' ? v : (v && (v.value || v.url)) || ''));
+
+    for (let i = 0; i < values.length; i++) {
+        let raw = String(values[i] || '').trim();
+        if (!raw) continue;
+
+        // Support raw URLs or [img]URL[/img] BBCode
+        const bbMatch = raw.match(/\[img\](https?:\/\/[^\s[\]]+)\[\/img\]/i);
+        if (bbMatch) raw = bbMatch[1];
+
+        // Match direct image URLs or known image hosts
+        if (!isValidAvatarUrl(raw)) continue;
+        if (!/\.(png|jpe?g|webp|gif|avif)(\?.*|#.*)?$/i.test(raw) && raw.indexOf('upload.forumfree.net') === -1) {
+            continue;
+        }
+
+        if (raw.startsWith('//')) raw = 'https:' + raw;
+        if (raw.startsWith('http://') && window.location.protocol === 'https:') {
+            raw = raw.replace('http://', 'https://');
+        }
+
+        return optimizeImageUrl(raw, 600, 200);
+    }
+
+    return null;
+}
+
     // ============================================================================
     // HELPERS
     // ============================================================================
@@ -2348,17 +2382,21 @@ function setupTooltipObserver() {
             joinDate = data.joinDate;
         }
 
-        const isOnline = (user?.status === 'online') || data.isOnline;
-        const groupClass = 'group-' + sanitizeGroupName(groupName);
+const bannerUrl = getUserBannerUrl(user);
+const headerClass = bannerUrl ? 'tip-profile-header has-banner' : 'tip-profile-header';
+const headerStyle = bannerUrl
+    ? ' style="background-image: linear-gradient(180deg, rgba(15, 23, 42, 0.35) 0%, rgba(15, 23, 42, 0.85) 100%), url(\'' + escapeHtml(bannerUrl) + '\'); background-size: cover; background-position: center;"'
+    : '';
 
-        return '<div class="tip-profile ' + groupClass + '">' +
-            '<div class="tip-profile-header">' +
-                '<div class="tip-profile-avatar">' + avatarHtml + '</div>' +
-                '<div class="tip-profile-names">' +
-                    '<a class="tip-profile-username" href="' + escapeHtml(profileUrl) + '">' + escapeHtml(data.username) + '</a>' +
-                    '<span class="tip-profile-group">' + escapeHtml(groupName) + '</span>' +
-                '</div>' +
-                '<span class="tip-profile-status ' + (isOnline ? 'online' : 'offline') + '"></span>' +
+return '<div class="tip-profile ' + groupClass + '">' +
+    '<div class="' + headerClass + '"' + headerStyle + '>' +
+        '<div class="tip-profile-avatar">' + avatarHtml + '</div>' +
+        '<div class="tip-profile-names">' +
+            '<a class="tip-profile-username" href="' + escapeHtml(profileUrl) + '">' + escapeHtml(data.username) + '</a>' +
+            '<span class="tip-profile-group">' + escapeHtml(groupName) + '</span>' +
+        '</div>' +
+        '<span class="tip-profile-status ' + (isOnline ? 'online' : 'offline') + '"></span>' +
+    '</div>' +
             '</div>' +
             '<div class="tip-profile-stats">' +
                 '<div class="tip-profile-stat"><i class="fa-regular fa-message"></i><span class="tip-profile-stat-value">' + formatNumber(postCount) + '</span><span class="tip-profile-stat-label">posts</span></div>' +
