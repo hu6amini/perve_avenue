@@ -2159,7 +2159,9 @@
   padding: 0;
   overflow: hidden;
   max-width: 320px !important;
-  padding: var(--space-2xs) var(--space-sm);
+}
+.tippy-box[data-theme~='emerald'] .tippy-content:not(:has(> [class^="tip-"])) {
+  padding: var(--pad-3) var(--pad-4);
 }
 .tippy-box[data-theme~='emerald'] > .tippy-arrow::before { color: var(--surface-color); }
 .tippy-box[data-theme~='emerald'][data-placement^='top']    > .tippy-arrow::before { border-top-color: var(--surface-color); }
