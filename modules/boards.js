@@ -91,8 +91,9 @@ const ForumBoardsModule = (function () {
     // stats block (getStatsFromApi — counts, newest member, online
     // users when the index returns them in a usable shape). Set to
     // false to force every path back to the DOM scraper. Section topic
-    // lists, the online page, members, group pages, the groups legend
-    // and the "most online" record stay DOM-based.
+    // lists (?f=) also have an API path now; the online page, members,
+    // group pages, the groups legend and the "most online" record stay
+    // DOM-based.
     const ENABLE_API_BOARDS = true;
 
     // Cached forum index — convertBoards() and convertStats() both
@@ -2072,6 +2073,148 @@ const ForumBoardsModule = (function () {
         }
     }
 
+    // =========================================================================
+    // TOPIC LIST — API path (?f=<sectionId>[&st=<offset>])
+    // =========================================================================
+    // Verified shape of ?f= → threads[]:
+    //   { id, title (entity-encoded), desc (thumbnail <img> html),
+    //     info: { stats:{replies,views,points,pages},
+    //             start:{id,name,post_id,date}, last:{id,name,date},
+    //             status, pinned, poll_state, tracked } }
+    // Only two things still come from the legacy rows, because the API has
+    // no equivalent: the per-row status icon class and the unread (.on) flag.
+    // Rows are optional — without them sensible defaults are used.
+    const TOPIC_PAGE_SIZE = 15; // posts per topic page on this board
+
+    async function fetchSectionFromApi(forumId, st) {
+        const controller = new AbortController();
+        const timer = setTimeout(function () { controller.abort(); }, CONFIG.API_TIMEOUT);
+        try {
+            const url = '/api.php?f=' + encodeURIComponent(forumId) +
+                (st ? '&st=' + encodeURIComponent(st) : '');
+            const r = await fetch(url, {
+                credentials: 'same-origin',
+                cache: 'no-store',
+                signal: controller.signal
+            });
+            if (!r.ok) return null;
+            const data = await r.json();
+            if (!data || !Array.isArray(data.threads) || data.threads.length === 0) return null;
+            return data;
+        } catch (e) {
+            console.warn('[BoardsModule] Section API fetch failed:', e);
+            return null;
+        } finally {
+            clearTimeout(timer);
+        }
+    }
+
+    // desc is an <img> tag, sometimes entity-escaped. <template> parsing
+    // never loads or executes anything.
+    function thumbnailFromApiDesc(desc) {
+        if (!desc || typeof desc !== 'string') return null;
+        function findImg(html) {
+            const tpl = document.createElement('template');
+            tpl.innerHTML = html;
+            return tpl.content.querySelector('img');
+        }
+        let img = findImg(desc);
+        if (!img) img = findImg(_decodeEntities(desc));
+        if (!img) return null;
+        let url = img.getAttribute('data-original') || img.getAttribute('src') || '';
+        if (url.indexOf('//') === 0) url = 'https:' + url;
+        return isValidAvatarUrl(url) ? url : null;
+    }
+
+    function buildTopicDataFromApi(thread, rowById) {
+        const info = thread.info || {};
+        const stats = info.stats || {};
+        const start = info.start || {};
+        const last = info.last || {};
+        const id = String(thread.id);
+        const row = rowById.get(id) || null;
+
+        const title = _decodeEntities(String(thread.title || '')) || 'Unknown Topic';
+        const topicUrl = '/?t=' + id;
+        const pages = parseInt(stats.pages, 10) || 1;
+
+        const lastDate = last.date ? new Date(last.date) : null;
+        const hasLastDate = lastDate && !isNaN(lastDate.getTime());
+
+        const starterName = _decodeEntities(String(start.name || ''));
+        const starterMid = start.id ? String(start.id) : null;
+        const lastPosterName = _decodeEntities(String(last.name || '')) || starterName;
+        const lastPosterMid = last.id ? String(last.id) : starterMid;
+
+        let statusIconClass = 'fa-regular fa-folder';
+        const rowIcon = row && row.querySelector('.aa i');
+        if (rowIcon) statusIconClass = rowIcon.className;
+        else if (info.status === 'closed' || info.status === 'locked') statusIconClass = 'fa-regular fa-lock';
+        else if (info.pinned) statusIconClass = 'fa-regular fa-thumbtack';
+
+        return {
+            topicId: id,
+            isUnread: !!(row && row.classList.contains('on')),
+            statusIconClass: statusIconClass,
+            topicTitle: title,
+            topicUrl: topicUrl,
+            topicTitleHTML: escapeHtml(title),
+            thumbnailUrl: thumbnailFromApiDesc(thread.desc),
+            starterName: starterName,
+            starterUrl: starterMid ? '/?act=Profile&MID=' + starterMid : '#',
+            starterMid: starterMid,
+            replyCount: parseInt(stats.replies, 10) || 0,
+            viewCount: parseInt(stats.views, 10) || 0,
+            lastPostRelative: hasLastDate ? getRelativeTimeString(lastDate) : '',
+            lastPostUrl: topicUrl + (pages > 1 ? '&st=' + ((pages - 1) * TOPIC_PAGE_SIZE) : '') + '#lastpost',
+            lastPosterName: lastPosterName,
+            lastPosterUrl: lastPosterMid ? '/?act=Profile&MID=' + lastPosterMid : '#',
+            lastPosterMid: lastPosterMid,
+            forumName: '',
+            forumUrl: ''
+        };
+    }
+
+    async function convertTopicsViaApi(container, topicRows) {
+        const params = new URLSearchParams(window.location.search);
+        const forumId = params.get('f');
+        if (!forumId || !/^\d+$/.test(forumId)) return null;
+        const st = params.get('st');
+        if (st && !/^\d+$/.test(st)) return null;
+
+        const section = await fetchSectionFromApi(forumId, st);
+        if (!section) return null;
+
+        const rowById = new Map();
+        topicRows.forEach(function (row) {
+            const rid = extractTopicIdFromClass(row);
+            if (rid) rowById.set(rid, row);
+        });
+
+        const topics = section.threads.map(function (t) { return buildTopicDataFromApi(t, rowById); });
+
+        await fetchAllRelevantUsersByMidList(topics.map(function (t) { return t.lastPosterMid; }));
+
+        const sectionName = section.info && section.info.name
+            ? _decodeEntities(String(section.info.name)) : 'Forum';
+
+        var html =
+            '<section class="topic-list-section">' +
+                '<header class="topic-list-header">' +
+                    '<h2 class="topic-list-title">' + escapeHtml(sectionName) + '</h2>' +
+                '</header>' +
+                '<div class="modern-cards-grid">';
+        topics.forEach(function (data, index) {
+            const color = TOPIC_PLACEHOLDER_COLORS[index % TOPIC_PLACEHOLDER_COLORS.length];
+            html += generateTopicCard(data, color);
+        });
+        html += '</div></section>';
+
+        container.innerHTML = html;
+        attachProfileTipsToCards(container);
+        return { count: topics.length };
+    }
+
     async function convertTopics() {
         if (conversionInProgress) return;
         conversionInProgress = true;
@@ -2083,9 +2226,25 @@ const ForumBoardsModule = (function () {
             if (!forumWrapper) return;
 
             const topicList = forumWrapper.querySelector(CONFIG.TOPIC_LIST_SELECTOR);
-            if (!topicList) return;
+            const topicRows = topicList
+                ? topicList.querySelectorAll(CONFIG.TOPIC_ROW_SELECTOR)
+                : [];
 
-            const topicRows = topicList.querySelectorAll(CONFIG.TOPIC_ROW_SELECTOR);
+            // API path first (section pages only). Legacy rows are only
+            // consulted for icon class + unread state.
+            if (ENABLE_API_BOARDS && document.body.id === 'forum') {
+                try {
+                    const apiResult = await convertTopicsViaApi(container, Array.from(topicRows));
+                    if (apiResult) {
+                        console.log('[BoardsModule] Topic list modernised via API (' + apiResult.count + ' topics)');
+                        return;
+                    }
+                } catch (e) {
+                    console.warn('[BoardsModule] Topic API path threw, falling back to DOM:', e);
+                }
+            }
+
+            if (!topicList) return;
             if (topicRows.length === 0) return;
 
             await fetchAllRelevantUsers([], Array.from(topicRows));
