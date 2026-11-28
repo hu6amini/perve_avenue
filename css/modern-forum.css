@@ -4113,7 +4113,13 @@ section.modern-stats {
   gap: var(--space-xs);
   flex-wrap: wrap;
 }
-.modern-title a { color: var(--text-primary); text-decoration: none; }
+.modern-title a { 
+ color: var(--text-primary); 
+ text-decoration: none; 
+ overflow: hidden;
+ text-overflow: ellipsis;
+ white-space: nowrap;
+}
 .modern-title a:hover { color: var(--primary-light); text-decoration: underline; }
 
 .latest-post-title {
