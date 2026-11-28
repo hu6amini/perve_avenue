@@ -941,7 +941,7 @@ async function fetchTopicUsersFromApi(topicData) {
 // or from the topic starter if this user is the OP.
 function resolveMessageUserId(msg, topicData) {
     const user = msg.user || {};
-    if (user.id && user.id !== 0 && user.id !== '0') return user.id;
+    if (user.id && user.id !== 0) return user.id;
 
     const avatarMatch = (user.avatar || '').match(/\/fc(\d+)\//);
     if (avatarMatch) return parseInt(avatarMatch[1], 10);
@@ -950,8 +950,7 @@ function resolveMessageUserId(msg, topicData) {
     if (starter && starter.nickname && starter.nickname === user.nickname) {
         return starter.id;
     }
-
-    return null; // unknown — treat as no-profile
+    return null;
 }
 
 function normalizeApiPoints(points) {
@@ -5306,6 +5305,10 @@ function deriveAvailableActions({ message, info, viewerMid, viewerPerm }) {
 }
 
 function buildPostDataFromApi({ message, topicData, apiUser, viewerContext, postNumber }) {
+    const resolvedMid = resolveMessageUserId(message, topicData);
+    const apiUser = resolvedMid != null
+    ? userDataCache.get(String(resolvedMid))
+    : null;
     const user = message.user || {};
     const info = message.info || {};
     const points = info.points || {};
@@ -5467,23 +5470,44 @@ function hydrateIpFromLegacy(postsData, container) {
     });
 }
 
-async function convertAllPostsViaApi() {
+    // ─────────────────────────────────────────────────────────────
+    // Pagination offset resolver — maps st=lastpost / st=firstpost
+    // to real numeric offsets. Placed before convertAllPostsViaApi
+    // because that function calls it.
+    // ─────────────────────────────────────────────────────────────
+    async function resolveStOffset(topicId, st) {
+        if (!st) return 0;
+        if (/^\d+$/.test(st)) {
+            const n = parseInt(st, 10);
+            return n > 0 ? n : 0;
+        }
+        if (st === 'lastpost' || st === 'last') {
+            const probe = await fetchTopicPage(topicId, 0);
+            const pages = probe && probe.info && probe.info.pages;
+            const perPage = (probe && probe.messages && probe.messages.length) || 15;
+            if (pages && pages > 1) return (pages - 1) * perPage;
+            return 0;
+        }
+        return 0; // firstpost, or unknown → page 1
+    }
+
+  async function convertAllPostsViaApi() {
     if (document.body.id !== 'topic' && document.body.id !== 'blog') return null;
     const urlParams = new URLSearchParams(window.location.search);
     const topicId = urlParams.get('t');
     if (!topicId) return null;
 
-    const st = parseInt(urlParams.get('st') || '0', 10);
-    const postStartOffset = Number.isFinite(st) && st > 0 ? st : 0;
+const rawSt = urlParams.get('st') || '0';
+const postStartOffset = await resolveStOffset(topicId, rawSt);
 
-    const topicData = await fetchTopicPage(topicId, postStartOffset);
+const topicData = await fetchTopicPage(topicId, postStartOffset);
     if (!topicData) return null;
 
     const viewerContext = await resolveViewerContext();
 
-    const mids = [...new Set(
+const mids = [...new Set(
     topicData.messages
-        .map(m => m.user?.id)
+        .map(m => resolveMessageUserId(m, topicData))
         .filter(id => id != null)
         .map(String)
 )];
