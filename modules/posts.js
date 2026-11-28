@@ -5064,11 +5064,11 @@ async function fetchTopicPage(topicId, st) {
     }
     const url = '/api.php?' + params.toString();
     try {
-        // Reuse the request media-optimizer already started for this exact
-        // endpoint (one-shot, page-lifetime, never for cache-busted fetches).
+        // Join the request media-optimizer / breadcrumbs already started for this
+        // exact endpoint (page-lifetime, never for cache-busted fetches).
         let data = null;
         const prefetched = (!params.has('_t') && globalThis.ForumApiPrefetch)
-            ? globalThis.ForumApiPrefetch.take(url) : null;
+            ? globalThis.ForumApiPrefetch.start(url) : null;
         if (prefetched) data = await prefetched;
         if (!data) {
             const r = await fetch(url, {
