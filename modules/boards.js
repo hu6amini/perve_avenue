@@ -2085,15 +2085,22 @@ const ForumBoardsModule = (function () {
         const controller = new AbortController();
         const timer = setTimeout(function () { controller.abort(); }, CONFIG.API_TIMEOUT);
         try {
+            const stNum = st ? parseInt(st, 10) : 0;
             const url = '/api.php?f=' + encodeURIComponent(forumId) +
-                (st ? '&st=' + encodeURIComponent(st) : '');
-            const r = await fetch(url, {
-                credentials: 'same-origin',
-                cache: 'no-store',
-                signal: controller.signal
-            });
-            if (!r.ok) return null;
-            const data = await r.json();
+                (stNum > 0 ? '&st=' + stNum : '');
+            // Take over the request media-optimizer started for this endpoint.
+            const prefetched = globalThis.ForumApiPrefetch
+                ? globalThis.ForumApiPrefetch.take(url) : null;
+            let data = prefetched ? await prefetched : null;
+            if (!data) {
+                const r = await fetch(url, {
+                    credentials: 'same-origin',
+                    cache: 'no-store',
+                    signal: controller.signal
+                });
+                if (!r.ok) return null;
+                data = await r.json();
+            }
             if (!data || !Array.isArray(data.threads) || data.threads.length === 0) return null;
             return data;
         } catch (e) {
