@@ -243,7 +243,7 @@ whenBodyReady(() => {
 
             const resultsA = await Promise.allSettled([
                 loadScript("https://cdn.jsdelivr.net/npm/tippy.js@6.3.7/dist/tippy-bundle.umd.min.js"),
-                loadScript("https://cdn.jsdelivr.net/gh/hu6amini/perve_avenue@0f3e5b845e6f9497bd184918d72cc9f2957f0735/media-optimizer.min.js"),
+                loadScript("https://cdn.jsdelivr.net/gh/hu6amini/perve_avenue@b177014ac23bee306542326aef1c41c1a528b5e3/media-optimizer.min.js"),
                 loadScript("https://cdn.jsdelivr.net/gh/hu6amini/perve_avenue@1977fabb5553b0f825fa92671a03b2ae26c67702/core/event-bus.min.js")
             ]);
             const failedA = resultsA.filter(r => r.status === 'rejected');
@@ -319,16 +319,16 @@ whenBodyReady(() => {
 
                 const enhTasks = [
                     loadScript("https://cdn.jsdelivr.net/gh/hu6amini/perve_avenue@a7fd0dfe7297bcf6f2534f9a8b3398b909994cc3/modules/media-dimensions.min.js"),
-                    loadScript("https://cdn.jsdelivr.net/gh/hu6amini/perve_avenue@412a352bc3f67bb0f9a7d9806dcdae8b174ed1e0/modules/breadcrumbs.min.js"),
+                    loadScript("https://cdn.jsdelivr.net/gh/hu6amini/perve_avenue@98832ef61e13d85bcbb47f0a8c12a6c948de4eb2/modules/breadcrumbs.min.js"),
                     loadScript("https://cdn.jsdelivr.net/gh/hu6amini/perve_avenue@e47e4580f2127e02f42122349868a623b1f115d5/modules/twemoji.min.js"),
-                    loadScript("https://cdn.jsdelivr.net/gh/hu6amini/perve_avenue@5fed1d9c9136f07c5c3f0e91b6ee428c5e305b8a/modules/boards.min.js"),
+                    loadScript("https://cdn.jsdelivr.net/gh/hu6amini/perve_avenue@6ebe425d4b87ea16bd652506dbff2638329f0512/modules/boards.min.js"),
                     loadScript("https://cdn.jsdelivr.net/gh/hu6amini/perve_avenue@6a84d4d102192c98c13f4d6b2f1df381396de33e/modules/modals.min.js"),
                     loadScript("https://cdn.jsdelivr.net/gh/hu6amini/perve_avenue@02eeb0013286d890512c1f5feb957eed9219ed0d/modules/modern-chat.min.js")
                 ];
 
                 if (onPage(PAGE_GATES.mediaContent)) {
                     enhTasks.push(
-                        loadScript("https://cdn.jsdelivr.net/gh/hu6amini/perve_avenue@bd1efa875d1cb185cac22a3a670db084c0da645c/modules/posts.min.js")
+                        loadScript("https://cdn.jsdelivr.net/gh/hu6amini/perve_avenue@6c011e6d20041b78de0124c376e617dcec7f4352/modules/posts.min.js")
                     );
                 }
 
