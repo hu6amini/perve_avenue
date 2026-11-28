@@ -218,7 +218,7 @@ whenBodyReady(() => {
             console.debug(`[Boot] Phase A completed in ${(performance.now() - phaseAStart).toFixed(2)}ms`);
 
             // Fire-and-forget nav once Popper & Tippy are available
-            loadScript("https://cdn.jsdelivr.net/gh/hu6amini/perve_avenue@ade1650d39dba8862605bc54a10d1c2d8eccab3c/modules/top-menu.js")
+            loadScript("https://cdn.jsdelivr.net/gh/hu6amini/perve_avenue@4d8db2868f97de11984acabd2ad4facf40642d0a/modules/top-menu.js")
                 .catch(err => console.warn('[Boot] Top menu failed:', err));
 
             injectCriticalCSS();
