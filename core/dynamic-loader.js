@@ -588,8 +588,8 @@ whenBodyReady(() => {
             // PHASE A: Foundation — start media-optimizer & event-bus immediately,
             // while ensuring Popper loads before Tippy (and both before top-menu).
             const phaseAStart = performance.now();
-            const optimizerPromise = loadScript("https://cdn.jsdelivr.net/gh/hu6amini/perve_avenue@9e04af41beaed68bef4eb46f6409596868f5877f/media-optimizer.min.js");
             const eventBusPromise = loadScript("https://cdn.jsdelivr.net/gh/hu6amini/perve_avenue@1977fabb5553b0f825fa92671a03b2ae26c67702/core/event-bus.min.js");
+            const optimizerPromise = loadScript("https://cdn.jsdelivr.net/gh/hu6amini/perve_avenue@9e04af41beaed68bef4eb46f6409596868f5877f/media-optimizer.min.js");
             const tippyReadyPromise = loadScript("https://cdn.jsdelivr.net/npm/@popperjs/core@2.11.8/dist/umd/popper.min.js")
                 .then(() => loadScript("https://cdn.jsdelivr.net/npm/tippy.js@6.3.7/dist/tippy-bundle.umd.min.js"));
 
