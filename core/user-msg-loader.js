@@ -223,7 +223,7 @@ whenBodyReady(() => {
 
             const resultsA = await Promise.allSettled([
                 loadScript("https://cdn.jsdelivr.net/npm/tippy.js@6.3.7/dist/tippy-bundle.umd.min.js"),
-                loadScript("https://cdn.jsdelivr.net/gh/hu6amini/perve_avenue@9e04af41beaed68bef4eb46f6409596868f5877f/media-optimizer.min.js"),
+                loadScript("https://cdn.jsdelivr.net/gh/hu6amini/perve_avenue@0f3e5b845e6f9497bd184918d72cc9f2957f0735/media-optimizer.min.js"),
                 loadScript("https://cdn.jsdelivr.net/gh/hu6amini/perve_avenue@1977fabb5553b0f825fa92671a03b2ae26c67702/core/event-bus.min.js")
             ]);
             const failedA = resultsA.filter(r => r.status === 'rejected');
@@ -278,8 +278,8 @@ whenBodyReady(() => {
                 loadScript("https://cdn.jsdelivr.net/gh/hu6amini/perve_avenue@a7fd0dfe7297bcf6f2534f9a8b3398b909994cc3/modules/media-dimensions.min.js"),
                 loadScript("https://cdn.jsdelivr.net/gh/hu6amini/perve_avenue@412a352bc3f67bb0f9a7d9806dcdae8b174ed1e0/modules/breadcrumbs.min.js"),
                 loadScript("https://cdn.jsdelivr.net/gh/hu6amini/perve_avenue@e47e4580f2127e02f42122349868a623b1f115d5/modules/twemoji.min.js"),
-                loadScript("https://cdn.jsdelivr.net/gh/hu6amini/perve_avenue@7a0842c9a934492326f9fd4b94028948d102a505/modules/boards.min.js"),
-                loadScript("https://cdn.jsdelivr.net/gh/hu6amini/perve_avenue@a759925724b2123d809686b3c224dc5385758e42/modules/posts.min.js"),
+                loadScript("https://cdn.jsdelivr.net/gh/hu6amini/perve_avenue@5fed1d9c9136f07c5c3f0e91b6ee428c5e305b8a/modules/boards.min.js"),
+                loadScript("https://cdn.jsdelivr.net/gh/hu6amini/perve_avenue@bd1efa875d1cb185cac22a3a670db084c0da645c/modules/posts.min.js"),
                 loadScript("https://cdn.jsdelivr.net/gh/hu6amini/perve_avenue@6a84d4d102192c98c13f4d6b2f1df381396de33e/modules/modals.min.js"),
                 loadScript("https://cdn.jsdelivr.net/gh/hu6amini/perve_avenue@4b6c36ab3cde44f79c3ddb4f7dfbeed8b98a83b6/modules/quote-queue.min.js")
             ]);
