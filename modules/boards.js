@@ -2088,9 +2088,9 @@ const ForumBoardsModule = (function () {
             const stNum = st ? parseInt(st, 10) : 0;
             const url = '/api.php?f=' + encodeURIComponent(forumId) +
                 (stNum > 0 ? '&st=' + stNum : '');
-            // Take over the request media-optimizer started for this endpoint.
+            // Join the request media-optimizer / breadcrumbs started for this endpoint.
             const prefetched = globalThis.ForumApiPrefetch
-                ? globalThis.ForumApiPrefetch.take(url) : null;
+                ? globalThis.ForumApiPrefetch.start(url) : null;
             let data = prefetched ? await prefetched : null;
             if (!data) {
                 const r = await fetch(url, {
