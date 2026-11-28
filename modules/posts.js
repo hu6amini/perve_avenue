@@ -5064,15 +5064,23 @@ async function fetchTopicPage(topicId, st) {
     }
     const url = '/api.php?' + params.toString();
     try {
-        const r = await fetch(url, {
-            credentials: 'same-origin',
-            cache: 'no-store'
-        });
-        if (!r.ok) {
-            console.warn('[PostsModule] API topic fetch failed:', r.status, r.statusText);
-            return null;
+        // Reuse the request media-optimizer already started for this exact
+        // endpoint (one-shot, page-lifetime, never for cache-busted fetches).
+        let data = null;
+        const prefetched = (!params.has('_t') && globalThis.ForumApiPrefetch)
+            ? globalThis.ForumApiPrefetch.take(url) : null;
+        if (prefetched) data = await prefetched;
+        if (!data) {
+            const r = await fetch(url, {
+                credentials: 'same-origin',
+                cache: 'no-store'
+            });
+            if (!r.ok) {
+                console.warn('[PostsModule] API topic fetch failed:', r.status, r.statusText);
+                return null;
+            }
+            data = await r.json();
         }
-        const data = await r.json();
         if (!data || !Array.isArray(data.messages) || data.messages.length === 0) {
             console.warn('[PostsModule] API topic fetch returned no messages');
             return null;
