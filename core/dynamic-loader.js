@@ -304,7 +304,7 @@ whenBodyReady(() => {
 
                 const enhTasks = [
                     loadScript("https://cdn.jsdelivr.net/gh/hu6amini/perve_avenue@a7fd0dfe7297bcf6f2534f9a8b3398b909994cc3/modules/media-dimensions.min.js"),
-                    loadScript("https://cdn.jsdelivr.net/gh/hu6amini/perve_avenue@8327d3e44bf70f2b0541e15eb6bc783c76af9913/modules/breadcrumbs.min.js"),
+                    loadScript("https://cdn.jsdelivr.net/gh/hu6amini/perve_avenue@412a352bc3f67bb0f9a7d9806dcdae8b174ed1e0/modules/breadcrumbs.min.js"),
                     loadScript("https://cdn.jsdelivr.net/gh/hu6amini/perve_avenue@e47e4580f2127e02f42122349868a623b1f115d5/modules/twemoji.min.js"),
                     loadScript("https://cdn.jsdelivr.net/gh/hu6amini/perve_avenue@7ff3fff75dfe269a166cd374fb3cbe9abfb58acd/modules/boards.min.js"),
                     loadScript("https://cdn.jsdelivr.net/gh/hu6amini/perve_avenue@6a84d4d102192c98c13f4d6b2f1df381396de33e/modules/modals.min.js"),
