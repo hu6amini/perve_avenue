@@ -138,22 +138,16 @@ const ForumTopMenuModule = (function () {
         return null;
     }
 
-    function getGroupClass(user) {
-        if (!user || !user.group) return 'group-member';
-        const name = (user.group.name || '').toLowerCase();
-        const cls = (user.group.class || '').toLowerCase();
-        const body = (user.group.bodyclass || '').toLowerCase();
-        const all = name + ' ' + cls + ' ' + body;
+function sanitizeGroupName(n) {
+    if (!n) return 'member';
+    return n.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
+}
 
-        if (all.includes('founder')) return 'group-founder';
-        if (all.includes('admin') || all.includes('amministrat')) return 'group-administrator';
-        if (all.includes('global') && all.includes('mod')) return 'group-global-moderator';
-        if (all.includes('moderator') || all.includes('moderat')) return 'group-moderator';
-        if (all.includes('developer')) return 'group-developer';
-        if (all.includes('game dev')) return 'group-game-dev';
-        if (all.includes('fan')) return 'group-fan';
-        return 'group-member';
-    }
+function getGroupClass(user) {
+    if (!user || !user.group || !user.group.name) return 'group-member';
+    if ((user.group.class || '').includes('founder')) return 'group-founder';
+    return 'group-' + sanitizeGroupName(user.group.name);
+}
 
     function generateAvatarHtml(user, username, userId, size) {
         const groupClass = getGroupClass(user);
