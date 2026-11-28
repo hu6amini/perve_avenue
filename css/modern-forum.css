@@ -3337,66 +3337,34 @@ body.modal-open {
 .topic-starter.group-founder .topic-starter-avatar--initial {
     border-color: var(--group-founder);
 }
-.topic-starter.group-founder .topic-starter-avatar--initial {
-    background-color: var(--group-founder);
-}
-
 .topic-starter.group-administrator .topic-starter-avatar,
 .topic-starter.group-administrator .topic-starter-avatar--initial {
     border-color: var(--group-administrator);
 }
-.topic-starter.group-administrator .topic-starter-avatar--initial {
-    background-color: var(--group-administrator);
-}
-
 .topic-starter.group-global-moderator .topic-starter-avatar,
 .topic-starter.group-global-moderator .topic-starter-avatar--initial {
     border-color: var(--group-global-moderator);
 }
-.topic-starter.group-global-moderator .topic-starter-avatar--initial {
-    background-color: var(--group-global-moderator);
-}
-
 .topic-starter.group-moderator .topic-starter-avatar,
 .topic-starter.group-moderator .topic-starter-avatar--initial {
     border-color: var(--group-moderator);
 }
-.topic-starter.group-moderator .topic-starter-avatar--initial {
-    background-color: var(--group-moderator);
-}
-
 .topic-starter.group-developer .topic-starter-avatar,
 .topic-starter.group-developer .topic-starter-avatar--initial {
     border-color: var(--group-developer);
 }
-.topic-starter.group-developer .topic-starter-avatar--initial {
-    background-color: var(--group-developer);
-}
-
 .topic-starter.group-game-dev .topic-starter-avatar,
 .topic-starter.group-game-dev .topic-starter-avatar--initial {
     border-color: var(--group-game-dev);
 }
-.topic-starter.group-game-dev .topic-starter-avatar--initial {
-    background-color: var(--group-game-dev);
-}
-
 .topic-starter.group-fan .topic-starter-avatar,
 .topic-starter.group-fan .topic-starter-avatar--initial {
     border-color: var(--group-fan);
 }
-.topic-starter.group-fan .topic-starter-avatar--initial {
-    background-color: var(--group-fan);
-}
-
 .topic-starter.group-member .topic-starter-avatar,
 .topic-starter.group-member .topic-starter-avatar--initial {
     border-color: var(--group-member);
 }
-.topic-starter.group-member .topic-starter-avatar--initial {
-    background-color: var(--group-member);
-}
-
 /* Name link — primary text, hover to primary colour. */
 .topic-starter-link {
     color: var(--text-primary);
