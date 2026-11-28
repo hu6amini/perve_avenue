@@ -2356,56 +2356,57 @@ function setupTooltipObserver() {
         return ROLE_DESCRIPTIONS[key] || ('Member of the ' + role + ' group');
     }
 
-    function buildProfileHovercardHtml(data) {
-        const user = data.apiUser || {};
-        const avatarData = getUserAvatarData(user, data.username, data.mid);
-        const profileUrl = data.mid ? '/?act=Profile&MID=' + data.mid : '#';
+function buildProfileHovercardHtml(data) {
+    const user = data.apiUser || {};
+    const avatarData = getUserAvatarData(user, data.username, data.mid);
+    const profileUrl = data.mid ? '/?act=Profile&MID=' + data.mid : '#';
+    const isOnline = (user?.status === 'online') || Boolean(data.isOnline);
 
-        let avatarHtml = '';
-        if (avatarData.type === 'img') {
-            avatarHtml = '<img class="tip-avatar-img" src="' + escapeHtml(avatarData.url) + '" alt="" width="56" height="56" loading="lazy">';
-        } else {
-            avatarHtml = '<div class="tip-avatar-initial" style="background-color:#' + avatarData.bgColor + '">' + escapeHtml(avatarData.initial) + '</div>';
-        }
-
-        let groupName = data.groupText || user?.group?.name || 'Member';
-        const isFounder = user?.group && ((user.group.class?.includes('founder')) || (user.group.bodyclass?.includes('founder')));
-        if (isFounder) groupName = 'Founder';
-
-        const postCount = user?.messages ?? data.postCount ?? 0;
-        const reputation = user?.reputation ?? data.reputation ?? 0;
-
-        let joinDate = 'Unknown';
-        if (user?.registration) {
-            joinDate = new Date(user.registration).toLocaleDateString('en-US', { month: 'short', year: 'numeric' });
-        } else if (data.joinDate) {
-            joinDate = data.joinDate;
-        }
-
-const bannerUrl = getUserBannerUrl(user);
-const headerClass = bannerUrl ? 'tip-profile-header has-banner' : 'tip-profile-header';
-const headerStyle = bannerUrl
-    ? ' style="background-image: linear-gradient(180deg, rgba(15, 23, 42, 0.35) 0%, rgba(15, 23, 42, 0.85) 100%), url(\'' + escapeHtml(bannerUrl) + '\'); background-size: cover; background-position: center;"'
-    : '';
-
-return '<div class="tip-profile ' + groupClass + '">' +
-    '<div class="' + headerClass + '"' + headerStyle + '>' +
-        '<div class="tip-profile-avatar">' + avatarHtml + '</div>' +
-        '<div class="tip-profile-names">' +
-            '<a class="tip-profile-username" href="' + escapeHtml(profileUrl) + '">' + escapeHtml(data.username) + '</a>' +
-            '<span class="tip-profile-group">' + escapeHtml(groupName) + '</span>' +
-        '</div>' +
-        '<span class="tip-profile-status ' + (isOnline ? 'online' : 'offline') + '"></span>' +
-    '</div>' +
-            '</div>' +
-            '<div class="tip-profile-stats">' +
-                '<div class="tip-profile-stat"><i class="fa-regular fa-message"></i><span class="tip-profile-stat-value">' + formatNumber(postCount) + '</span><span class="tip-profile-stat-label">posts</span></div>' +
-                '<div class="tip-profile-stat"><i class="fa-regular fa-thumbs-up"></i><span class="tip-profile-stat-value">' + formatNumber(reputation) + '</span><span class="tip-profile-stat-label">rep</span></div>' +
-                '<div class="tip-profile-stat"><i class="fa-regular fa-user-plus"></i><span class="tip-profile-stat-value">' + escapeHtml(joinDate) + '</span><span class="tip-profile-stat-label">joined</span></div>' +
-            '</div>' +
-            '<div class="tip-profile-footer"><a class="tip-profile-link" href="' + escapeHtml(profileUrl) + '">View Profile <i class="fa-regular fa-angle-right"></i></a></div>' +
-        '</div>';
+    let avatarHtml = '';
+    if (avatarData.type === 'img') {
+        avatarHtml = '<img class="tip-avatar-img" src="' + escapeHtml(avatarData.url) + '" alt="" width="56" height="56" loading="lazy">';
+    } else {
+        avatarHtml = '<div class="tip-avatar-initial" style="background-color:#' + avatarData.bgColor + '">' + escapeHtml(avatarData.initial) + '</div>';
     }
+
+    let groupName = data.groupText || user?.group?.name || 'Member';
+    const isFounder = user?.group && ((user.group.class?.includes('founder')) || (user.group.bodyclass?.includes('founder')));
+    if (isFounder) groupName = 'Founder';
+    const groupClass = 'group-' + sanitizeGroupName(groupName);
+
+    const postCount = user?.messages ?? data.postCount ?? 0;
+    const reputation = user?.reputation ?? data.reputation ?? 0;
+
+    let joinDate = 'Unknown';
+    if (user?.registration) {
+        joinDate = new Date(user.registration).toLocaleDateString('en-US', { month: 'short', year: 'numeric' });
+    } else if (data.joinDate) {
+        joinDate = data.joinDate;
+    }
+
+    const bannerUrl = getUserBannerUrl(user);
+    const headerClass = bannerUrl ? 'tip-profile-header has-banner' : 'tip-profile-header';
+    const headerStyle = bannerUrl
+        ? ' style="background-image: linear-gradient(180deg, rgba(15, 23, 42, 0.35) 0%, rgba(15, 23, 42, 0.85) 100%), url(\'' + escapeHtml(bannerUrl) + '\'); background-size: cover; background-position: center;"'
+        : '';
+
+    return '<div class="tip-profile ' + groupClass + '">' +
+        '<div class="' + headerClass + '"' + headerStyle + '>' +
+            '<div class="tip-profile-avatar">' + avatarHtml + '</div>' +
+            '<div class="tip-profile-names">' +
+                '<a class="tip-profile-username" href="' + escapeHtml(profileUrl) + '">' + escapeHtml(data.username) + '</a>' +
+                '<span class="tip-profile-group">' + escapeHtml(groupName) + '</span>' +
+            '</div>' +
+            '<span class="tip-profile-status ' + (isOnline ? 'online' : 'offline') + '"></span>' +
+        '</div>' +
+        '<div class="tip-profile-stats">' +
+            '<div class="tip-profile-stat"><i class="fa-regular fa-message"></i><span class="tip-profile-stat-value">' + formatNumber(postCount) + '</span><span class="tip-profile-stat-label">posts</span></div>' +
+            '<div class="tip-profile-stat"><i class="fa-regular fa-thumbs-up"></i><span class="tip-profile-stat-value">' + formatNumber(reputation) + '</span><span class="tip-profile-stat-label">rep</span></div>' +
+            '<div class="tip-profile-stat"><i class="fa-regular fa-user-plus"></i><span class="tip-profile-stat-value">' + escapeHtml(joinDate) + '</span><span class="tip-profile-stat-label">joined</span></div>' +
+        '</div>' +
+        '<div class="tip-profile-footer"><a class="tip-profile-link" href="' + escapeHtml(profileUrl) + '">View Profile <i class="fa-regular fa-angle-right"></i></a></div>' +
+    '</div>';
+}
 
     function attachTips(card, data) {
         if (!card || !data) return;
