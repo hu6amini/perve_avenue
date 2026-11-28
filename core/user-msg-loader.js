@@ -1,5 +1,7 @@
 "use strict";
 
+const __loadedScriptUrls = (window.__loadedScriptUrls = window.__loadedScriptUrls || new Set());
+
 // Wait for DOM to be ready before checking body id
 function whenBodyReady(callback) {
     if (document.body) {
@@ -27,8 +29,6 @@ whenBodyReady(() => {
         url.indexOf('CODE=02') === -1;
 
     if (IS_COMPOSE_SECTION) {
-        // Preload messenger.min.js so it's ready when Phase C runs.
-        // Matches loadScript's crossOrigin to avoid a double fetch.
         const messengerLink = document.createElement('link');
         messengerLink.rel = 'preload';
         messengerLink.as = 'script';
@@ -36,18 +36,6 @@ whenBodyReady(() => {
         messengerLink.crossOrigin = 'anonymous';
         document.head.appendChild(messengerLink);
 
-        // TipTap modulepreload graph. Fire these at parse time so the
-        // browser begins fetching while Phases A–C below are still
-        // resolving. messenger.js does not reach its `await import(...)`
-        // calls until forum-enhancer has built #modern-forum-wrapper and
-        // called MessengerModule.initialize(); by then these should be
-        // in the module map or in-flight.
-        //
-        // Scoped to compose only. Messages and contacts share the msg
-        // body id but never construct the editor — messenger.js builds
-        // their UI from the existing forum DOM. Firing thirteen
-        // modulepreloads on those pages ties up connection slots with
-        // requests the page will never consume.
         [
             'https://esm.sh/@tiptap/core@2.5.2',
             'https://esm.sh/@tiptap/starter-kit@2.5.2',
@@ -96,6 +84,11 @@ whenBodyReady(() => {
     // 2. SCRIPT LOADER ENGINE
     // ============================================================================
     function loadScript(src, isModule = false) {
+        if (__loadedScriptUrls.has(src)) {
+            return Promise.resolve();
+        }
+        __loadedScriptUrls.add(src);
+
         return new Promise((resolve, reject) => {
             const script = document.createElement('script');
             script.src = src;
@@ -106,10 +99,9 @@ whenBodyReady(() => {
 
             if (isModule || fileName === 'media-optimizer') {
                 script.type = 'module';
-            } else {
-                script.defer = fileName !== 'event-bus';
             }
 
+            script.async = true;
             script.crossOrigin = "anonymous";
             script.onload = () => resolve();
             script.onerror = () => reject(new Error(`Failed to load ${src}`));
@@ -205,21 +197,17 @@ whenBodyReady(() => {
     // 6. PHASED EXECUTION (NO TIPTAP – messenger loads it via import)
     // ============================================================================
     async function bootSystem() {
-    try {
-        const startTime = performance.now();
+        try {
+            const startTime = performance.now();
 
-        // ── Fire-and-forget: nav must render ASAP ─────────────────
-        // Self-contained; no Phase A/B/C/D/E dependencies. Runs
-        // in parallel so it doesn't extend any phase's wall-clock.
-        loadScript("https://cdn.jsdelivr.net/gh/hu6amini/perve_avenue@ade1650d39dba8862605bc54a10d1c2d8eccab3c/modules/top-menu.js")
-            .catch(err => console.warn('[Boot] Top menu failed:', err));
+            // Set language only on allowed pages
+            document.documentElement.lang = "en";
 
-        // Set language only on allowed pages
-        document.documentElement.lang = "en";
-
-        // PHASE A: Foundation (media optimizer & event bus)
-        const phaseAStart = performance.now();
+            // PHASE A: Foundation (Popper + Tippy before top-menu, media optimizer & event bus)
+            const phaseAStart = performance.now();
+            await loadScript("https://cdn.jsdelivr.net/npm/@popperjs/core@2.11.8/dist/umd/popper.min.js");
             const resultsA = await Promise.allSettled([
+                loadScript("https://cdn.jsdelivr.net/npm/tippy.js@6.3.7/dist/tippy-bundle.umd.min.js"),
                 loadScript("https://cdn.jsdelivr.net/gh/hu6amini/perve_avenue@9e04af41beaed68bef4eb46f6409596868f5877f/media-optimizer.min.js"),
                 loadScript("https://cdn.jsdelivr.net/gh/hu6amini/perve_avenue@1977fabb5553b0f825fa92671a03b2ae26c67702/core/event-bus.min.js")
             ]);
@@ -229,6 +217,10 @@ whenBodyReady(() => {
             }
             console.debug(`[Boot] Phase A completed in ${(performance.now() - phaseAStart).toFixed(2)}ms`);
 
+            // Fire-and-forget nav once Popper & Tippy are available
+            loadScript("https://cdn.jsdelivr.net/gh/hu6amini/perve_avenue@ade1650d39dba8862605bc54a10d1c2d8eccab3c/modules/top-menu.js")
+                .catch(err => console.warn('[Boot] Top menu failed:', err));
+
             injectCriticalCSS();
             preloadLCPImage();
 
@@ -236,7 +228,6 @@ whenBodyReady(() => {
             const phaseBStart = performance.now();
             const resultsB = await Promise.allSettled([
                 loadScript("https://cdnjs.cloudflare.com/ajax/libs/slick-carousel/1.9.0/slick.min.js"),
-                loadScript("https://cdn.jsdelivr.net/npm/tippy.js@6.3.7/dist/tippy-bundle.umd.min.js"),
                 loadScript("https://cdn.jsdelivr.net/gh/hu6amini/perve_avenue@9681242beef6f3a2e2e4c8de461c2e6eeabec26a/core/dom-utils.min.js"),
                 loadScript("https://cdn.jsdelivr.net/gh/hu6amini/perve_avenue@70efe7c7bca10a5093093841f67994aef3b76819/forum_core_observer.min.js"),
                 loadScript("https://cdn.jsdelivr.net/gh/hu6amini/perve_avenue@f026ad7f7daaf1eeb12eb4b6bcb46fe9f2d6d2cd/modules/theme.min.js")
@@ -248,16 +239,6 @@ whenBodyReady(() => {
             console.debug(`[Boot] Phase B completed in ${(performance.now() - phaseBStart).toFixed(2)}ms`);
 
             // PHASE C: Third-party libs + carousel + messenger.
-            // messenger.js has no dependency on the enhancement modules
-            // (posts, boards, modals, breadcrumbs, media-dimensions), so
-            // it rides here instead of in the batch below. It registers
-            // its wrapper observer on load and waits for forum-enhancer
-            // (Phase E) to build #modern-forum-wrapper and call
-            // MessengerModule.initialize(). Loading it earlier means the
-            // import graph for TipTap — already being preloaded above on
-            // the compose section — can start the moment initialize()
-            // runs, instead of after the slowest of six unrelated
-            // enhancement modules settles.
             const phaseCStart = performance.now();
             const resultsC = await Promise.allSettled([
                 loadScript("https://cdn.jsdelivr.net/npm/twemoji@14.0.2/dist/twemoji.min.js"),
@@ -271,19 +252,12 @@ whenBodyReady(() => {
             }
             console.debug(`[Boot] Phase C completed in ${(performance.now() - phaseCStart).toFixed(2)}ms`);
 
-            // Initialise Slick carousel. No idle deferral — the page shell
-            // is already painted by the time Phases A–C have settled, and
-            // the carousel module is loaded. Deferring this previously
-            // added up to 500 ms of delay on an already-idle main thread.
             if (window.SlickCarouselModule && typeof window.SlickCarouselModule.initialize === 'function') {
                 window.SlickCarouselModule.initialize();
                 console.debug('[Boot] Slick carousel initialized');
             }
 
-            // PHASE D: Enhancement modules. These are loaded in parallel
-            // and the batch settles when the slowest one does. No
-            // scheduleWork wrapper — the previous 800 ms requestIdleCallback
-            // gate was the largest artificial delay in the chain.
+            // PHASE D: Enhancement modules.
             const phaseDStart = performance.now();
             const resultsD = await Promise.allSettled([
                 loadScript("https://cdn.jsdelivr.net/gh/hu6amini/perve_avenue@a7fd0dfe7297bcf6f2534f9a8b3398b909994cc3/modules/media-dimensions.min.js"),
@@ -300,10 +274,7 @@ whenBodyReady(() => {
             }
             console.debug(`[Boot] Phase D completed in ${(performance.now() - phaseDStart).toFixed(2)}ms`);
 
-            // PHASE E: Orchestrator. forum-enhancer registers every module
-            // above and builds #modern-forum-wrapper, which unblocks
-            // messenger's wrapper observer and triggers
-            // MessengerModule.initialize().
+            // PHASE E: Orchestrator.
             const phaseEStart = performance.now();
             try {
                 await loadScript("https://cdn.jsdelivr.net/gh/hu6amini/perve_avenue@8134bdecd2bffe15f91715fab655d57fb52a23df/core/forum-enhancer.min.js");
@@ -313,9 +284,7 @@ whenBodyReady(() => {
                 console.warn('[Boot] Forum enhancer failed to load:', err);
             }
 
-            // ============================================================
             // LAZY LOAD: Social widgets (Twitter/Instagram) when they become visible
-            // ============================================================
             const tweetEl = document.querySelector('.twitter-tweet, .twitter-timeline, [data-twitter]');
             if (tweetEl) {
                 const tweetObserver = new IntersectionObserver((entries) => {
@@ -350,8 +319,6 @@ whenBodyReady(() => {
                 instagramObserver.observe(instagramEl);
             }
 
-            // LightGallery is only relevant on content pages. On msg/user
-            // pages neither id is in CONTENT_PAGE_IDS, so this is a no-op.
             const checkAndLoadLightGallery = () => {
                 const id = document.body?.id;
                 if (CONTENT_PAGE_IDS.includes(id)) {
@@ -370,6 +337,5 @@ whenBodyReady(() => {
         }
     }
 
-    // Start the boot process
     bootSystem();
 });
