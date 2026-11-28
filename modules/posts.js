@@ -4862,7 +4862,15 @@ function resolveViewerContext() {
         }
                 if (!viewerMid) return { mid: null, permission: null };
         try {
-            const me = await fetchUserData(viewerMid);
+            // Viewer permissions change rarely — go through the shared cache
+            // (top-menu.js requests the same endpoint). Author stats elsewhere
+            // stay cache-busted on purpose.
+            let me = null;
+            if (globalThis.ForumApiCache) {
+                const raw = await globalThis.ForumApiCache.get('/api.php?mid=' + encodeURIComponent(viewerMid));
+                me = raw && (raw['m' + viewerMid] || raw.info) || null;
+            }
+            if (!me) me = await fetchUserData(viewerMid);
             return { mid: viewerMid, permission: me?.permission || null };
         } catch (e) {
             return { mid: viewerMid, permission: null };
