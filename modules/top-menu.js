@@ -701,7 +701,7 @@ const ForumTopMenuModule = (function () {
                 type: 'button', className: 'mfn-action mfn-action--ghost mfn-social-trigger',
                 'aria-haspopup': 'true', 'aria-expanded': 'false', 
                 'data-tippy-content': 'Alternative login methods', // <── CHANGED
-                innerHTML: icon('fa-right-left') + '<span class="mfn-action-label">Social</span>'
+                innerHTML: icon('fa-fingerprint') + '<span class="mfn-action-label">Social</span>'
             });
             
             const socialPanel = h('div', { className: 'mfn-dropdown-panel mfn-social-panel' });
