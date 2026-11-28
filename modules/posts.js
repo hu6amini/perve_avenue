@@ -106,8 +106,6 @@ const ForumPostsModule = (function () {
     // CONFIGURATION
     // ============================================================================
     const CONFIG = Object.freeze({
-        USE_API_FOR_TOPICS: true,
-        API_TIMEOUT_MS: 3000,
         POST_SELECTOR: '.post',
         POST_ID_PREFIX: 'ee',
         CONTAINER_ID: 'modern-posts-container',
@@ -856,367 +854,17 @@ function postProcessPreviewContent(el) {
     });
 }
 
-    // ============================================================================
-// API-FIRST POST CONVERSION (v4.0 — topic pages)
-// ============================================================================
-// On topic pages, posts.js fetches /api.php?t=<topicId> and /api.php?mid=<uid>
-// in parallel, renders modern cards from JSON, and keeps the legacy .post
-// nodes only as data sources for reactions, IP address, and edit/delete
-// form availability — three pieces of info the JSON API doesn't provide.
-// Falls back to the DOM scraper (convertAllPosts) on any API failure.
-// ============================================================================
-
-function getTopicContextFromUrl() {
-    const params = new URLSearchParams(window.location.search);
-    const t = params.get('t');
-    if (!t || !/^\d+$/.test(t)) return null;
-    const st = params.get('st'); // may be null, numeric, 'lastpost', 'firstpost', 'last'
-    return { topicId: t, st: st || null };
-}
-
-async function fetchTopicFromApi() {
-    const ctx = getTopicContextFromUrl();
-    if (!ctx) return null;
-
-    const endpoint = '/api.php?t=' + encodeURIComponent(ctx.topicId) +
-        (ctx.st ? '&st=' + encodeURIComponent(ctx.st) : '');
-
-    const fetchPromise = globalThis.ForumApiCache
-        ? globalThis.ForumApiCache.get(endpoint)
-        : fetch(endpoint, { credentials: 'same-origin', cache: 'no-store' })
-            .then(r => r.ok ? r.json() : null)
-            .catch(() => null);
-
-    const timeout = new Promise(resolve =>
-        setTimeout(() => resolve('__timeout__'), CONFIG.API_TIMEOUT_MS));
-
-    const result = await Promise.race([fetchPromise, timeout]);
-    if (result === '__timeout__') {
-        console.warn('[PostsModule] API fetch timed out, falling back to DOM');
+    // msg.user.id is 0 for the founder/admin. Recover the real MID from the
+    // avatar URL (.../fc<mid>/...) or from the topic starter if this is the OP.
+    function resolveMessageUserId(msg, topicData) {
+        const user = (msg && msg.user) || {};
+        if (user.id && String(user.id) !== '0') return user.id;
+        const m = (user.avatar || '').match(/\/fc(\d+)\//);
+        if (m) return parseInt(m[1], 10);
+        const starter = topicData && topicData.starter;
+        if (starter && starter.nickname && starter.nickname === user.nickname) return starter.id;
         return null;
     }
-    if (!result || !Array.isArray(result.messages) || result.messages.length === 0) {
-        return null;
-    }
-    return result;
-}
-
-// Fetch full profiles for every unique author on the page. msg.user in ?t=
-// lacks post count / reputation / registration — ?mid= supplies them.
-// Returns a Map<mid, userObject>. Failures resolve to entries with
-// only the ?t= data merged in, so the card still renders.
-async function fetchTopicUsersFromApi(topicData) {
-    const mids = new Set();
-    for (const msg of (topicData.messages || [])) {
-        const resolved = resolveMessageUserId(msg);
-        if (resolved != null) mids.add(String(resolved));
-    }
-    if (mids.size === 0) return new Map();
-
-    const entries = await Promise.all(
-        Array.from(mids).map(async (mid) => {
-            try {
-                const data = await (globalThis.ForumApiCache
-                    ? globalThis.ForumApiCache.get('/api.php?mid=' + encodeURIComponent(mid))
-                    : fetch('/api.php?mid=' + encodeURIComponent(mid), { credentials: 'same-origin' })
-                        .then(r => r.ok ? r.json() : null).catch(() => null));
-                // ?mid= returns an object keyed by 'm<mid>' or a plain 'info'
-                const user = data && (data['m' + mid] || data.info || data);
-                return [mid, user && user.id ? user : null];
-            } catch (e) {
-                return [mid, null];
-            }
-        })
-    );
-
-    const map = new Map();
-    for (const [mid, user] of entries) {
-        if (user) map.set(mid, user);
-    }
-    return map;
-}
-
-// msg.user.id is 0 for the founder/admin (verified against live API).
-// Try to recover the real MID from the avatar URL (…/fc<mid>/avatar/…)
-// or from the topic starter if this user is the OP.
-function resolveMessageUserId(msg, topicData) {
-    const user = msg.user || {};
-    if (user.id && user.id !== 0) return user.id;
-
-    const avatarMatch = (user.avatar || '').match(/\/fc(\d+)\//);
-    if (avatarMatch) return parseInt(avatarMatch[1], 10);
-
-    const starter = topicData && topicData.starter;
-    if (starter && starter.nickname && starter.nickname === user.nickname) {
-        return starter.id;
-    }
-    return null;
-}
-
-function normalizeApiPoints(points) {
-    if (points == null) return 0;
-    if (typeof points === 'number') return points;
-    if (typeof points === 'string') {
-        const n = parseInt(points, 10);
-        return isNaN(n) ? 0 : n;
-    }
-    if (typeof points === 'object') {
-        const inner = points.points;
-        if (typeof inner === 'number') return inner;
-        if (typeof inner === 'string') {
-            const n = parseInt(inner, 10);
-            return isNaN(n) ? 0 : n;
-        }
-    }
-    return 0;
-}
-
-function extractEditInfoFromContent(html) {
-    if (!html || typeof html !== 'string') return null;
-    const tempDiv = document.createElement('div');
-    tempDiv.innerHTML = html;
-    const editSpan = tempDiv.querySelector('.edit');
-    if (!editSpan) return null;
-    const fullText = editSpan.textContent.trim();
-    const parts = fullText.split(' - ');
-    if (parts.length < 2) return null;
-    const editorPart = parts.slice(0, -1).join(' - ');
-    const dateStr = parts[parts.length - 1].trim();
-    const date = parseDateFromTitle(dateStr);
-    if (!date || isNaN(date.getTime())) return null;
-    return { editor: editorPart, relative: getRelativeTimeString(date), rawDate: date };
-}
-
-function renderApiAttachment(attachment) {
-    if (!attachment || !attachment.url) return '';
-    const type = String(attachment.type || '');
-    const name = attachment.name || 'Attachment';
-    const url = attachment.url;
-
-    if (type.startsWith('image/')) {
-        return '<div class="post-attachment post-attachment-image">' +
-            '<a href="' + escapeHtml(url) + '" target="_blank" rel="noopener noreferrer">' +
-                '<img src="' + escapeHtml(url) + '" alt="' + escapeHtml(name) + '" loading="lazy" decoding="async">' +
-            '</a></div>';
-    }
-
-    return '<div class="post-attachment post-attachment-file">' +
-        '<a href="' + escapeHtml(url) + '" target="_blank" rel="noopener noreferrer" download>' +
-            '<i class="fa-regular fa-paperclip" aria-hidden="true"></i>' +
-            '<span class="attachment-name">' + escapeHtml(name) + '</span>' +
-        '</a></div>';
-}
-
-// Build a data object in the exact shape generateModernPost() expects.
-// The legacy .post element (if still present) is the source for reactions,
-// IP, and action-availability. Everything else comes from the API.
-function extractPostDataFromApi(msg, index, stOffset, topicData, userMap) {
-    const topicInfo = topicData.info || {};
-    const msgUser = msg.user || {};
-    const msgInfo = msg.info || {};
-
-    const resolvedMid = resolveMessageUserId(msg, topicData);
-    const fullUser = resolvedMid != null ? userMap.get(String(resolvedMid)) : null;
-
-    // Merge: prefer fullUser (?mid=) for stats, msg.user for current state.
-    const user = {
-        id: resolvedMid,
-        nickname: msgUser.nickname || (fullUser && fullUser.nickname) || 'Unknown',
-        avatar: msgUser.avatar || (fullUser && fullUser.avatar),
-        status: msgUser.status || (fullUser && fullUser.status),
-        group: msgUser.group || (fullUser && fullUser.group) || { name: 'Member', class: 'member' },
-        title: msgUser.title || (fullUser && fullUser.title) || '',
-        signature: msgUser.signature || (fullUser && fullUser.signature) || '',
-        messages: (fullUser && fullUser.messages) ?? msgUser.messages,
-        reputation: (fullUser && fullUser.reputation) ?? msgUser.reputation,
-        registration: (fullUser && fullUser.registration) ?? msgUser.registration,
-    };
-
-    // Content — strip signature/edit markers, run through all transforms.
-    let contentHtml = '';
-    try {
-        contentHtml = transformContentHtmlString(msg.content || '');
-    } catch (e) {
-        console.warn('[PostsModule] transformContentHtmlString failed:', e);
-        contentHtml = msg.content || '';
-    }
-
-    // Attachment
-    const attachmentHtml = renderApiAttachment(msg.attachment);
-    if (attachmentHtml) {
-        contentHtml = contentHtml + attachmentHtml;
-    }
-
-    // Edit info — parse from raw msg.content before transforms stripped it
-    const editInfo = extractEditInfoFromContent(msg.content || '');
-
-    // Signature — only if use_sig is truthy ('1', 1, true)
-    let signatureHtml = '';
-    const useSig = msgInfo.use_sig;
-    if (useSig === '1' || useSig === 1 || useSig === true) {
-        signatureHtml = paragraphizeHtml(user.signature || '');
-    }
-
-    // Date — ISO 8601 from API
-    const postDate = msgInfo.date ? new Date(msgInfo.date) : null;
-    const relativeTime = postDate && !isNaN(postDate.getTime())
-        ? getRelativeTimeString(postDate)
-        : 'Unknown';
-
-    // Points (like / reputation given to post)
-    const likes = normalizeApiPoints(msgInfo.points);
-
-    // Legacy DOM probe — reactions, IP, action availability
-    const legacyPost = document.getElementById('ee' + msg.id);
-
-    const reactionData = legacyPost
-        ? getReactionData(legacyPost)
-        : { hasReactions: false, reactionCount: 0, reactions: [] };
-
-    const ipAddress = legacyPost ? getMaskedIp(legacyPost) : '';
-
-    let availableActions;
-    if (legacyPost) {
-        availableActions = getAvailableActions(legacyPost, msg.id);
-    } else {
-        availableActions = { quote: false, edit: false, delete: false, report: Boolean(window.ModernReport?.openReportDialog), share: true };
-    }
-    // API-derived gates layered on top
-    if (topicInfo.open_topic === 0 || topicInfo.state === 'locked') {
-        availableActions.quote = false;
-    }
-    if (topicInfo.read_only === 1) {
-        availableActions.edit = false;
-        availableActions.delete = false;
-    }
-
-    const userTitle = user.title || 'Member';
-    const rankIconClass = (user.group && user.group.img && /fa-/.test(user.group.img))
-        ? user.group.img
-        : 'fa-medal fa-regular';
-
-    return {
-        postId: msg.id,
-        mid: user.id,
-        username: user.nickname,
-        apiUser: user,
-        groupText: user.group.name,
-        postCount: user.messages,
-        reputation: user.reputation,
-        joinDate: user.registration
-            ? new Date(user.registration).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
-            : null,
-        isOnline: user.status === 'online',
-        userTitle: userTitle,
-        rankIconClass: rankIconClass,
-        contentHtml: contentHtml,
-        signatureHtml: signatureHtml,
-        editInfo: editInfo,
-        likes: likes,
-        hasReactions: reactionData.hasReactions,
-        reactionCount: reactionData.reactionCount,
-        reactions: reactionData.reactions,
-        postDate: postDate,
-        relativeTime: relativeTime,
-        ipAddress: ipAddress,
-        availableActions: availableActions,
-        isMemberPostsPage: false,
-        hideActions: false,
-        hideFooter: false,
-        isMessage: false,
-    };
-}
-
-// Main driver — iterate messages[], generate cards, append.
-async function convertApiPosts(topicData, stOffset, userMap) {
-    const container = getPostsContainer();
-    if (!container) {
-        console.warn('[PostsModule] API conversion skipped — no container');
-        return false;
-    }
-
-    const messages = topicData.messages || [];
-    if (messages.length === 0) return false;
-
-    const fragment = document.createDocumentFragment();
-    let rendered = 0;
-
-    for (let i = 0; i < messages.length; i++) {
-        const msg = messages[i];
-        if (!msg || !msg.id) continue;
-
-        let data;
-        try {
-            data = extractPostDataFromApi(msg, i, stOffset, topicData, userMap);
-        } catch (e) {
-            console.warn('[PostsModule] Failed to extract post ' + msg.id + ':', e);
-            continue;
-        }
-
-        let cardHtml;
-        try {
-            cardHtml = generateModernPost(data);
-        } catch (e) {
-            console.warn('[PostsModule] generateModernPost failed for ' + msg.id + ':', e);
-            continue;
-        }
-        if (!cardHtml) continue;
-
-        const card = createElementFromHTML(cardHtml);
-        if (!card) continue;
-
-        card.setAttribute('data-source', 'api');
-        card.setAttribute('data-post-id', msg.id);
-        fragment.appendChild(card);
-        rendered++;
-
-        try {
-            attachTips(card, data);
-        } catch (e) {}
-    }
-
-    if (rendered === 0) return false;
-
-    container.appendChild(fragment);
-    console.log('[PostsModule] API-driven conversion complete: ' + rendered + ' cards');
-
-    // Post-process: quotes, spoilers, image settling, tippy
-    initQuotesAndSpoilers();
-    container.querySelectorAll('.post-card').forEach(card => {
-        postProcessPreviewContent(card).catch(() => {});
-    });
-
-    // LightGallery
-    if (typeof lightGallery !== 'undefined') {
-        initModernLightGallery();
-    } else {
-        waitForLightGallery();
-    }
-
-    // Hash navigation retarget
-    if (typeof scrollToHashAfterBuild === 'function') {
-        scrollToHashAfterBuild();
-    }
-
-    return true;
-}
-
-// Top-level entry — fetch API, fall back to DOM on any failure
-async function tryConvertViaApi() {
-    if (!CONFIG.USE_API_FOR_TOPICS) return false;
-    if (document.body.id !== 'topic') return false;
-
-    const topicData = await fetchTopicFromApi();
-    if (!topicData) return false;
-
-    const userMap = await fetchTopicUsersFromApi(topicData);
-    const stOffset = (function () {
-        const m = window.location.search.match(/[?&]st=(\d+)/);
-        return m ? parseInt(m[1], 10) : 0;
-    })();
-
-    return await convertApiPosts(topicData, stOffset, userMap);
-}
 
     function getSignatureHtml($post) {
         const signature = $post.querySelector('.signature');
@@ -5277,9 +4925,9 @@ function extractEditInfoFromContent(html) {
     };
 }
 
-function deriveAvailableActions({ message, info, viewerMid, viewerPerm }) {
+function deriveAvailableActions({ message, info, viewerMid, viewerPerm, authorMid }) {
     const isOpen = info?.open_topic === 1 && info?.read_only === 0;
-    const isSelf = viewerMid != null && String(message.user?.id) === String(viewerMid);
+    const isSelf = viewerMid != null && String(authorMid ?? message.user?.id) === String(viewerMid);
 
     const perm = viewerPerm || {};
     const isGlobalStaff = perm.founder === 1 || perm.admin === 1 || perm.global_mod === 1;
@@ -5306,9 +4954,6 @@ function deriveAvailableActions({ message, info, viewerMid, viewerPerm }) {
 
 function buildPostDataFromApi({ message, topicData, apiUser, viewerContext, postNumber }) {
     const resolvedMid = resolveMessageUserId(message, topicData);
-    const apiUser = resolvedMid != null
-    ? userDataCache.get(String(resolvedMid))
-    : null;
     const user = message.user || {};
     const info = message.info || {};
     const points = info.points || {};
@@ -5350,7 +4995,7 @@ function buildPostDataFromApi({ message, topicData, apiUser, viewerContext, post
 
     const data = {
         postId: String(message.id),
-        mid: user.id != null ? String(user.id) : null,
+        mid: resolvedMid != null ? String(resolvedMid) : null,
         originalPost: null,
         username: user.nickname || 'Unknown',
         groupText: user.group?.name || 'Member',
@@ -5373,7 +5018,8 @@ function buildPostDataFromApi({ message, topicData, apiUser, viewerContext, post
             message,
             info: topicData.info,
             viewerMid: viewerContext.mid,
-            viewerPerm: viewerContext.permission
+            viewerPerm: viewerContext.permission,
+            authorMid: resolvedMid
         }),
         isMemberPostsPage: false,
         hideActions: false,
@@ -5525,7 +5171,8 @@ const mids = [...new Set(
 
     for (let i = 0; i < topicData.messages.length; i++) {
         const message = topicData.messages[i];
-        const apiUser = message.user?.id ? userDataCache.get(String(message.user.id)) : null;
+        const resolvedMid = resolveMessageUserId(message, topicData);
+        const apiUser = resolvedMid != null ? userDataCache.get(String(resolvedMid)) : null;
         const data = buildPostDataFromApi({
             message, topicData, apiUser, viewerContext,
             postNumber: postStartOffset + i + 1
