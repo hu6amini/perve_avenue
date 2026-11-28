@@ -107,7 +107,11 @@ const ForumBoardsModule = (function () {
                     cache: 'no-store'
                 });
                 if (!r.ok) return null;
-                return await r.json();
+                const data = await r.json();
+                // Seed the shared cache so top-menu (section filter) and the
+                // media scripts reuse this response instead of refetching.
+                try { if (globalThis.ForumApiCache) globalThis.ForumApiCache.set('/api.php', data); } catch (e) {}
+                return data;
             } catch (e) {
                 console.warn('[BoardsModule] Forum index API failed:', e);
                 return null;
@@ -302,47 +306,39 @@ const ForumBoardsModule = (function () {
     // =========================================================================
     const userDataCache = new Map();
 
-    async function fetchUserData(mid) {
-        if (userDataCache.has(mid)) return userDataCache.get(mid);
+    // User profiles go through the shared ForumApiCache (same endpoint string
+    // as top-menu.js), so the same ?mid= is requested once across modules.
+    async function fetchUserDataWithTimeout(mid, timeoutMs) {
+        if (mid == null) return null;
+        const key = String(mid);
+        if (userDataCache.has(key)) return userDataCache.get(key);
+        const ep = '/api.php?mid=' + encodeURIComponent(key);
+        const cache = globalThis.ForumApiCache;
+        let timer;
         try {
-            const response = await fetch('/api.php?mid=' + mid);
-            if (!response.ok) throw new Error('HTTP ' + response.status);
-            const data = await response.json();
-            const user = data['m' + mid] || data.info;
+            const request = cache
+                ? cache.get(ep)
+                : fetch(ep, { credentials: 'same-origin' }).then(function (r) { return r.ok ? r.json() : null; });
+            const timeout = new Promise(function (resolve) {
+                timer = setTimeout(function () { resolve(null); }, timeoutMs || CONFIG.API_TIMEOUT);
+            });
+            const data = await Promise.race([request, timeout]);
+            const user = data && (data['m' + key] || data.info);
             if (user && user.id) {
-                userDataCache.set(mid, user);
+                userDataCache.set(key, user);
                 return user;
             }
             return null;
         } catch (e) {
-            console.warn('[BoardsModule] API error for MID', mid, e);
+            console.warn('[BoardsModule] User fetch error for MID', mid, e);
             return null;
+        } finally {
+            clearTimeout(timer);
         }
     }
 
-    async function fetchUserDataWithTimeout(mid, timeoutMs) {
-        if (userDataCache.has(mid)) return userDataCache.get(mid);
-        const effectiveTimeout = timeoutMs || CONFIG.API_TIMEOUT;
-        const controller = new AbortController();
-        const timeoutId = setTimeout(function () { controller.abort(); }, effectiveTimeout);
-        try {
-            const response = await fetch('/api.php?mid=' + encodeURIComponent(mid), {
-                signal: controller.signal
-            });
-            clearTimeout(timeoutId);
-            if (!response.ok) throw new Error('HTTP ' + response.status);
-            const data = await response.json();
-            const user = data['m' + mid] || data.info;
-            if (user && user.id) {
-                userDataCache.set(mid, user);
-                return user;
-            }
-            return null;
-        } catch (e) {
-            clearTimeout(timeoutId);
-            console.warn('[BoardsModule] User fetch timeout / error for MID', mid, e);
-            return null;
-        }
+    async function fetchUserData(mid) {
+        return fetchUserDataWithTimeout(mid);
     }
 
     function getColorFromNickname(nickname, userId) {
