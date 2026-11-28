@@ -8159,6 +8159,7 @@ body.has-docked-editor {
     border-color: var(--mfn-border);
     color: var(--mfn-fg);
     outline: none;
+    text-decoration: none;
 }
 .mfn-action:focus-visible { box-shadow: 0 0 0 3px var(--mfn-accent-soft); }
 .mfn-action i { font-size: 1rem; opacity: .9; }
