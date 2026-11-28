@@ -203,9 +203,24 @@ whenBodyReady(() => {
             // Set language only on allowed pages
             document.documentElement.lang = "en";
 
-            // PHASE A: Foundation (Popper + Tippy before top-menu, media optimizer & event bus)
+            // PHASE A: Foundation (Popper + API cache before tippy, media optimizer & event bus)
+            //
+            // - popper: required by tippy and top-menu. Critical — throw on failure.
+            // - api-cache: required by media-optimizer (this phase) and
+            //   media-dimensions (Phase D below). Non-critical — both
+            //   modules fall back if ForumApiCache is absent.
             const phaseAStart = performance.now();
-            await loadScript("https://cdn.jsdelivr.net/npm/@popperjs/core@2.11.8/dist/umd/popper.min.js");
+            const prereqs = await Promise.allSettled([
+                loadScript("https://cdn.jsdelivr.net/npm/@popperjs/core@2.11.8/dist/umd/popper.min.js"),
+                loadScript("https://cdn.jsdelivr.net/gh/hu6amini/perve_avenue@3be65c0183dcaa87a666bb3ef93bd78a1cd9c11e/modules/api-cache.js")
+            ]);
+            if (prereqs[0].status === 'rejected') {
+                throw new Error('[Boot] Popper failed to load — critical');
+            }
+            if (prereqs[1].status === 'rejected') {
+                console.warn('[Boot] api-cache failed to load — media preload/seeding disabled:', prereqs[1].reason);
+            }
+
             const resultsA = await Promise.allSettled([
                 loadScript("https://cdn.jsdelivr.net/npm/tippy.js@6.3.7/dist/tippy-bundle.umd.min.js"),
                 loadScript("https://cdn.jsdelivr.net/gh/hu6amini/perve_avenue@9e04af41beaed68bef4eb46f6409596868f5877f/media-optimizer.min.js"),
