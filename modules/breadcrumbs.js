@@ -62,6 +62,29 @@ const BreadcrumbsModule = (function () {
     return div.innerHTML;
 };
 
+    // Avatar background colours for first-letter avatars. Keep in sync with
+    // AVATAR_COLORS / getColorFromNickname in top-menu.js and boards.js so
+    // the same user gets the same colour everywhere.
+    const AVATAR_COLORS = [
+        '059669', '10B981', '34D399', '6EE7B7', 'A7F3D0',
+        '0D9488', '14B8A6', '2DD4BF', '5EEAD4', '99F6E4',
+        '3B82F6', '60A5FA', '93C5FD', '2563EB', '1D4ED8',
+        '6366F1', '818CF8', 'A5B4FC', '4F46E5', '4338CA',
+        '8B5CF6', 'A78BFA', 'C4B5FD', '7C3AED', '6D28D9',
+        'D97706', 'F59E0B', 'FBBF24', 'FCD34D', 'B45309',
+        '64748B', '94A3B8', 'CBD5E1', '475569', '334155'
+    ];
+
+    function getColorFromNickname(nickname, userId) {
+        let hash = 0;
+        const str = nickname || userId || 'user';
+        for (let i = 0; i < str.length; i++) {
+            hash = ((hash << 5) - hash) + str.charCodeAt(i);
+            hash = hash & hash;
+        }
+        return AVATAR_COLORS[Math.abs(hash) % AVATAR_COLORS.length];
+    }
+
     function decodeHtmlEntities(str) {
         if (!str || typeof str !== 'string') return str || '';
         if (str.indexOf('&') === -1) return str;
@@ -724,7 +747,9 @@ else groupClass = 'group-member';
                 escapeHtml(data.starter.avatar) + '" alt="" width="20" height="20" loading="lazy">';
         } else {
             const initial = (data.starter.username || '?').charAt(0).toUpperCase();
-            avatarHtml = '<span class="topic-starter-avatar topic-starter-avatar--initial">' +
+            const bgColor = getColorFromNickname(data.starter.username, data.starter.mid);
+            avatarHtml = '<span class="topic-starter-avatar topic-starter-avatar--initial" ' +
+                'style="background-color:#' + bgColor + '">' +
                 escapeHtml(initial) + '</span>';
         }
 
