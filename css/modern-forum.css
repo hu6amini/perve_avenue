@@ -4111,7 +4111,6 @@ section.modern-stats {
   display: flex;
   align-items: center;
   gap: var(--space-xs);
-  flex-wrap: wrap;
 }
 .modern-title a { 
  color: var(--text-primary); 
