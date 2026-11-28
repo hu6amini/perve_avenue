@@ -478,7 +478,7 @@ function parseDateFromTitle(title) {
     const key = String(mid);                                  // ← normalize
     if (userDataCache.has(key)) return userDataCache.get(key);
     try {
-        const response = await fetch('/api.php?mid=' + key, { signal });
+        const response = await fetch('/api.php?mid=' + key + '&_=' + Date.now(), { signal, credentials: 'same-origin', cache: 'no-store' });
         if (!response.ok) throw new Error('HTTP ' + response.status);
         const data = await response.json();
         const user = data['m' + key] || data.info;
@@ -2334,7 +2334,7 @@ function setupTooltipObserver() {
             avatarHtml = '<div class="tip-avatar-initial" style="background-color:#' + avatarData.bgColor + '">' + escapeHtml(avatarData.initial) + '</div>';
         }
 
-        let groupName = user?.group?.name || data.groupText || 'Member';
+        let groupName = data.groupText || user?.group?.name || 'Member';
         const isFounder = user?.group && ((user.group.class?.includes('founder')) || (user.group.bodyclass?.includes('founder')));
         if (isFounder) groupName = 'Founder';
 
@@ -2921,7 +2921,7 @@ emojiItem.setAttribute('aria-label', emoji.alt || emoji.name);
             avatarHtml = '<div class="post-avatar-wrapper"><a href="' + escapeHtml(profileUrl) + '" class="avatar-link" aria-label="Profile of ' + escapeHtml(username) + '"><div class="initial-avatar" style="background-color: #' + avatarData.bgColor + ';" data-initial="' + escapeHtml(avatarData.initial) + '">' + escapeHtml(avatarData.initial) + '</div></a><span class="status-dot ' + statusClass + '" data-status="' + statusText + '" aria-label="User is ' + statusText + '"></span></div>';
         }
 
-        let groupName = user?.group?.name || data.groupText || 'Member';
+        let groupName = data.groupText || user?.group?.name || 'Member';
         let roleClass = 'role-badge';
         const isFounder = user?.group && ((user.group.class?.includes('founder')) || (user.group.bodyclass?.includes('founder')));
         const groupKey = groupName.toLowerCase();
@@ -5696,4 +5696,4 @@ if (typeof window !== 'undefined') {
     } else {
         window.addEventListener('load', runFix);
     }
-})();
+})()
