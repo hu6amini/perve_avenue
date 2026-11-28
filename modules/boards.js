@@ -92,8 +92,7 @@ const ForumBoardsModule = (function () {
     // users when the index returns them in a usable shape). Set to
     // false to force every path back to the DOM scraper. Section topic
     // lists (?f=) also have an API path now; the online page, members,
-    // group pages, the groups legend and the "most online" record stay
-    // DOM-based.
+    // group pages and the groups legend stay DOM-based.
     const ENABLE_API_BOARDS = true;
 
     // Cached forum index — convertBoards() and convertStats() both
@@ -2505,6 +2504,10 @@ const ForumBoardsModule = (function () {
         if (_isNum(st.totalVisits)) stats.totalVisits = _fmtNum(st.totalVisits);
         if (_isNum(st.monthVisits)) stats.monthlyVisits = _fmtNum(st.monthVisits);
         if (_isNum(st.topForum))    stats.topForum = st.topForum + 'º';
+        // stats.topMembers is the "most users ever online" record (24 on the
+        // live board, matching .usersrecord). Only the count is exposed — the
+        // record date is DOM-only, but the card doesn't display it.
+        if (_isNum(st.topMembers))  stats.mostOnline = { count: String(parseInt(st.topMembers, 10)) };
         if (_isNum(st.lastMemberId) && st.lastMemberName) {
             stats.newestMember = {
                 name: _decodeEntities(String(st.lastMemberName)),
