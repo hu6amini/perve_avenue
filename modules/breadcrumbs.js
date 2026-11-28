@@ -42,7 +42,11 @@ const BreadcrumbsModule = (function () {
         // the 15 messages per page the API returns on ?t=; SECTION_PAGE_SIZE
         // is the section-view default (30 topics per page).
         TOPIC_PAGE_SIZE: 15,
-        SECTION_PAGE_SIZE: 30
+        SECTION_PAGE_SIZE: 30,
+
+        // Give up on an api.php call after this long so the DOM fallbacks
+        // can take over instead of leaving the header unbuilt.
+        API_TIMEOUT_MS: 5000
     });
 
     // =========================================================================
@@ -257,22 +261,43 @@ const BreadcrumbsModule = (function () {
     // _renderedUrl tracks the last URL each component rendered for, so
     // observer re-fires and manual re-invocations don't rebuild markup.
     // ============================================================================
+    // t= / f= go through ForumApiPrefetch (join the request media-optimizer or
+    // posts.js already started — same endpoint string, so one request per page).
+    // mid= goes through the shared ForumApiCache (3 min, shared with top-menu
+    // and boards). Anything else is a plain fetch.
     function apiFetch(qs) {
         if (_apiCache.has(qs)) return _apiCache.get(qs);
-        const p = (async () => {
+        const endpoint = '/api.php?' + qs;
+        const isTopicOrSection = /^[tf]=/.test(qs);
+        const isUser = /^mid=/.test(qs);
+        const request = (async () => {
             try {
-                const r = await fetch('/api.php?' + qs, { credentials: 'same-origin' });
+                if (isTopicOrSection && globalThis.ForumApiPrefetch) {
+                    const shared = await globalThis.ForumApiPrefetch.start(endpoint);
+                    if (shared) return shared;
+                } else if (isUser && globalThis.ForumApiCache) {
+                    return await globalThis.ForumApiCache.get(endpoint);
+                }
+                const r = await fetch(endpoint, {
+                    credentials: 'same-origin',
+                    cache: isUser ? 'default' : 'no-store'
+                });
                 if (!r.ok) return null;
                 return await r.json();
             } catch (e) {
                 return null;
             }
         })();
+        let timer;
+        const timeout = new Promise(resolve => {
+            timer = setTimeout(() => resolve(null), CONFIG.API_TIMEOUT_MS);
+        });
+        const p = Promise.race([request, timeout]).then(data => { clearTimeout(timer); return data; });
         _apiCache.set(qs, p);
         return p;
     }
 
-        function getPageContext() {
+    function getPageContext() {
         if (_contextPromise) return _contextPromise;
         _contextPromise = (async () => {
             const params    = new URLSearchParams(window.location.search);
@@ -281,19 +306,17 @@ const BreadcrumbsModule = (function () {
             const postId    = params.get('p');
             const userId    = params.get('MID');
             const st        = params.get('st') || '0';
+            // Match the endpoint strings posts.js / boards.js use: st only
+            // when it is not the first page.
+            const stQs      = st !== '0' ? '&st=' + encodeURIComponent(st) : '';
 
-            const topicData   = topicId
-                ? await apiFetch('t='   + encodeURIComponent(topicId)   + '&st=' + st)
-                : null;
-            const sectionData = sectionId
-                ? await apiFetch('f='   + encodeURIComponent(sectionId) + '&st=' + st)
-                : null;
-            const postData    = postId
-                ? await apiFetch('p='   + encodeURIComponent(postId))
-                : null;
-            const userData    = userId
-                ? await apiFetch('mid=' + encodeURIComponent(userId))
-                : null;
+            // Independent lookups — run them together, not one after another.
+            const [topicData, sectionData, postData, userData] = await Promise.all([
+                topicId   ? apiFetch('t='   + encodeURIComponent(topicId)   + stQs) : null,
+                sectionId ? apiFetch('f='   + encodeURIComponent(sectionId) + stQs) : null,
+                postId    ? apiFetch('p='   + encodeURIComponent(postId))           : null,
+                userId    ? apiFetch('mid=' + encodeURIComponent(userId))           : null
+            ]);
 
             // Fetch the topic starter's full user record so the header
             // chip can render a complete profile hovercard (posts / rep /
